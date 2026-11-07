@@ -405,6 +405,9 @@ describe('run rows', () => {
       line: 'edit electron/capture-hotkey.ts',
       stuck: false,
       stuckText: '',
+      activity: 'edit electron/capture-hotkey.ts',
+      silentMinutes: expect.any(Number) as number,
+      contextPct: null,
     });
     expect(runRowOf(RUN, null, NOW).title).toBe('T-0007');
   });

@@ -36,7 +36,10 @@ export const THEME_SWATCH: Record<ThemeName, { readonly bg: string; readonly pan
 };
 
 /** The highlight colours; `default` keeps the theme's own accent. */
-export type AccentName = 'default' | 'blue' | 'teal' | 'violet' | 'pink' | 'orange' | 'yellow';
+export type AccentName = 'default' | 'blue' | 'teal' | 'violet' | 'pink' | 'orange' | 'yellow' | 'mint' | 'peach';
+
+/** The phone's five dots (board 10h); a colour picked elsewhere stays applied, no dot lit. */
+export const PHONE_ACCENTS: readonly AccentName[] = ['default', 'blue', 'mint', 'pink', 'peach'];
 
 export const ACCENTS: readonly AccentName[] = ['default', 'blue', 'teal', 'violet', 'pink', 'orange', 'yellow'];
 
@@ -48,6 +51,8 @@ export const ACCENT_LABEL: Record<AccentName, string> = {
   pink: 'Pink',
   orange: 'Orange',
   yellow: 'Yellow',
+  mint: 'Mint',
+  peach: 'Peach',
 };
 
 /** The override colour; `default` has none (the theme's accent stands). */
@@ -55,9 +60,11 @@ export const ACCENT_COLOR: Record<Exclude<AccentName, 'default'>, string> = {
   blue: '#8ecbef',
   teal: '#7fd1b9',
   violet: '#a78bfa',
-  pink: '#f2a0d0',
+  pink: '#f2d3e2',
   orange: '#f0a58a',
   yellow: '#e6d27a',
+  mint: '#bfe3cd',
+  peach: '#f2cfae',
 };
 
 /** Text sizes (owner decision 2026-11-04, XXL added by E12-14 / canvas decision 8): S / M / L / XL / XXL, L the default (iOS body size). */
@@ -127,7 +134,7 @@ export function parseTheme(value: unknown): ThemeName {
 }
 
 export function parseAccent(value: unknown): AccentName {
-  return ACCENTS.find((name) => name === value) ?? 'default';
+  return [...ACCENTS, ...PHONE_ACCENTS].find((name) => name === value) ?? 'default';
 }
 
 /** Folds a value of the current scale into a size; anything else is the default. */

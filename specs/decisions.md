@@ -8,6 +8,12 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **The attach button in the phone's chat composer** (2026-11-07; integrator, recommendation of milestone 194's measure
+  sheet). Board 10a's composer has none and its bar no free control, so the button left the phone. Attaching from the
+  phone waits for a place (req-114); it is not a deviation to re-open on the board.
+- **Decision cards inside the phone's Work list** (2026-11-07; milestone 194). Board 10c draws rows only: a question is
+  answered on the ticket (10d), Accept and Send back on its pinned card (10o), a plan on the plan to accept (10j). The
+  wide layouts' list is 4.6's.
 - **The boards' "D" tile as the app's logo** (owner, 2026-11-07; milestone 192, req-104). Every board draws a
   "D" tile in the title bar. The Drey logo stays and is used in its place; it is no deviation to re-open on any board.
 - **A new icon for every glyph a board draws** (owner, 2026-11-07; milestone 192, req-104). An icon may differ

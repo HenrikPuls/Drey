@@ -19,7 +19,7 @@
  */
 import { InjectionToken } from '@angular/core';
 import { maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
-import type { McEstimate, McPlanStatus, McTicketComment, McTicketUsage, McVerlaufEntry } from '../api/dto';
+import type { McEstimate, McPlanApproval, McPlanStatus, McTicketComment, McTicketUsage, McVerlaufEntry } from '../api/dto';
 
 // --- action replies ----------------------------------------------------------
 
@@ -1053,6 +1053,8 @@ export interface TicketVm {
    * the plan's parts. Optional — an adapter without it hides the button.
    */
   approvePlan?(ticketId: string): void;
+  /** The ticket's parts as the desk knows them (the phone's Parts rows); null = no readable parts. */
+  partsOf?(ticketId: string): Promise<McPlanApproval | null>;
   /**
    * The gate sheet's way into the flow editor (E10-5). Optional — an
    * adapter without it hides the row.

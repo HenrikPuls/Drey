@@ -12,7 +12,7 @@
 import { InjectionToken } from '@angular/core';
 import { estimateText, noEstimateText } from '../../../../shared/cost-text';
 import type { I18n } from '../../../../shared/i18n';
-import type { McEstimate, McPartCard, McPartFlowStep, McPartPersona, McPlanApproval } from '../api/dto';
+import type { McEstimate, McPartCard, McPartFlowStep, McPartPersona, McPlanApproval, McPlanStatus } from '../api/dto';
 
 export type McApproveReply = { readonly ok: true; readonly tickets?: readonly string[] } | { readonly ok: false; readonly error: string };
 
@@ -37,6 +37,16 @@ export interface McApproveState {
   edit(edit: McPartsEdit): Promise<McApproveReply>;
   /** The approval: `all` new parts or only the `first` one. */
   release(scope: 'all' | 'first'): Promise<McApproveReply>;
+  /** The ticket's text (the phone's Goal); absent = no Goal section. */
+  ticketText?(id: string): Promise<string | null>;
+  /** The plan's version and the owner's edits (the phone's title line and highlights). */
+  planStatus?(id: string): McPlanStatus | null;
+  /** What the ticket's runs cost so far (the phone's Cost row); null = nothing known. */
+  spent?(id: string): number | null;
+  /** The ticket's state in words (the phone's pill). */
+  phaseTitle?(id: string): string;
+  /** A reply on the plan: the shape dialog opens with the text in the composer. */
+  replyInShape?(text: string): void;
   /** Opens the flow editor on one part's flow (E10-5). */
   changeFlow(part: number): void;
   /** Back to the shape dialog: the split changes in the plan or by asking Mission Control. */

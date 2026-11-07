@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { McI18nPipe } from '../i18n/i18n.pipe';
+import { McI18n } from '../i18n/i18n.service';
 import type { CostTableView } from './cost-table.model';
 
 /**
@@ -16,5 +17,41 @@ import type { CostTableView } from './cost-table.model';
   imports: [McI18nPipe],
 })
 export class CostTable {
+  private readonly i18n = inject(McI18n);
   readonly view = input.required<CostTableView>();
+  /** The phone's rows of phases without a run: only these, the ones still to come. */
+  readonly openPhases = input<readonly string[] | null>(null);
+  /** The phase that runs right now: its grey line says so. */
+  readonly runningPhase = input<string | null>(null);
+  /** The ticket has run its course: the total is `Total`, not `Total so far`. */
+  readonly settled = input(false);
+
+  protected phoneRows(): CostTableView['rows'] {
+    const open = this.openPhases();
+    return this.view().rows.filter((row) => !row.pending || open === null || open.includes(row.phase));
+  }
+
+  /** The phone's row title: `Plan · Paul`, the persona off the row's model field. */
+  protected phoneTitle(row: CostTableView['rows'][number]): string {
+    const persona = row.pending ? '' : row.model.split(' · ')[0]!;
+    return persona === '' ? row.phase : `${row.phase} · ${persona}`;
+  }
+
+  /** The phone's grey line: the model, the tokens and the time. */
+  protected phoneSub(row: CostTableView['rows'][number]): string {
+    const model = row.model.split(' · ').slice(1).join(' · ');
+    const running = !this.settled() && row.phase === this.runningPhase() ? this.i18n.t('cost.table.running') : '';
+    return [model, row.tokens, this.shortTime(row.time), running].filter((bit) => bit !== '').join(' · ');
+  }
+
+  protected phoneTotal(): string {
+    const total = this.view().total;
+    return [total.tokens, this.shortTime(total.time)].filter((bit) => bit !== '').join(' · ');
+  }
+
+  /** `9 min` as the phone's rows write it: `9m`. */
+  private shortTime(time: string): string {
+    const minutes = /^(\d+)/.exec(time)?.[1];
+    return minutes === undefined ? time : this.i18n.t('cost.table.minutes_short', { n: Number(minutes) });
+  }
 }

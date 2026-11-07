@@ -1,0 +1,197 @@
+/* The phone's chat (boards 10a, 10m): overrides come last; wide rules stay as they are. */
+.ph-meta,
+.ph-prop {
+  display: none;
+}
+.ph-hide {
+  display: none !important;
+}
+@media (max-width: 767.98px) {
+  :host {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+    font-size: var(--ph-17);
+    line-height: 24px;
+  }
+  .chat {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+  .hbtn {
+    width: 44px;
+    height: 44px;
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+  .hbtn svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.75;
+  }
+  .thread {
+    gap: 14px;
+    padding: 12px 16px;
+  }
+  /* the thread sits at the bottom until it fills the screen */
+  .thread > :first-child {
+    margin-top: auto;
+  }
+  .msg {
+    max-width: none;
+    margin: 0;
+  }
+  .msg.owner {
+    align-self: flex-end;
+    max-width: calc(80% + 28px);
+  }
+  .msg.owner .bubble {
+    padding: 10px 14px;
+    font-size: var(--ph-17);
+    line-height: 24px;
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 0;
+    border-top-left-radius: var(--radius-dialog);
+    border-top-right-radius: var(--radius-dialog);
+    border-bottom-right-radius: var(--radius-chip);
+    border-bottom-left-radius: var(--radius-dialog);
+  }
+  .msg.mission {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-self: stretch;
+  }
+  .msg.mission .bubble {
+    padding: 0;
+    font-size: var(--ph-17);
+    line-height: 25px;
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+  .ph-meta {
+    display: block;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .ph-prop {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-dialog);
+  }
+  .ph-prop-head {
+    font-size: var(--ph-13);
+    line-height: 18px;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+  .ph-change {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .ph-change-text {
+    display: flex;
+    flex-direction: column;
+  }
+  .ph-change-id {
+    font-family: var(--mono);
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .ph-change-line {
+    font-size: var(--ph-17);
+    line-height: 24px;
+  }
+  .ph-change-acts {
+    display: flex;
+    gap: 8px;
+  }
+  .ph-grow {
+    flex: 1 1 0;
+  }
+  .composer {
+    margin-bottom: var(--ph-safe-bottom);
+    padding: 6px 12px 8px;
+    background: transparent;
+    border-top: 0;
+    backdrop-filter: none;
+  }
+  .composer-row {
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 16px;
+    background: var(--bg);
+    border: 1px solid var(--control-border);
+    border-radius: 999px;
+  }
+  .composer-input {
+    flex-grow: 1;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    font: inherit;
+    font-size: var(--ph-17);
+    line-height: 24px;
+    color: var(--text);
+    resize: none;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+  .composer-input::placeholder {
+    color: var(--text-2);
+  }
+  .mic,
+  .send {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+  }
+  .mic {
+    color: var(--text);
+    background: transparent;
+    border-radius: var(--radius-control);
+  }
+  .mic svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.75;
+  }
+  .send,
+  .send:disabled {
+    color: var(--on-accent);
+    background: var(--accent);
+    border-radius: 50%;
+    opacity: 1;
+  }
+  .send svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.25;
+  }
+}

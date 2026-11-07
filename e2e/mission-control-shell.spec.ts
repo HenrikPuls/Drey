@@ -157,13 +157,14 @@ test.describe('Phone (390×844)', () => {
     const menu = page.locator('mc-menu');
     await expect(menu).toBeVisible();
     await expect(menu.getByRole('searchbox', { name: 'Search' })).toBeVisible();
-    await expect(menu.locator('.places .row')).toHaveText([/Notes/, /Work/, /Crew/, /Autopilot · On/, /Settings/]);
+    await expect(menu.locator('.places .row')).toHaveText([/Autopilot.*On/, /Notes/, /Work/, /Crew/, /Settings/]);
     await expect(menu.locator('.places .row', { hasText: 'Work' }).locator('.bdg')).toHaveText('2');
+    await expect(menu.locator('.places .row', { hasText: 'Work' }).locator('.needs-dot')).toBeVisible();
     await expect(menu.locator('.chats .sess')).toHaveText([/Dark mode for the PDF export/, /Why is T-0050 blocked\?/, /Plan the release notes/]);
     await expect(page.locator('button.back:visible')).toHaveCount(0);
     await expect(page.locator('button.menu-btn:visible')).toHaveCount(0);
     for (const row of await menu.locator('.row').all()) {
-      expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(52);
+      expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(48);
     }
     await page.screenshot({ path: testInfo.outputPath('mc-phone-menu.png') });
 
@@ -177,10 +178,25 @@ test.describe('Phone (390×844)', () => {
     await expect(page.locator('button.menu-btn:visible')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('mc-phone-work.png') });
 
-    // Ticket → back "Work".
+    // Ticket → back "Work". Inbox starts folded (board 10c).
+    await expect(page.locator('mc-work').getByText('Export the board as CSV')).toHaveCount(0);
+    await page.locator('mc-work .ph-ghead', { hasText: 'Inbox' }).click();
     await page.locator('mc-work').getByText('Export the board as CSV').first().click();
     await expect(page.locator('.ticket-layer.open')).toBeVisible();
     const backToWork = page.locator('.ticket-layer mc-ticket mc-app-bar button.back').first();
+    await expect(backToWork).toHaveText(/Work/);
+
+    // What the face does not draw is under ⋯: Review and the raw editor stay reachable.
+    await page.locator('.ticket-layer').getByRole('button', { name: 'More' }).click();
+    const more = page.getByRole('dialog', { name: 'More' });
+    await more.getByRole('button', { name: 'Edit the text' }).click();
+    await expect(page.locator('mc-ticket-edit textarea, mc-ticket-edit .cm-content').first()).toBeVisible();
+    await expect(page.locator('mc-ticket .ph-page')).toHaveCount(0);
+    await page.locator('mc-ticket-edit').getByRole('button', { name: /^View$/ }).click();
+    await page.locator('.ticket-layer').getByRole('button', { name: 'More' }).click();
+    await page.getByRole('dialog', { name: 'More' }).getByRole('button', { name: 'Review' }).click();
+    await expect(page.locator('mc-ticket .seg.ph-hide')).toHaveCount(1);
+    await page.locator('mc-ticket mc-app-bar button.back').first().click();
     await expect(backToWork).toHaveText(/Work/);
     await backToWork.click();
     await expect(page.locator('.ticket-layer.open')).toHaveCount(0);
@@ -195,11 +211,11 @@ test.describe('Phone (390×844)', () => {
     // Settings → back "Menu"; Appearance → back "Settings".
     await menu.locator('.places .row', { hasText: 'Settings' }).click();
     const settings = page.locator('mc-settings');
-    await expect(settings.locator('.cats mc-app-bar button.back')).toHaveText(/Menu/);
-    await settings.locator('.cats .row', { hasText: 'Appearance' }).click();
-    await expect(settings.locator('.page mc-app-bar button.back')).toHaveText(/Settings/);
-    await settings.locator('.page mc-app-bar button.back').click();
-    await settings.locator('.cats mc-app-bar button.back').click();
+    await expect(settings.locator('mc-app-bar button.back')).toHaveText(/Menu/);
+    await settings.locator('.ph-row', { hasText: 'Appearance' }).click();
+    await expect(settings.locator('mc-app-bar button.back')).toHaveText(/Settings/);
+    await settings.locator('mc-app-bar button.back').click();
+    await settings.locator('mc-app-bar button.back').click();
     await expect(menu).toBeVisible();
 
     // A chat → back "Menu"; its own ☰ (history) is not on the phone.

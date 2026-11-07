@@ -64,6 +64,8 @@ const texts = (el: HTMLElement, selector: string): string[] =>
           .join(' '),
   );
 
+const clock = (iso: string): string => new McI18n().formatTime(new Date(iso));
+
 describe('ageLabelOf (req-96)', () => {
   const i18n = new McI18n();
   const t = i18n.t.bind(i18n);
@@ -78,27 +80,26 @@ describe('ageLabelOf (req-96)', () => {
 describe('Menu (req-96, canvas decision 17)', () => {
   it('is the root: a title, a search field, no back control, no hamburger', () => {
     const { el } = mount();
-    expect(el.querySelector('.ttl')!.textContent).toBe('Menu');
+    expect(el.querySelector('.ttl')!.textContent).toBe('Drey');
     expect(el.querySelector('input[type="search"]')!.getAttribute('aria-label')).toBe('Search');
-    expect(el.querySelector('mc-app-bar')).toBeNull();
     expect(el.querySelector('.back')).toBeNull();
     expect(el.querySelector('.menu-btn')).toBeNull();
   });
 
   it('lists the places with the needs count, Notes only behind the flag, then the chats by day', () => {
     const { fixture, el, host } = mount();
-    expect(texts(el, '.places .row')).toEqual(['Work 2 ›', 'Crew ›', 'Settings ›']);
+    expect(texts(el, '.places .row')).toEqual(['Work 2', 'Crew', 'Settings']);
     expect(texts(el, '.chats .group')).toEqual(['Today', 'Yesterday', 'Earlier']);
     expect(texts(el, '.chats .sess')).toEqual([
-      'Dark mode for the PDF export 1 2 h',
-      'Why is T-0050 blocked? 21 h',
-      'Plan the release notes 5 d',
+      `Dark mode for the PDF export ${clock('2026-11-06T09:40:00Z')}`,
+      'Why is T-0050 blocked? Thu',
+      'Plan the release notes Sun',
     ]);
     expect(el.querySelector('.chats .sess.cur')!.textContent).toContain('Why is T-0050 blocked?');
     host.notes.set(true);
     host.needs.set(0);
     fixture.detectChanges();
-    expect(texts(el, '.places .row')).toEqual(['Notes ›', 'Work ›', 'Crew ›', 'Settings ›']);
+    expect(texts(el, '.places .row')).toEqual(['Notes', 'Work', 'Crew', 'Settings']);
   });
 
   it('emits the place, the chat and New chat', () => {
@@ -119,7 +120,7 @@ describe('Menu (req-96, canvas decision 17)', () => {
     input.value = 'release';
     input.dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    expect(texts(el, '.chats .sess')).toEqual(['Plan the release notes 5 d']);
+    expect(texts(el, '.chats .sess')).toEqual(['Plan the release notes Sun']);
     expect(texts(el, '.places .row').length).toBe(3);
   });
 

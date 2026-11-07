@@ -52,11 +52,13 @@ test.describe('Phone (390×844)', () => {
   test('the Appearance page is full width and XXL is saved on the device', async ({ page }) => {
     await openApp(page);
     await page.locator('mc-menu .places .row', { hasText: 'Settings' }).click();
-    await page.locator('mc-settings .cats .row', { hasText: 'Appearance' }).click();
-    expect(await width(page, 'mc-settings .page')).toBeGreaterThanOrEqual(388);
-    const steps = page.locator('mc-settings .sizes .size');
-    await expect(steps).toHaveCount(5);
-    await steps.nth(4).click();
+    await page.locator('mc-settings .ph-row', { hasText: 'Appearance' }).click();
+    expect(await width(page, 'mc-settings .ph-app')).toBeGreaterThanOrEqual(388);
+    const slider = page.getByRole('slider', { name: 'Text size' });
+    await expect(slider).toHaveAttribute('aria-valuetext', 'L, 17 px');
+    const box = (await slider.boundingBox())!;
+    await page.mouse.click(box.x + box.width, box.y + 22);
+    await expect(slider).toHaveAttribute('aria-valuetext', 'XXL, 21 px');
     expect(await page.evaluate(() => localStorage.getItem('mc.textSize'))).toBe('XXL');
     expect(await page.evaluate(() => document.documentElement.style.getPropertyValue('--mc-text'))).toBe(String(21 / 15));
     await page.reload();

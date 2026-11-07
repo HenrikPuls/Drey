@@ -75,6 +75,11 @@ export class NotesStore {
   readonly dirty = computed(() => this.editing() && this.draft() !== this.base());
   readonly ticketId = computed(() => ticketIdOf(this.base()));
 
+  /** The linked ticket's title and state on the board; null when the host cannot say. */
+  ticketSummary(id: string): { readonly title: string; readonly phase: string } | null {
+    return this.host.ticketSummary?.(id) ?? null;
+  }
+
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private searchSeq = 0;
   private noteSeq = 0;

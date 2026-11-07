@@ -1,3 +1,112 @@
+@if (phone()) {
+  @if (store.editing()) {
+    <header class="ph-editbar">
+      <button type="button" class="ph-iconbtn" [attr.aria-label]="'notes.cancel' | t" [attr.title]="'notes.cancel' | t" (click)="store.cancel()">
+        <mc-ph-icon name="x" />
+      </button>
+      <b class="ph-editbar-title ph-ellipsis">{{ store.name() }}</b>
+      <button type="button" class="ph-iconbtn ph-save" [disabled]="store.saving() || !store.dirty()" [attr.aria-label]="'notes.save' | t" [attr.title]="'notes.save' | t" (click)="store.save()">
+        <mc-ph-icon name="check" [stroke]="2.25" />
+      </button>
+    </header>
+    <div class="ph-tabs-wrap">
+      <div class="ph-tabs" role="tablist" [attr.aria-label]="'notes.mode' | t">
+        @for (m of modes; track m) {
+          <button type="button" role="tab" class="ph-tab" [class.on]="store.mode() === m" [attr.aria-selected]="store.mode() === m" (click)="pick(m)">{{ modeLabel(m) }}</button>
+        }
+      </div>
+    </div>
+    @if (store.conflict(); as conflict) {
+      <section class="conflict" role="alert" [attr.aria-label]="'notes.conflict.title' | t">
+        <h2 class="ctitle">{{ 'notes.conflict.title' | t }}</h2>
+        <div class="versions">
+          <div class="version">
+            <h3 class="vcap">{{ 'notes.conflict.disk' | t }} · {{ when() }}</h3>
+            <pre class="vtext">{{ conflict.text }}</pre>
+          </div>
+          <div class="version">
+            <h3 class="vcap">{{ 'notes.conflict.mine' | t }}</h3>
+            <pre class="vtext">{{ store.draft() }}</pre>
+          </div>
+        </div>
+        <div class="crow">
+          <button type="button" class="ph-primary" [disabled]="store.saving()" (click)="store.keepMine()">{{ 'notes.conflict.keep_mine' | t }}</button>
+          <button type="button" class="ph-outline" [disabled]="store.saving()" (click)="store.keepTheirs()">{{ 'notes.conflict.keep_theirs' | t }}</button>
+        </div>
+      </section>
+    }
+    @if (store.saveError(); as error) {
+      <p class="err" role="alert">{{ error }}</p>
+    }
+    <div class="ph-editor">
+      <mc-markdown #editor [text]="store.draft()" surface="note" [label]="'notes.text_label' | t" [mode]="store.mode()" [modeBar]="false" [editable]="store.mode() !== 'view'" (textChange)="onText($event)" />
+    </div>
+    @if (store.mode() !== 'view') {
+      <div class="ph-format" role="toolbar" [attr.aria-label]="'notes.text_label' | t">
+        @for (b of formatButtons; track b.icon) {
+          <button type="button" class="ph-iconbtn" [attr.aria-label]="b.label | t" [attr.title]="b.label | t" (click)="format(editor, b.action)">
+            <mc-ph-icon [name]="b.icon" />
+          </button>
+        }
+      </div>
+    }
+  } @else {
+    <mc-app-bar [title]="store.name()" [back]="'notes.title' | t" [backOnWide]="false" (backed)="store.leave()">
+      @if (!store.readOnly() && store.noteError() === null) {
+        <button bar-end type="button" class="ph-iconbtn edit" [disabled]="store.noteLoading()" [attr.aria-label]="'notes.edit' | t" [attr.title]="'notes.edit' | t" (click)="store.startEdit()">
+          <mc-ph-icon name="pencil" />
+        </button>
+      }
+    </mc-app-bar>
+    @if (store.noteError(); as error) {
+      <div class="errbox">
+        <p class="err" role="alert">{{ error }}</p>
+        <button type="button" class="ph-outline" (click)="store.reload()">{{ 'notes.reload' | t }}</button>
+      </div>
+    } @else if (store.noteLoading() && store.base() === '') {
+      <p class="ph-hint">{{ 'notes.loading' | t }}</p>
+    } @else {
+      <div class="ph-scroll ph-noteview">
+        <span class="ph-path">{{ pathLine() }}</span>
+        <h1 class="ph-h1">{{ viewTitle() }}</h1>
+        @if (store.tags().length > 0) {
+          <ul class="ph-tags" [attr.aria-label]="'notes.tags' | t">
+            @for (tag of store.tags(); track tag) {
+              <li class="ph-tag">#{{ tag }}</li>
+            }
+          </ul>
+        }
+        <div class="ph-md">
+          <mc-markdown [text]="viewBody()" surface="note-view" [label]="'notes.text_label' | t" mode="view" [modeBar]="false" />
+        </div>
+        @if (store.ticketId(); as ticket) {
+          <button type="button" class="ph-linkcard" (click)="store.openTicket()">
+            <span class="ph-linkcard-body">
+              <span>{{ ticketTitle() }}</span>
+              <span class="ph-linkcard-sub">{{ ticketLine() }}</span>
+            </span>
+            <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+          </button>
+        }
+      </div>
+      <div class="ph-askbar">
+        <button type="button" class="ph-ask" (click)="store.askAbout()">
+          <mc-ph-icon name="ask" [size]="20" />
+          {{ 'notes.ask' | t }}
+        </button>
+      </div>
+    }
+  }
+  @if (store.discardAsk() !== null) {
+    <div class="sheet-scrim">
+      <section class="sheet" role="alertdialog" [attr.aria-label]="'notes.discard.title' | t">
+        <h2 class="stitle">{{ 'notes.discard.title' | t }}</h2>
+        <button type="button" class="btn primary" (click)="store.keepEditing()">{{ 'notes.discard.keep' | t }}</button>
+        <button type="button" class="btn danger" (click)="store.confirmDiscard()">{{ 'notes.discard.drop' | t }}</button>
+      </section>
+    </div>
+  }
+} @else {
 <mc-app-bar [title]="store.name()" [sub]="folder() === '' ? null : folder()" [back]="'notes.title' | t" [backOnWide]="false" (backed)="store.leave()">
   @if (store.editing()) {
     <span bar-end class="acts">
@@ -126,4 +235,6 @@
       <button type="button" class="btn danger" (click)="store.confirmDiscard()">{{ 'notes.discard.drop' | t }}</button>
     </section>
   </div>
+}
+
 }

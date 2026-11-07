@@ -14,6 +14,201 @@
     @switch (mode()) {
       <!-- ==================== the ticket face ==================== -->
       @case ('ticket') {
+        @if (phone()) {
+        <mc-app-bar [title]="id()" [back]="'shell.work' | t" (backed)="vm.onClose()">
+          <button bar-end type="button" class="ph-iconbtn" [attr.aria-label]="'ticket.phone.more' | t" [attr.title]="'ticket.phone.more' | t" aria-haspopup="dialog" (click)="moreOpen.set(true)">
+            <mc-ph-icon name="more" />
+          </button>
+        </mc-app-bar>
+        <div class="ph-scroll ph-page" [class.ph-no-safe]="decisionNeed() !== null">
+          <div class="ph-headrow">
+            <span class="ph-id">{{ id() }}</span>
+            <span class="ph-status">{{ phaseTitle() }}</span>
+            @if (needsYou()) {
+              <span class="ph-needs"><span class="ph-needs-dot" aria-hidden="true"></span>{{ 'ticket.phone.needs_you' | t }}</span>
+            }
+            <span class="ph-spacer"></span>
+            <button type="button" class="ph-thread" (click)="openThread()">{{ 'ticket.phone.thread' | t }}</button>
+          </div>
+          <h1 class="ph-h1">{{ title() }}</h1>
+          <div class="ph-grid">
+            @if (steps().length > 0) {
+              <span class="ph-grey">{{ 'ticket.phone.flow' | t }}</span>
+              <span class="ph-flow">
+                @if (flow().past !== '') {
+                  <span class="ph-grey">{{ flow().past }}</span>
+                }
+                @if (flow().current !== null) {
+                  <span class="ph-flow-now">{{ flow().current }}</span>
+                }
+                @if (flow().note !== null) {
+                  <span class="ph-grey">{{ flow().note }}</span>
+                }
+                @if (flow().rest !== '') {
+                  <span class="ph-grey">{{ flow().rest }}</span>
+                }
+              </span>
+            }
+            @if (workerName(); as worker) {
+              <span class="ph-grey">{{ 'ticket.phone.worker' | t }}</span>
+              <span>{{ worker }}</span>
+            }
+            @if (costLine(); as line) {
+              <span class="ph-grey">{{ 'ticket.phone.cost' | t }}</span>
+              <span class="ph-grey">{{ line }}</span>
+            }
+          </div>
+
+          @if (proofStrip(); as strip) {
+            <div class="ph-proof">
+              <span class="ph-proof-item" [attr.title]="'ticket.phone.proof_checks_title' | t">
+                <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                <span><b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b> {{ 'ticket.phone.proof_checks' | t }}</span>
+              </span>
+              @if (strip.testedBy !== '') {
+                <span class="ph-proof-item">
+                  <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                  {{ 'ticket.phone.proof_tested' | t: { name: strip.testedBy } }}
+                </span>
+              }
+              @if (strip.reviewer !== '') {
+                <span class="ph-proof-item">
+                  <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                  {{ 'ticket.phone.proof_review' | t: { name: strip.reviewer } }}
+                </span>
+              }
+            </div>
+          }
+
+          @if (questionCard(); as card) {
+            @if (!readOnly() && !threadQDone()) {
+              <mc-answer-card
+                [question]="card.question"
+                [why]="questionNeed()?.shaped?.why ?? null"
+                [options]="card.options"
+                [selected]="threadQSelected()"
+                [busy]="threadQPending()"
+                [error]="threadQError()"
+                (pick)="threadQSelect($event)"
+                (send)="threadQSend()"
+              />
+            } @else if (threadQDone()) {
+              <p class="ph-done" role="status">{{ 'ticket.phone.answer_sent' | t: { name: threadPersonaLabel() } }}</p>
+            }
+          }
+
+          @if (phoneBody() !== '') {
+            <div class="ph-md">
+              <mc-markdown [text]="phoneBody()" surface="ticket" [label]="'ticket.phone.text' | t" mode="view" [modeBar]="false" />
+            </div>
+          }
+
+          @if (phoneParts().length > 0) {
+            <h2 class="ph-h2">{{ 'ticket.phone.parts' | t }}</h2>
+            <div>
+              @for (part of phoneParts(); track part.key) {
+                <div class="ph-line">
+                  <span class="ph-mark" [attr.data-state]="part.state" aria-hidden="true">{{ part.mark }}</span>
+                  <span class="ph-line-body">
+                    <span class="ph-line-title">{{ part.title }}</span>
+                    <span class="ph-line-sub">{{ part.sub }}</span>
+                  </span>
+                  @if (part.cost !== null) {
+                    <span class="ph-line-end">{{ part.cost }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          @if (costTable(); as table) {
+            <h2 class="ph-h2">{{ 'cost.table.label' | t }}</h2>
+            <mc-cost-table [view]="table" [openPhases]="phoneOpenPhases()" [runningPhase]="phoneRunningPhase()" [settled]="decisionNeed() !== null && proofStrip() !== null" />
+          }
+
+          @if (proof(); as report) {
+            @if (report.criteria.length > 0) {
+              <h2 class="ph-h2">{{ 'ticket.phone.checks' | t }}</h2>
+              <div>
+                @for (criterion of report.criteria; track criterion.command) {
+                  <div class="ph-line">
+                    <span class="ph-mark" [attr.data-state]="criterion.passed ? 'done' : 'failed'" aria-hidden="true">{{ criterion.passed ? '✓' : '✗' }}</span>
+                    <span class="ph-line-body">
+                      <span class="ph-line-title ph-ellipsis">{{ criterion.command }}</span>
+                      @if (checkSub(criterion); as sub) {
+                        <span class="ph-line-small">{{ sub }}</span>
+                      }
+                    </span>
+                  </div>
+                }
+              </div>
+            }
+          }
+
+          @if (savedFlash(); as flash) {
+            <p class="ph-done">{{ flash }}</p>
+          }
+          @if (result(); as ticketResult) {
+            <p class="ph-done" [class.ph-err]="ticketResult.kind === 'error'" aria-live="polite">{{ ticketResult.text }}</p>
+          }
+        </div>
+
+        @if (decisionNeed(); as need) {
+          <div class="ph-decision">
+            @if (sendBackOpen()) {
+              <label class="ph-decision-text" for="ph-sendback">{{ 'ticket.phone.sendback_why' | t }}</label>
+              <textarea id="ph-sendback" class="ph-sendback" rows="3" [value]="note()" (input)="onNote($event)"></textarea>
+              @if (decisionError(); as error) {
+                <p class="ph-err" role="alert">{{ error }}</p>
+              }
+              <div class="ph-decision-row">
+                <button type="button" class="ph-outline ph-flex1" (click)="toggleSendBack()">{{ 'ticket.phone.cancel' | t }}</button>
+                <button type="button" class="ph-primary ph-flex14" [disabled]="note().trim() === '' || decisionBusy()" (click)="decisionSendBack(need)">{{ 'ticket.phone.send_back_now' | t }}</button>
+              </div>
+            } @else if (decisionDone(); as done) {
+              <span class="ph-decision-text">{{ done }}</span>
+            } @else {
+              <span class="ph-decision-text">
+                @if (decisionHead(); as head) {
+                  <b>{{ head }}</b>
+                }
+                {{ decisionBody() }}
+              </span>
+              @if (decisionError(); as error) {
+                <p class="ph-err" role="alert">{{ error }}</p>
+              }
+              <div class="ph-decision-row">
+                <button type="button" class="ph-outline ph-flex1" [disabled]="decisionBusy()" (click)="toggleSendBack()">{{ 'ticket.phone.send_back' | t }}</button>
+                @if (questionNeed() === null) {
+                  <button type="button" class="ph-primary ph-flex14" [disabled]="decisionBusy()" (click)="decisionAccept(need)">{{ 'ticket.phone.accept' | t }}</button>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        @if (moreOpen()) {
+          <div class="ph-sheet-scrim" (click)="moreOpen.set(false)"></div>
+          <section class="ph-sheet" role="dialog" aria-modal="true" [attr.aria-label]="'ticket.phone.more' | t">
+            <span class="ph-grab" aria-hidden="true"></span>
+            @if (canApprove()) {
+              <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); approvePlan()">{{ 'ticket.phone.plan_to_accept' | t: { n: planParts() } }}</button>
+            }
+            <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); openProof()">{{ 'ticket.phone.review' | t }}</button>
+            @if (!readOnly()) {
+              <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); onModePick('source')">{{ 'ticket.phone.edit_text' | t }}</button>
+              <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); changeByChat()">{{ 'ticket.phone.change_by_chat' | t }}</button>
+              @if (canShape()) {
+                <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); shapeWithPaul()">{{ 'ticket.phone.shape' | t }}</button>
+              }
+              @if (promotable()) {
+                <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); promote()">{{ 'ticket.phone.promote' | t }}</button>
+              }
+              <button type="button" class="ph-sheet-row" (click)="moreOpen.set(false); openSheet()">{{ 'ticket.phone.gate_chain' | t }}</button>
+            }
+          </section>
+        }
+        } @else {
         <mc-app-bar [title]="id()" back="Work" (backed)="vm.onClose()">
           @if (!readOnly()) {
             <mc-ticket-mode bar-end active="view" (pick)="onModePick($event)" />
@@ -158,6 +353,7 @@
             </div>
           }
         </div>
+        }
       }
 
       <!-- ==================== the proof face ==================== -->
@@ -799,7 +995,7 @@
 
 <!-- E13-20: one segmented control, identical on the ticket, thread and review faces. -->
 <ng-template #faceSwitch>
-  <div class="seg" role="tablist" aria-label="Ticket faces">
+  <div class="seg" [class.ph-hide]="phone()" role="tablist" aria-label="Ticket faces">
     @for (item of faces; track item.face) {
       <button
         type="button"

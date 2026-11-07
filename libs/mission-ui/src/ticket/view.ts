@@ -19,11 +19,17 @@ import {
   type McPersona,
   type QuestionCardVm,
 } from '../work/work.model';
+import type { McPartCard } from '../api/dto';
 import { AppBar } from '../app-bar/app-bar';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { AnswerCard } from '../phone/answer-card';
+import { PhoneIcon } from '../phone/icon';
+import { phoneSignal } from '../phone/phone';
+import { flowLineOf, partRowsOf, withoutPartsChapter, type PhonePartRow } from './phone-face';
 import { CostTable } from '../cost/cost-table';
 import { costTableOf } from '../cost/cost-table.model';
 import { McI18n } from '../i18n/i18n.service';
-import { costInTotalText, costSoFarText, estimateInlineText, noEstimateText } from '../../../../shared/cost-text';
+import { costInTotalText, costSoFarText, estimateInlineText, estimateText, noEstimateText } from '../../../../shared/cost-text';
 import { Markdown } from '../markdown/markdown';
 import type { MdMode } from '../markdown/mode';
 import { TicketEditMode, TicketModeSwitch } from './mode-switch';
@@ -123,9 +129,9 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
 @Component({
   selector: 'mc-ticket',
   templateUrl: './view.html',
-  styleUrls: ['../seg.css', './view.css'],
+  styleUrls: ['../seg.css', '../phone/kit.css', './view.css', './phone.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar, CostTable],
+  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar, CostTable, AnswerCard, McI18nPipe, PhoneIcon],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
@@ -161,6 +167,192 @@ export class TicketView {
   protected readonly phaseColor = computed(() => this.vm.phaseColor());
 
   protected readonly readOnly = computed(() => this.vm.readOnly());
+
+  // --- the phone's ticket face (boards 10d, 10o) ----------------------------------
+
+  protected readonly phone = phoneSignal();
+  /** The ⋯ sheet: everything the phone's face does not draw (Review, edit, chain). */
+  protected readonly moreOpen = signal(false);
+
+  /** The flow row: what is done, the current step, then what is still to come. */
+  protected readonly flow = computed(() =>
+    flowLineOf(this.steps(), this.partsProgress(), this.decisionNeed() !== null && this.proofStrip() !== null, (key, params) => this.i18n.t(key, params)),
+  );
+
+  /** Step n of m inside the current phase: the released parts done so far. */
+  private readonly partsProgress = computed<{ readonly done: number; readonly total: number } | null>(() => {
+    const parts = this.partCards();
+    if (parts === null || parts.length < 2) {
+      return null;
+    }
+    return { done: parts.filter((part) => part.state === 'done').length, total: parts.length };
+  });
+
+  /** The parts as the desk knows them; null until read (the plan's lines show meanwhile). */
+  private readonly partCards = signal<readonly McPartCard[] | null>(null);
+  /** The build gate the parts' estimates are asked for. */
+  private readonly partGate = signal<string | null>(null);
+
+  private readonly loadParts = effect(() => {
+    const id = this.docId();
+    const read = this.vm.partsOf;
+    if (!this.phone() || id === null || read === undefined) {
+      return;
+    }
+    untracked(() => this.partCards.set(null));
+    void read(id).then((approval) => {
+      if (this.docId() === id) {
+        this.partCards.set(approval?.parts ?? null);
+        this.partGate.set(approval?.gate ?? null);
+      }
+    });
+  });
+
+  protected readonly phoneParts = computed<readonly PhonePartRow[]>(() =>
+    partRowsOf(
+      planPartsOf(planSectionOf(this.doc()?.text ?? '')),
+      this.partCards(),
+      (id) => this.personaLabel(id),
+      (persona) => {
+        const gate = this.partGate();
+        const estimate = gate === null ? null : (this.vm.estimate?.(gate, persona) ?? null);
+        return estimate === null ? null : this.i18n.t('cost.amount.estimate', { estimate: estimateText(this.i18n, estimate) });
+      },
+      (key, params) => this.i18n.t(key, params),
+    ),
+  );
+
+  private personaLabel(id: string): string {
+    return this.work?.personas.find((persona) => persona.id === id)?.title ?? this.personaTitle(id);
+  }
+
+  /** The body without the Parts chapter: the Parts rows draw that. */
+  protected readonly phoneBody = computed(() => withoutPartsChapter(this.bodyText()));
+
+  /** The titles of the phases still to run; a done or manual column has no row on the phone (10d). */
+  protected readonly phoneOpenPhases = computed<readonly string[]>(() => {
+    const future = this.steps().filter((step) => step.state === 'future').map((step) => step.title);
+    return future.slice(0, -1);
+  });
+
+  protected readonly phoneRunningPhase = computed<string | null>(() =>
+    this.steps().find((step) => step.state === 'current')?.title ?? null,
+  );
+
+  protected readonly workerName = computed<string | null>(() => {
+    const pinned = this.questionPersona()?.title ?? null;
+    const current = this.persona();
+    return pinned ?? (current === null ? null : this.personaLabel(current));
+  });
+
+  /** The cost row: spent so far or in total, then the estimate with its basis. */
+  protected readonly costLine = computed<string | null>(() => {
+    const bits = [this.cost(), this.phoneEstimate()].filter((bit): bit is string => bit !== null && bit !== '');
+    return bits.length === 0 ? null : bits.join(' · ');
+  });
+
+  /** The current phase's estimate for the ticket's worker; the desk answers per persona and model. */
+  private readonly phoneEstimate = computed<string | null>(() => {
+    const current = this.steps().find((step) => step.state === 'current');
+    const persona = current?.persona ?? this.questionPersona()?.id ?? null;
+    if (current === undefined || persona === null) {
+      return null;
+    }
+    const estimate = this.vm.estimate?.(current.id, persona) ?? null;
+    return estimate === null ? noEstimateText(this.i18n) : this.i18n.t('cost.amount.estimate', { estimate: estimateText(this.i18n, estimate) });
+  });
+
+  private readonly ticketNeeds = computed<readonly McNeed[]>(() => {
+    const id = this.id();
+    return (this.work?.needs ?? []).filter((need) => need.ticketId === id);
+  });
+
+  protected readonly needsYou = computed(() => this.ticketNeeds().length > 0);
+
+  /** The need the pinned decision card answers (board 10o): a checkpoint or a manual step. */
+  protected readonly decisionNeed = computed<McNeed | null>(() =>
+    this.readOnly() || this.work?.finishManual === undefined
+      ? null
+      : (this.ticketNeeds().find((need) => need.kind === 'checkpoint' || need.kind === 'manual') ?? null),
+  );
+
+  protected readonly proofStrip = computed<{ readonly passed: number; readonly total: number; readonly testedBy: string; readonly reviewer: string } | null>(() => {
+    const verdict = this.verdict();
+    if (verdict === null) {
+      return null;
+    }
+    const proof = this.proof();
+    // The reviewer's persona off the phase log; a reviewer who found something names no "no blockers".
+    const review = [...(this.doc()?.verlauf ?? [])].find((entry) => (entry.phase ?? '').toLowerCase() === 'review');
+    const reviewer = (proof?.findings.length ?? 0) === 0 && (review?.persona ?? null) !== null ? this.personaLabel(review!.persona!) : '';
+    return { passed: verdict.passed, total: verdict.total, testedBy: proof?.tester ?? '', reviewer };
+  });
+
+  protected readonly decisionHead = computed<string | null>(() =>
+    this.proofStrip() === null ? null : this.i18n.t('ticket.phone.ready_head', { id: this.id() }),
+  );
+
+  protected readonly decisionBody = computed<string>(() => {
+    const strip = this.proofStrip();
+    if (strip !== null) {
+      return strip.passed === strip.total
+        ? this.i18n.t('ticket.phone.ready_green', { n: strip.total })
+        : this.i18n.t('ticket.phone.ready_red', { passed: strip.passed, total: strip.total });
+    }
+    return this.decisionNeed()?.summary ?? '';
+  });
+
+  protected readonly decisionBusy = signal(false);
+  protected readonly decisionError = signal<string | null>(null);
+  protected readonly decisionDone = signal<string | null>(null);
+
+  protected async decisionAccept(need: McNeed): Promise<void> {
+    const finish = this.work?.finishManual;
+    if (finish !== undefined) {
+      await this.runDecision(() => finish.call(this.work, need.ticketId ?? ''), this.i18n.t('ticket.phone.accepted'));
+    }
+  }
+
+  protected async decisionSendBack(need: McNeed): Promise<void> {
+    const back = this.work?.sendBackManual;
+    if (back !== undefined) {
+      await this.runDecision(() => back.call(this.work, need.ticketId ?? '', this.note().trim()), this.i18n.t('ticket.phone.sent_back'));
+    }
+  }
+
+  private async runDecision(call: () => Promise<{ readonly ok: boolean; readonly error?: string }>, done: string): Promise<void> {
+    this.decisionBusy.set(true);
+    this.decisionError.set(null);
+    try {
+      const reply = await call();
+      if (reply.ok) {
+        this.sendBackOpen.set(false);
+        this.decisionDone.set(done);
+      } else {
+        this.decisionError.set(reply.error ?? this.i18n.t('ticket.phone.refused'));
+      }
+    } catch {
+      this.decisionError.set(this.i18n.t('ticket.phone.no_answer'));
+    } finally {
+      this.decisionBusy.set(false);
+    }
+  }
+
+  /** A check row's grey line: who tested it and, when the walkthrough has a chapter for it, when. */
+  protected checkSub(criterion: { readonly command: string; readonly note?: string | null }): string {
+    const by = this.proof()?.tester ?? '';
+    const chapter = this.proof()?.chapters.find((entry) => entry.label === criterion.command);
+    return [by, chapter === undefined ? '' : this.clock(chapter.atSec)].filter((bit) => bit !== '').join(' · ');
+  }
+
+  /** The report's Promote moved here from the wide list's card (the phone's rows carry no action). */
+  protected readonly promotable = computed(
+    () => this.work?.promote !== undefined && this.ticketNeeds().some((need) => need.kind === 'report'),
+  );
+
+  protected promote(): void {
+    this.work?.promote?.(this.id());
+  }
 
   // --- the three faces: ticket, proof, thread ---------------------------------
 
@@ -233,7 +425,11 @@ export class TicketView {
     // The face a selection opens on: the run while it is active or waiting,
     // the ticket document otherwise (E13-20). Read untracked: a run starting
     // later does not yank the face away from where the owner is reading.
-    untracked(() => this.mode.set(defaultFaceOf(this.runActive())));
+    // The phone's face is the ticket: its question and decision are on it (board 10d).
+    untracked(() => this.mode.set(this.phone() ? 'ticket' : defaultFaceOf(this.runActive())));
+    this.moreOpen.set(false);
+    this.decisionDone.set(null);
+    this.decisionError.set(null);
     // A run face opens with the `<id>:` prefix the thread's composer always carries.
     this.threadDraft.set(untracked(() => (this.mode() === 'thread' ? `${this.id()}: ` : '')));
     this.threadError.set(null);

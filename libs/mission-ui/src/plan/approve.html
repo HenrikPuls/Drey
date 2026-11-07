@@ -1,3 +1,141 @@
+@if (phone()) {
+  <mc-app-bar [title]="phoneTitle()" [sub]="phoneSub()" [subOnPhone]="true" [back]="'plan.phone.back' | t" (backed)="backToTicket()" />
+  <div class="ph-scroll ph-plan">
+    @if (approval(); as a) {
+      <div class="ph-headrow">
+        <span class="ph-id">{{ a.ticket }}</span>
+        <span class="ph-status">{{ phaseWord() }}</span>
+        @if (questionCard() !== null || proposal().approveLabel !== null) {
+          <span class="ph-needs"><span class="ph-needs-dot" aria-hidden="true"></span>{{ 'ticket.phone.needs_you' | t }}</span>
+        }
+        <span class="ph-spacer"></span>
+        <button type="button" class="ph-thread" (click)="changeSplit()">{{ 'ticket.phone.thread' | t }}</button>
+      </div>
+      <div class="ph-grid">
+        @if (flowLine(); as line) {
+          <span class="ph-grey">{{ 'ticket.phone.flow' | t }}</span>
+          <span class="ph-grey">{{ line }}</span>
+        }
+        @if (planner(); as who) {
+          <span class="ph-grey">{{ 'ticket.phone.worker' | t }}</span>
+          <span class="ph-worker">
+            <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ title: who.title, color: who.color, size: 24 }" />
+            <span class="ph-grey">{{ 'plan.phone.plans_via' | t }}</span>
+          </span>
+        }
+        @if (costLine(); as line) {
+          <span class="ph-grey">{{ 'ticket.phone.cost' | t }}</span>
+          <span class="ph-grey">{{ line }}</span>
+        }
+      </div>
+
+      @if (questionCard(); as card) {
+        <mc-answer-card [question]="card.question" [why]="questionWhy()" [options]="card.options" [selected]="qSelected()" [busy]="qBusy()" [error]="qError()" (pick)="qSelected.set($event)" (send)="qSend(card)">
+          @if (planner(); as who) {
+            <span answer-head class="ph-via">
+              <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ title: who.title, color: who.color, size: 24 }" />
+              {{ 'plan.phone.via' | t: { name: who.title } }}
+            </span>
+          }
+        </mc-answer-card>
+      }
+
+      @if (goal(); as text) {
+        <h2 class="ph-h2 ph-h2-first">{{ 'plan.phone.goal' | t }}</h2>
+        <p class="ph-goal">{{ text }}</p>
+      }
+
+      <div class="ph-parts-head">
+        <h2 class="ph-h2 ph-parts-title">{{ 'ticket.phone.parts' | t }}</h2>
+        @if (editCount() > 0) {
+          <span class="ph-edits">{{ 'plan.phone.edits' | t: { n: editCount() } }}</span>
+        }
+      </div>
+      <div>
+        @for (row of rows(); track row.card.index) {
+          <button type="button" class="ph-part" [class.ph-edited]="isEdited(row.card.title)" [attr.aria-expanded]="selected() === row.card.index" (click)="select(row.card)">
+            <span class="ph-mark" aria-hidden="true">{{ row.card.state === 'done' ? '✓' : row.card.locked ? '●' : '○' }}</span>
+            <span class="ph-part-body">
+              <span class="ph-part-title ph-ellipsis">{{ row.card.title }}</span>
+              <span class="ph-part-sub">
+                @if (row.builder; as b) {
+                  <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ title: b.title, color: b.color, size: 18 }" />
+                }
+                <span class="ph-ellipsis">{{ row.card.reason === null ? row.who : row.who + ' · ' + row.card.reason }}</span>
+              </span>
+            </span>
+            @if (partEstimate(row.card); as est) {
+              <span class="ph-part-est">{{ est }}</span>
+            }
+          </button>
+          @if (selected() === row.card.index) {
+            <div class="ph-part-acts">
+              @if (row.card.locked) {
+                @if (row.card.ticket !== null) {
+                  <button type="button" class="ph-chipbtn" (click)="openTicket(row.card.ticket)">{{ 'plan.phone.open_ticket' | t }}</button>
+                }
+              } @else if (!readOnly()) {
+                @for (p of a.personas; track p.id) {
+                  <button type="button" class="ph-chipbtn" [class.on]="p.id === (row.card.persona ?? a.defaultPersona)" [attr.aria-pressed]="p.id === (row.card.persona ?? a.defaultPersona)" (click)="pick(row.card, p.id)">{{ p.title }}</button>
+                }
+                <button type="button" class="ph-chipbtn" [disabled]="!row.up || busy()" (click)="move(row.card, -1)">{{ 'plan.phone.up' | t }}</button>
+                <button type="button" class="ph-chipbtn" [disabled]="!row.down || busy()" (click)="move(row.card, 1)">{{ 'plan.phone.down' | t }}</button>
+                <button type="button" class="ph-chipbtn" (click)="changeFlow(row.card)">{{ 'plan.phone.flow' | t }}</button>
+                <button type="button" class="ph-chipbtn ph-red" [disabled]="busy()" (click)="remove(row.card)">{{ (armed() === row.card.index ? 'plan.phone.delete_confirm' : 'plan.phone.delete') | t }}</button>
+              }
+            </div>
+          }
+        }
+      </div>
+      @for (warning of a.warnings; track $index) {
+        <p class="ph-foot-line ph-warn">{{ warning }}</p>
+      }
+      <span class="ph-foot-line">
+        {{ 'plan.phone.tap_hint' | t }}
+        @if (rows().length > 1) {
+          <a class="ph-link" href="#" (click)="$event.preventDefault(); changeSplit()">{{ 'plan.phone.split' | t: { n: rows().length } }}</a>.
+        }
+        @if (questionCard() !== null) {
+          {{ 'plan.phone.after_question' | t }}
+        }
+      </span>
+    } @else if (error(); as e) {
+      <p class="ph-foot-line" role="alert">{{ e }}</p>
+    } @else {
+      <p class="ph-foot-line" aria-live="polite">{{ 'plan.phone.loading' | t }}</p>
+    }
+  </div>
+  @if (approval() !== null && questionCard() === null && proposal().approveLabel !== null) {
+    <div class="ph-decide">
+      <span class="ph-decide-text">{{ proposal().text }}</span>
+      @if (message(); as m) {
+        <p class="ph-warn" role="alert">{{ m }}</p>
+      }
+      <div class="ph-decide-row">
+        @if (proposal().firstLabel !== null) {
+          <button type="button" class="ph-outline ph-flex1" [disabled]="readOnly() || busy()" (click)="release('first')">{{ proposal().firstLabel }}</button>
+        }
+        <button type="button" class="ph-primary ph-flex14" [disabled]="readOnly() || busy()" (click)="release('all')">{{ proposal().approveLabel }}</button>
+      </div>
+    </div>
+  }
+  <div class="ph-replybar">
+    <div class="ph-reply">
+      <label class="ph-vh" for="ph-plan-reply">{{ 'plan.phone.reply_label' | t }}</label>
+      <textarea id="ph-plan-reply" rows="1" [attr.placeholder]="'plan.phone.reply' | t" [value]="reply()" (input)="onReply($event)"></textarea>
+      <button type="button" class="ph-round" [attr.aria-label]="'chat.phone.dictate' | t" (click)="changeSplit()"><mc-ph-icon name="mic" [size]="18" [stroke]="2" /></button>
+      <button type="button" class="ph-round ph-send" [attr.aria-label]="'chat.phone.send' | t" [disabled]="reply().trim() === ''" (click)="sendReply()"><mc-ph-icon name="send" [size]="16" [stroke]="2.5" /></button>
+    </div>
+  </div>
+
+  <ng-template #avatar let-title="title" let-color="color" let-size="size">
+    <svg class="ph-ava" role="img" [attr.aria-label]="title" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24">
+      <rect width="24" height="24" [attr.fill]="color" />
+      <circle cx="12" cy="9.5" r="4.2" fill="var(--on-pastel)" fill-opacity="0.78" />
+      <path d="M3.5 24c0-5 3.8-8 8.5-8s8.5 3 8.5 8z" fill="var(--on-pastel)" fill-opacity="0.78" />
+    </svg>
+  </ng-template>
+} @else {
 <section class="pa" aria-label="Plan to accept">
   <header class="pa-head">
     <button type="button" class="pa-back" (click)="close()">
@@ -170,3 +308,5 @@
     </footer>
   }
 </section>
+
+}

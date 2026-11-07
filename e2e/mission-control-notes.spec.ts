@@ -47,33 +47,32 @@ test.describe('phone (390×844)', () => {
 
     // 10k: the list names the vault, shows Recent and the folders.
     const list = page.locator('mc-notes');
-    await expect(list.locator('mc-app-bar .sub')).toHaveText('Main vault');
+    await expect(list.locator('.ph-vault')).toHaveText('Vault: Main vault');
     await expect(list.locator('mc-app-bar button.back')).toHaveText(/Menu/);
-    await expect(list.locator('.group', { hasText: 'Recent' })).toContainText('Welcome');
-    await expect(list.locator('.row.folder', { hasText: 'ideas' })).toBeVisible();
+    await expect(list.locator('.ph-note-row', { hasText: 'Welcome' }).first()).toBeVisible();
+    await expect(list.locator('.ph-folder-row', { hasText: 'ideas' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('mc-phone-notes-list.png') });
 
     // Search.
     await list.getByRole('searchbox').fill('ship');
-    await expect(list.locator('.group .row')).toHaveCount(1);
-    await expect(list.locator('.group .row')).toContainText('Plan');
+    await expect(list.locator('.ph-note-row')).toHaveCount(1);
+    await expect(list.locator('.ph-note-row')).toContainText('Plan');
     await list.getByRole('searchbox').fill('');
 
     // 10l: a note opens in View with tags, the ticket link and Ask.
-    await list.locator('.group .row', { hasText: 'Welcome' }).first().click();
+    await list.locator('.ph-note-row', { hasText: 'Welcome' }).first().click();
     const note = page.locator('mc-note');
     await expect(note.locator('mc-app-bar button.back')).toHaveText(/Notes/);
-    await expect(note.locator('.mdx-seg-btn[aria-pressed="true"]')).toHaveText('View');
-    await expect(note.locator('.tag')).toHaveText('#start');
+    await expect(note.locator('.ph-tabs')).toHaveCount(0);
+    await expect(note.locator('.ph-tag')).toHaveText('#start');
     await expect(note.getByRole('button', { name: 'Ask about this note' })).toBeVisible();
-    for (const control of [note.getByRole('button', { name: 'Edit note' }), ...(await note.locator('.mdx-seg-btn').all())]) {
-      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    }
+    expect((await note.getByRole('button', { name: 'Edit note' }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({ path: testInfo.outputPath('mc-phone-note-view.png') });
 
     // 10p: the pencil → Live Preview, X and ✓ as icons; X asks only when the text changed.
     await note.getByRole('button', { name: 'Edit note' }).click();
-    await expect(note.locator('.mdx-seg-btn[aria-pressed="true"]')).toHaveText('Live');
+    await expect(note.locator('.ph-tab.on')).toHaveText('Live');
+    await expect(note.getByRole('toolbar').getByRole('button')).toHaveCount(7);
     await note.getByRole('button', { name: 'Cancel editing' }).click();
     await expect(note.locator('.sheet')).toHaveCount(0);
     await note.getByRole('button', { name: 'Edit note' }).click();
@@ -109,10 +108,10 @@ test.describe('phone (390×844)', () => {
   test('a note with a ticket links to it; Ask about this note opens the chat with the note named', async ({ page }) => {
     await openApp(page);
     await page.locator('mc-menu .places .row', { hasText: 'Notes' }).click();
-    await page.locator('mc-notes .row.folder', { hasText: 'ideas' }).click();
-    await page.locator('mc-notes section[aria-label="All notes"] .row', { hasText: 'Plan' }).click();
+    await page.locator('mc-notes .ph-folder-row', { hasText: 'ideas' }).click();
+    await page.locator('mc-notes .ph-note-row', { hasText: 'Plan' }).first().click();
     const note = page.locator('mc-note');
-    await expect(note.getByRole('button', { name: /Ticket T-0050/ })).toBeVisible();
+    await expect(note.locator('.ph-linkcard')).toContainText('T-0050');
     await note.getByRole('button', { name: 'Ask about this note' }).click();
     await expect(page.locator('mc-chat')).toBeVisible();
     await expect(page.locator('mc-chat textarea')).toHaveValue('About the note ideas/Plan.md:');
@@ -124,10 +123,10 @@ test.describe('phone (390×844)', () => {
     await page.locator('mc-menu .places .row', { hasText: 'Notes' }).click();
     await expect(page.locator('mc-notes')).toBeVisible();
     await expect(page.getByRole('button', { name: 'New note' })).toHaveCount(0);
-    await page.locator('mc-notes .row', { hasText: 'Welcome' }).first().click();
+    await page.locator('mc-notes .ph-note-row', { hasText: 'Welcome' }).first().click();
     await expect(page.locator('mc-note')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
-    await expect(page.locator('mc-note .mdx-seg')).toHaveCount(0);
+    await expect(page.locator('mc-note .ph-tabs')).toHaveCount(0);
   });
 });
 

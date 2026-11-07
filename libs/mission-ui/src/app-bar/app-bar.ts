@@ -49,6 +49,10 @@ export class AppBar {
   readonly title = input('');
   /** An optional mono line under the title (Work: the vault name). */
   readonly sub = input<string | null>(null);
+  /** The phone's root screen (the menu, board 10b): no leading control at all. */
+  readonly root = input(false);
+  /** The `sub` line also shows on the phone (only the plan to accept, board 10j, draws one). */
+  readonly subOnPhone = input(false);
   /** The parent page's name: set = the leading control is the back control. */
   readonly back = input<string | null>(null);
   /** False: from 768 px the back control is hidden (the parent list sits beside the page). */

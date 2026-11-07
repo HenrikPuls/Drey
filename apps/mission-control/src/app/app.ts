@@ -21,7 +21,7 @@ import { Capacity } from '@mission-ui/capacity/capacity';
 import { McI18nPipe } from '@mission-ui/i18n/i18n.pipe';
 import { Settings } from '@mission-ui/settings/settings';
 import { Theme } from '@mission-ui/theme';
-import { Team } from '@mission-ui/team/team';
+import { Team, stuckCountOf, type McTeamPersona } from '@mission-ui/team/team';
 import { PersonaDetail } from '@mission-ui/team/detail';
 import { TicketView } from '@mission-ui/ticket/view';
 import { TicketEdit } from '@mission-ui/ticket/edit';
@@ -196,6 +196,10 @@ export class App {
   protected readonly personaOpen = this.state.personaDetail;
   /** The Work tab's needs counter: the needs count. */
   protected readonly needsCount = computed(() => this.state.needs().length);
+  /** The menu's Crew row: how many runs the watchdog flagged as stuck (board 10b). */
+  protected readonly stuckCount = computed(() =>
+    stuckCountOf(this.state.team().personas as unknown as readonly Pick<McTeamPersona, 'liveRuns'>[] | null),
+  );
   /** The chats with Mission Control, for the phone menu. */
   protected readonly sessions = computed(() => this.state.chat().sessions);
   protected readonly activeSessionFile = computed(() => this.state.chat().active?.file ?? null);

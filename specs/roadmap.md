@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–193, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–194, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -860,6 +860,18 @@ rest are kept so they still match `docs/11`.
   own.
 
 ### Follow-ups of shipped milestones (none committed)
+
+- **req-114 — Attach on the phone (follow-up of milestone 194, Q3 of its measure sheet).** Board 10a's composer has no
+  Attach and its bar no free control; the upload itself exists. The owner places it.
+- **req-115 — Notes: folder counts and the vault's note count (milestone 194, board 10k).** `/api/notes` serves folders
+  by path and name only. An additive `count` per folder and `total` on the list.
+- **req-116 — Parts and phases: spent cost and estimates per row (milestone 194, boards 10d, 10j).** `/parts` serves no
+  spent cost per part (`$0.58`), and a phase still to run has no persona to ask an estimate for (`est. $0.30–0.40`).
+- **req-117 — Check rows' run time (milestone 194, board 10o).** A criterion carries no time (`tessa · 0:12`); only a
+  walkthrough's chapters do, and only when the video has one with the same label.
+- **req-118 — A chat question's why and consequences, a chat's ticket reference (milestone 194, board 10a).**
+  `ChatQuestionOptionView` is label + recommended; a message names no ticket, so the linked card reads the id out of
+  the answer's text and only finds a worker's open question.
 
 - **Device saves in File history and save hooks (follow-up of req-100).** A note saved from a phone or iPad runs no plugin save hooks and leaves no version under `<userData>/history/`, because both live in the Drey process and the engine also serves with Drey closed. The conflict guard still protects the text; only the "File history…" row is missing. To decide: a version store the engine can write, or a catch-up when Drey next hears of the path.
 - **An SDK event for the active vault (follow-up of req-100).** The Notes API follows Drey's active vault by a push at activation and with every board fetch; a switch without a board fetch reaches the engine late. A `ctx.vault` event for the switch would make it immediate.

@@ -1,4 +1,4 @@
-<header class="bar" [class.sub-page]="back() !== null" [class.top-page]="back() === null" [class.no-wide-back]="!backOnWide()" [class.own-menu]="ownMenu()">
+<header class="bar" [class.sub-page]="back() !== null" [class.top-page]="back() === null" [class.no-wide-back]="!backOnWide()" [class.own-menu]="ownMenu()" [class.phone-sub]="subOnPhone()">
   @if (back(); as parent) {
     <button type="button" class="lead back" [attr.aria-label]="'app_bar.back_to' | t: { name: parent }" [attr.title]="'app_bar.back_to' | t: { name: parent }" (click)="onBack()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -6,6 +6,8 @@
       </svg>
       <span class="back-label">{{ parent }}</span>
     </button>
+  } @else if (root()) {
+    <span></span>
   } @else {
     <button type="button" class="lead back menu-back" [attr.aria-label]="'app_bar.back_to' | t: { name: ('menu.title' | t) }" [attr.title]="'app_bar.back_to' | t: { name: ('menu.title' | t) }" (click)="onMenuBack()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -28,9 +30,9 @@
     }
   </div>
   <div class="end">
-    <ng-content select="[bar-end]" />
     @if (autopilot()) {
       <mc-autopilot-button />
     }
+    <ng-content select="[bar-end]" />
   </div>
 </header>

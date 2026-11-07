@@ -137,3 +137,64 @@
     visibility: hidden;
   }
 }
+
+/*
+ * The phone's bar (boards 10a–10t): 52 px under the status-bar inset, three
+ * columns with the title centred between them, 17 bold; back in the text
+ * colour, chevron stroke 1.75. An Autopilot icon widens the side columns to 100.
+ */
+@media (max-width: 767.98px) {
+  .bar,
+  .sub-page {
+    grid-template-columns: 96px minmax(0, 1fr) 96px;
+    gap: 0;
+    min-height: calc(53px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 4px 0;
+  }
+
+  .bar:has(mc-autopilot-button) {
+    grid-template-columns: 100px minmax(0, 1fr) 100px;
+  }
+
+  .back {
+    gap: 0;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .back svg {
+    stroke-width: 1.75;
+  }
+
+  .back-label {
+    font-size: var(--ph-17);
+    line-height: 22px;
+  }
+
+  .hd {
+    text-align: center;
+  }
+
+  .ttl,
+  .sub-page .ttl {
+    font-size: var(--ph-17);
+    font-weight: 700;
+    line-height: 22px;
+  }
+
+  .sub {
+    display: none;
+    font-family: var(--sans);
+    font-size: var(--ph-13);
+    color: var(--text-2);
+    line-height: 16px;
+  }
+
+  .phone-sub .sub {
+    display: block;
+  }
+
+  .end {
+    gap: 0;
+  }
+}

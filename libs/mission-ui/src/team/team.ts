@@ -1,5 +1,10 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { AppBar } from '../app-bar/app-bar';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { McI18n } from '../i18n/i18n.service';
+import { PhoneIcon } from '../phone/icon';
+import { phoneSignal } from '../phone/phone';
+import { todayOfPersonas } from '../work/phone-rows';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -284,6 +289,12 @@ export interface RunRowVm {
   readonly stuck: boolean;
   /** The warning under a stuck row; '' otherwise. */
   readonly stuckText: string;
+  /** What the worker does, without the `looks stuck` lead (the phone's mono line). */
+  readonly activity: string;
+  /** Whole minutes without output; null while unknown. */
+  readonly silentMinutes: number | null;
+  /** The context fill when it is worth saying; null otherwise. */
+  readonly contextPct: number | null;
 }
 
 /** Minutes between two instants, whole and non-negative. */
@@ -299,6 +310,11 @@ export function ageWordsOf(startedAt: string, nowMs: number): string {
     return '';
   }
   return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`;
+}
+
+/** How many live runs the watchdog flagged, over the whole crew (the phone menu's Crew row). */
+export function stuckCountOf(personas: readonly Pick<McTeamPersona, 'liveRuns'>[] | null): number {
+  return (personas ?? []).reduce((sum, persona) => sum + (persona.liveRuns ?? []).filter((run) => run.stuck).length, 0);
 }
 
 /** The context fill from which the stuck warning mentions it. */
@@ -330,6 +346,9 @@ export function runRowOf(run: LiveRunView, title: string | null, nowMs: number):
     line: run.stuck ? `looks stuck · ${activity}` : activity,
     stuck: run.stuck,
     stuckText,
+    activity,
+    silentMinutes: silent,
+    contextPct: run.contextPct !== null && run.contextPct >= CONTEXT_WARN_PCT ? run.contextPct : null,
   };
 }
 
@@ -364,9 +383,9 @@ export function budgetPctOf(persona: Pick<McPersonaView, 'budget' | 'dailyCost'>
 @Component({
   selector: 'mc-team',
   templateUrl: './team.html',
-  styleUrl: './team.css',
+  styleUrls: ['../phone/kit.css', './team.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, AppBar],
+  imports: [NgTemplateOutlet, AppBar, McI18nPipe, PhoneIcon],
 })
 export class Team {
   private readonly state = inject(MC_TEAM_STATE);
@@ -394,6 +413,98 @@ export class Team {
 
   /** True when the bound state can open a ticket — the run ghost shows for live runs. */
   protected readonly canOpenTicket = computed(() => this.state.openTicket !== undefined);
+
+  // --- the phone's Crew (board 10i) ---------------------------------------------
+
+  protected readonly phone = phoneSignal();
+  private readonly teamI18n = inject(McI18n);
+  /** The stuck run whose Stop was pressed: the question under its tiles. */
+  protected readonly stopAsk = signal<string | null>(null);
+  private readonly setupId = signal<string | null>(null);
+
+  /** The persona the Setup block below the cards shows: the tapped one, else the first with work. */
+  protected readonly setupOf = computed<McTeamPersona | null>(() => {
+    const list = (this.personas() ?? []).filter((persona) => persona.kind !== 'human');
+    const picked = this.setupId();
+    return (
+      list.find((persona) => persona.id === picked) ??
+      list.find((persona) => (persona.phases ?? []).includes('build') && (persona.liveRuns?.length ?? 0) > 0) ??
+      list.find((persona) => (persona.liveRuns?.length ?? 0) > 0) ??
+      list[0] ??
+      null
+    );
+  });
+
+  protected selectSetup(persona: McTeamPersona): void {
+    this.setupId.set(persona.id);
+  }
+
+  protected readonly summaryLine = computed(() => {
+    const list = this.personas() ?? [];
+    const runs = list.flatMap((persona) => persona.liveRuns ?? []);
+    const t = this.teamI18n;
+    return [
+      t.t('crew.phone.n_personas', { n: list.length }),
+      t.t('crew.phone.n_running', { n: runs.filter((run) => !run.stuck).length }),
+      t.t('crew.phone.n_stuck', { n: runs.filter((run) => run.stuck).length }),
+    ].join(' · ');
+  });
+
+  protected readonly todayLine = computed<string | null>(() => {
+    const today = todayOfPersonas((this.personas() ?? []) as readonly { dailyCost?: number; budget?: number | null }[]);
+    if (today === null || today.cost === null) {
+      return null;
+    }
+    const cost = `$${today.cost.toFixed(2)}`;
+    return today.budget === null
+      ? this.teamI18n.t('crew.phone.today_only', { cost })
+      : this.teamI18n.t('crew.phone.today_of', { cost, budget: Number.isInteger(today.budget) ? `$${today.budget}` : `$${today.budget.toFixed(2)}` });
+  });
+
+  /** A local pool names the model it serves (`Local · qwen3-coder`); a hosted pool its name alone. */
+  protected capLabel(cap: { readonly provider: string; readonly label: string }): string {
+    if (cap.provider !== 'opencode') {
+      return cap.label;
+    }
+    const model = (this.personas() ?? []).find((persona) => persona.pool[0] === cap.provider)?.model ?? '';
+    return model === '' ? cap.label : `${cap.label} · ${model}`;
+  }
+
+  /** A stuck run's warning as the board words it. */
+  protected stuckWords(row: RunRowVm): string {
+    const n = row.silentMinutes ?? 0;
+    return row.contextPct === null
+      ? this.teamI18n.t('crew.phone.stuck_text', { n })
+      : this.teamI18n.t('crew.phone.stuck_text_context', { n, pct: row.contextPct });
+  }
+
+  protected roleLineOf(persona: McTeamPersona): string {
+    const phases = (persona.phases ?? []).join(', ');
+    return [persona.role, phases].filter((bit) => bit !== '').join(' · ');
+  }
+
+  /** The card's state: running, waiting, stuck, paused. */
+  protected phoneStateOf(persona: McTeamPersona): string {
+    return (persona.liveRuns ?? []).some((run) => run.stuck) ? this.teamI18n.t('crew.phone.stuck') : this.stateWords(persona);
+  }
+
+  protected stateToneOf(persona: McTeamPersona): string {
+    if ((persona.liveRuns ?? []).some((run) => run.stuck)) {
+      return 'attention';
+    }
+    return (persona.liveRuns?.length ?? 0) > 0 ? 'running' : 'idle';
+  }
+
+  /** The Setup block's model pool in order; the first entry carries the persona's model. */
+  protected poolOf(persona: McTeamPersona): readonly { readonly key: string; readonly label: string; readonly model: string }[] {
+    const pool = persona.pool.length > 0 ? persona.pool : persona.worker === '' ? [] : [persona.worker];
+    const capacity = this.capacity();
+    return pool.map((provider, index) => ({
+      key: `${index}:${provider}`,
+      label: capacity.find((cap) => cap.provider === provider)?.label ?? provider,
+      model: index === 0 ? persona.model : '',
+    }));
+  }
 
   protected readonly canPauseAll = computed(() => this.state.toggleChainMaster !== undefined);
   protected readonly canNudge = computed(() => this.state.nudgeRun !== undefined);
@@ -496,6 +607,7 @@ export class Team {
   }
 
   protected readonly initialsOf = initialsOf;
+  protected readonly budgetPctOfPersona = budgetPctOf;
   protected readonly runStateClass = runStateClass;
   protected readonly dayCostFootOf = dayCostFootOf;
   protected readonly phasesFootOf = phasesFootOf;

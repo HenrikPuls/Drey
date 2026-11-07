@@ -675,6 +675,33 @@ export class McState {
     this.approvalError.set(null);
   }
 
+  /** A ticket's title and state on the board (the phone's linked-ticket cards). */
+  ticketSummary(id: string): { readonly title: string; readonly phase: string; readonly cost: number | null } | null {
+    const board = this.board() as {
+      columns?: readonly { phase: { title: string }; tickets: readonly { id: string; meta?: { title?: string }; usage?: { cost?: number | null } }[] }[];
+    } | null;
+    for (const column of board?.columns ?? []) {
+      const ticket = column.tickets.find((entry) => entry.id === id);
+      if (ticket !== undefined) {
+        return { title: ticket.meta?.title ?? id, phase: column.phase.title, cost: ticket.usage?.cost ?? null };
+      }
+    }
+    return null;
+  }
+
+  /** One ticket's text for the phone's plan to accept: a read, nothing else moves. */
+  async readTicketText(id: string): Promise<string | null> {
+    const body = await this.client.raw(`/api/tickets/${encodeURIComponent(id)}`);
+    const text = (body as { text?: unknown } | null)?.text;
+    return typeof text === 'string' ? text : null;
+  }
+
+  /** One ticket's parts for the phone's ticket face: a read, nothing else moves. */
+  async readParts(id: string): Promise<McPlanApproval | null> {
+    const body = await this.client.raw(`/api/tickets/${encodeURIComponent(id)}/parts`);
+    return body === null ? null : parsePlanApproval(body);
+  }
+
   /** Re-reads the open plan's cards; a failed GET keeps the last good ones. */
   async refreshApproval(): Promise<void> {
     const id = this.approvalTicket();

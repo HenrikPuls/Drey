@@ -1,9 +1,24 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import {
+  AUTOPILOT_KINDS,
+  autopilotRefusalCodeOf,
+  autopilotRefusalKeyOf,
+  resumeAtOfTime,
+  timeFieldOfResume,
+  type AutopilotKind,
+  type AutopilotView,
+} from '../../../../shared/autopilot';
+import { MC_AUTOPILOT } from '../autopilot/autopilot-state';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { PhoneIcon, type PhoneIconName } from '../phone/icon';
+import { phoneSignal } from '../phone/phone';
 import { AppBar } from '../app-bar/app-bar';
 import { McI18n } from '../i18n/i18n.service';
 import { deviceListOf } from './device-list';
 import {
   ACCENTS,
+  PHONE_ACCENTS,
   ACCENT_COLOR,
   ACCENT_LABEL,
   DEFAULT_TEXT_SIZE,
@@ -29,6 +44,14 @@ import {
 /** The settings screen's pages. */
 export type SettingsPage = 'appearance' | 'chat' | 'devices' | 'engine';
 
+/** One row of the phone's Settings list (board 10g). */
+interface PhoneSettingsRow {
+  readonly id: SettingsPage;
+  readonly icon: PhoneIconName;
+  readonly label: string;
+  readonly value: string;
+}
+
 export const SETTINGS_PAGES: readonly { readonly id: SettingsPage; readonly label: string; readonly sub: string }[] = [
   { id: 'appearance', label: 'Appearance', sub: 'Theme, highlight color, text size, density' },
   { id: 'chat', label: 'Chat', sub: 'Model, connection' },
@@ -51,14 +74,104 @@ export const VIDEOS_IN_GIT_WARNING =
 @Component({
   selector: 'mc-settings',
   templateUrl: './settings.html',
-  styleUrl: './settings.css',
-  imports: [AppBar],
+  styleUrls: ['../phone/kit.css', './settings.css'],
+  imports: [AppBar, McI18nPipe, NgTemplateOutlet, PhoneIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Settings {
   protected readonly theme = inject(Theme);
   private readonly state = inject(MC_SETTINGS_STATE, { optional: true });
   private readonly i18n = inject(McI18n);
+
+  // --- the phone's list and Appearance (boards 10g, 10h) --------------------------
+
+  protected readonly phone = phoneSignal();
+  private readonly autopilotState = inject(MC_AUTOPILOT, { optional: true });
+  protected readonly query = signal('');
+  protected readonly phoneAccents = PHONE_ACCENTS;
+  protected readonly autopilotKinds = AUTOPILOT_KINDS;
+  protected readonly autopilot = computed(() => this.autopilotState?.autopilot() ?? null);
+  protected readonly autopilotReadOnly = computed(() => this.autopilotState?.readOnly() ?? true);
+  protected readonly autopilotError = signal<string | null>(null);
+  /** The Resume row's time; the field is empty until one is set. */
+  protected readonly resumeTime = computed(() => timeFieldOfResume(this.autopilot()?.resumeAt));
+
+  /** The rows by where they apply; Away and alerts and Repositories wait for E12-3b. */
+  protected readonly phoneGroups = computed(() => {
+    const needle = this.query().trim().toLowerCase();
+    const row = (id: SettingsPage, icon: PhoneIconName): PhoneSettingsRow => ({
+      id,
+      icon,
+      label: this.labelOf(id),
+      value: this.phoneValueOf(id),
+    });
+    const groups = [
+      { key: 'device', label: this.i18n.t('settings.phone.this_device'), rows: [row('appearance', 'contrast'), row('chat', 'chat')] },
+      { key: 'all', label: this.i18n.t('settings.phone.all_devices'), rows: [row('devices', 'device'), row('engine', 'terminal')] },
+    ];
+    return groups
+      .map((group) => ({ ...group, rows: group.rows.filter((r) => needle === '' || r.label.toLowerCase().includes(needle)) }))
+      .filter((group) => group.rows.length > 0);
+  });
+
+  /** The right-hand value the board draws for a row. */
+  private phoneValueOf(id: SettingsPage): string {
+    switch (id) {
+      case 'chat':
+        return '';
+      case 'engine':
+        return this.view() === null ? '' : this.i18n.t('settings.phone.engine_running');
+      default:
+        return this.summaryOf(id);
+    }
+  }
+
+  protected onQuery(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  protected async pickAutopilot(state: AutopilotKind): Promise<void> {
+    await this.writeAutopilot({ state });
+  }
+
+  protected async onResumeTime(event: Event): Promise<void> {
+    const at = resumeAtOfTime((event.target as HTMLInputElement).value, new Date());
+    if (at !== null) {
+      await this.writeAutopilot({ state: 'paused', resumeAt: at });
+    }
+  }
+
+  private async writeAutopilot(record: AutopilotView): Promise<void> {
+    this.autopilotError.set(null);
+    const reply = await this.autopilotState?.set(record);
+    if (reply !== undefined && !reply.ok) {
+      this.autopilotError.set(this.i18n.t(autopilotRefusalKeyOf(reply.code ?? autopilotRefusalCodeOf(reply))));
+    }
+  }
+
+  protected sizeValueText(): string {
+    const size = this.theme.textSize();
+    return `${size}, ${TEXT_BODY_PX[size]} px`;
+  }
+
+  /** A tap or drag start on the slider takes the nearest of the five steps. */
+  protected onSlider(event: PointerEvent, slider: HTMLElement): void {
+    const box = slider.getBoundingClientRect();
+    const step = Math.round(((event.clientX - box.left) / Math.max(1, box.width)) * (this.sizes.length - 1));
+    const size = this.sizes[Math.min(this.sizes.length - 1, Math.max(0, step))];
+    if (size !== undefined) {
+      this.pickSize(size);
+    }
+  }
+
+  protected onSliderKey(event: KeyboardEvent): void {
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? -1 : 0;
+    const size = this.sizes[this.sizeIndex() + delta];
+    if (delta !== 0 && size !== undefined) {
+      event.preventDefault();
+      this.pickSize(size);
+    }
+  }
 
   protected readonly pages = SETTINGS_PAGES;
   protected readonly themes = THEMES;

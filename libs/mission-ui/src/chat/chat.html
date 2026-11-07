@@ -41,6 +41,8 @@
                   <pre class="planedit-diff">{{ diff }}</pre>
                 }
               </div>
+            } @else if (item.message.kind === 'question' && phone() && item.message === openQuestion()) {
+              <!-- The phone's answer card below the thread's last message carries the question. -->
             } @else if (item.message.kind === 'question') {
               <div class="msg mission">
                 @if (shape()) {
@@ -95,6 +97,7 @@
               </div>
             } @else {
               <div class="msg mission">
+                <span class="ph-meta">{{ 'chat.phone.meta' | t: { time: timeOf(item.message.at) } }}</span>
                 @if (shape()) {
                   <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
                 }
@@ -112,6 +115,30 @@
             }
           }
           @case ('proposal') {
+            @if (phone()) {
+              @if (item.proposal.id === pendingProposals()[0]?.id) {
+                <div class="ph-prop">
+                  <span class="ph-prop-head">{{ 'chat.phone.proposal_head' | t: { n: pendingProposals().length } }}</span>
+                  @for (proposal of pendingProposals(); track proposal.id) {
+                    <div class="ph-change" [class.dimmed]="isDimmed(proposal.id)" [attr.aria-busy]="isCardBusy(proposal.id)">
+                      <div class="ph-change-text">
+                        @if (changeOf(proposal).id; as id) {
+                          <span class="ph-change-id">{{ id }}</span>
+                        }
+                        <span class="ph-change-line">{{ changeOf(proposal).text }}</span>
+                      </div>
+                      @if (cardError(proposal.id); as error) {
+                        <p class="inline-error">{{ error }}</p>
+                      }
+                      <div class="ph-change-acts">
+                        <button type="button" class="ph-primary ph-grow" [disabled]="isCardBusy(proposal.id)" (click)="confirm(proposal.id)">{{ 'chat.phone.confirm' | t }}</button>
+                        <button type="button" class="ph-outline ph-grow" [disabled]="isCardBusy(proposal.id)" (click)="dismiss(proposal.id)">{{ 'chat.phone.dismiss' | t }}</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            } @else {
             <div class="confirm" [class.dimmed]="isDimmed(item.proposal.id)" [attr.aria-busy]="isCardBusy(item.proposal.id)">
               <div class="ck">{{ ckOf(item.proposal) }}</div>
               <ng-container [ngTemplateOutlet]="richBody" [ngTemplateOutletContext]="{ $implicit: item.proposal }" />
@@ -135,6 +162,7 @@
                 </button>
               </div>
             </div>
+            }
           }
           @case ('decision') {
             @if (item.proposal.state === 'confirmed') {
@@ -152,6 +180,39 @@
               </div>
             }
           }
+        }
+      }
+      @if (phone()) {
+        @if (linkedTicket(); as link) {
+          <button type="button" class="ph-linkcard" (click)="openLinked(link.id)">
+            <span class="ph-linkcard-body">
+              <span>{{ link.title }}</span>
+              <span class="ph-linkcard-sub">{{ link.line }}</span>
+            </span>
+            <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+          </button>
+        }
+        @if (linkedCard(); as card) {
+          @if (!linkedDone()) {
+            <mc-answer-card
+              [question]="card.question"
+              [options]="card.options"
+              [selected]="linkedPick()"
+              [busy]="linkedBusy()"
+              [error]="linkedError()"
+              (pick)="linkedPick.set($event)"
+              (send)="sendLinked(card)"
+            />
+          }
+        } @else if (openQuestion(); as question) {
+          <mc-answer-card
+            [question]="question.text"
+            [options]="phoneOptions()"
+            [selected]="pickedIndex()"
+            [busy]="sending()"
+            (pick)="pick(phoneOptions()[$event]!.label)"
+            (send)="sendPicked()"
+          />
         }
       }
       @if (failure(); as f) {
@@ -194,7 +255,7 @@
   }
 
   @if (openQuestion(); as question) {
-    <div class="answers" role="group" aria-label="Answer">
+    <div class="answers" [class.ph-hide]="phone()" role="group" aria-label="Answer">
       <span class="answers-hint">Pick an answer, then send it. Or write your own below.</span>
       @for (option of question.options; track option.label) {
         <button type="button" class="answer" [attr.aria-pressed]="pickedLabel() === option.label" (click)="pick(option.label)">
@@ -258,6 +319,7 @@
       <button
         type="button"
         class="attach"
+        [class.ph-hide]="phone()"
         [disabled]="attachDisabled()"
         [attr.aria-busy]="uploading()"
         (click)="openAttachSheet()"
@@ -274,7 +336,7 @@
         [disabled]="readOnly()"
         (input)="onDraft($event)"
         (keydown)="onComposerKeydown($event)"
-        [placeholder]="placeholder"
+        [placeholder]="phone() ? ('chat.phone.placeholder' | t) : placeholder"
         aria-label="Message to Mission Control"></textarea>
       @if (dictation.supported) {
         <button

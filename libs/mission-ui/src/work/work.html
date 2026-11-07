@@ -1,3 +1,77 @@
+@if (phone()) {
+  <mc-app-bar [title]="'shell.work' | t" [autopilot]="true">
+    <button bar-end type="button" class="ph-iconbtn" [attr.aria-label]="'work.phone.search' | t" [attr.title]="'work.phone.search' | t" [attr.aria-expanded]="searchOpen()" (click)="toggleSearch()">
+      <mc-ph-icon name="search" />
+    </button>
+  </mc-app-bar>
+  @if (state === null) {
+    <p class="work-note">{{ 'work.phone.not_connected' | t }}</p>
+  } @else {
+    @if (todayText(); as today) {
+      <div class="ph-today" [attr.title]="soFar">{{ today }}</div>
+    }
+    @if (searchOpen()) {
+      <div class="ph-searchwrap">
+        <label class="ph-search">
+          <mc-ph-icon name="search" [size]="18" />
+          <input type="search" [attr.aria-label]="'work.phone.search' | t" [attr.placeholder]="'work.phone.search' | t" [value]="query()" (input)="onQuery($event)" />
+        </label>
+      </div>
+    }
+    <div class="ph-scroll ph-list">
+      @for (group of phoneGroups(); track group.key) {
+        <button type="button" class="ph-ghead" [attr.aria-expanded]="isGroupOpen(group)" (click)="toggleGroup(group)">
+          <span class="ph-gtitle">{{ group.title }}</span>
+          @if (group.hot) {
+            <span class="ph-hot" role="img" [attr.aria-label]="group.title"></span>
+          }
+          <span class="ph-gcount">{{ group.rows.length }}</span>
+        </button>
+        @if (isGroupOpen(group)) {
+          @for (row of group.rows; track row.key) {
+            @if (row.ticket; as vm) {
+              <button
+                type="button"
+                class="ph-trow ticket-card"
+                [class.flash-forward]="isFlashing(vm, 'forward')"
+                [class.flash-back]="isFlashing(vm, 'back')"
+                (pointerdown)="onCardPointerDown($event, vm)"
+                (pointermove)="onCardPointerMove($event)"
+                (pointerup)="onCardPointerUp($event, vm)"
+                (pointercancel)="onCardPointerCancel()"
+                (click)="onCardTap(vm, row)"
+              >
+                @if (swipeLayerOf(vm); as layer) {
+                  <span class="swipe-layer" [class.forward]="layer.side === 'forward'" [class.back]="layer.side === 'back'" [style.width.%]="layer.widthPercent" [style.opacity]="layer.progress" aria-hidden="true">{{ layer.label }}</span>
+                }
+                <ng-container [ngTemplateOutlet]="phoneRow" [ngTemplateOutletContext]="{ $implicit: row }" />
+              </button>
+            } @else {
+              <button type="button" class="ph-trow" (click)="openPhoneRow(row)">
+                <ng-container [ngTemplateOutlet]="phoneRow" [ngTemplateOutletContext]="{ $implicit: row }" />
+              </button>
+            }
+          }
+        }
+      } @empty {
+        <p class="work-note">{{ 'work.phone.empty' | t }}</p>
+      }
+    </div>
+  }
+
+  <ng-template #phoneRow let-row>
+    <span class="ph-tbody">
+      <span class="ph-ttitle ph-ellipsis">{{ row.title }}</span>
+      <span class="ph-tmeta">
+        <span class="ph-tline ph-ellipsis">{{ row.meta }}</span>
+        @if (row.cost !== null) {
+          <span class="ph-tcost" [attr.title]="soFar">{{ row.cost }}</span>
+        }
+      </span>
+    </span>
+    <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+  </ng-template>
+} @else {
 <mc-app-bar title="Work" [sub]="vaultTitle()" [autopilot]="true">
   @if (state !== null) {
     <button bar-end type="button" class="fleet" title="Chain status" (click)="onFleetTap()">
@@ -352,3 +426,5 @@
   </div>
 }
 
+
+}

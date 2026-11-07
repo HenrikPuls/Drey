@@ -1,4 +1,42 @@
 @if (view(); as current) {
+  @if (sheet()) {
+    <div class="ph-sheet">
+      <span class="ph-grab" aria-hidden="true"></span>
+      <div class="ph-head">
+        <b class="ph-title">{{ 'autopilot.title' | t }}</b>
+        @if (current.state === 'paused') {
+          <label class="ph-resume">
+            <span>{{ resumeText() ?? ('autopilot.resume_time' | t) }}</span>
+            <input type="time" [value]="resumeValue()" [disabled]="disabled()" [attr.aria-label]="'autopilot.resume_time' | t" (change)="onTime($event)" />
+          </label>
+        }
+      </div>
+      <div class="ph-rows" role="radiogroup" [attr.aria-label]="'autopilot.title' | t">
+        @for (kind of kinds; track kind) {
+          <button type="button" class="ph-row" role="radio" [attr.data-state]="kind" [attr.aria-checked]="current.state === kind" [class.on]="current.state === kind" [disabled]="disabled()" (click)="pick(kind)">
+            <span class="ph-ic" [attr.data-tone]="tone(kind)"><mc-ph-icon [name]="glyph(kind)" /></span>
+            <span class="ph-body">
+              <span>{{ 'autopilot.state.' + kind | t }}</span>
+              <span class="ph-sentence">{{ 'autopilot.sentence.' + kind | t }}</span>
+            </span>
+            @if (current.state === kind) {
+              <mc-ph-icon name="check" [size]="20" [stroke]="2.5" />
+            }
+          </button>
+        }
+      </div>
+      <button type="button" class="ph-stop" [class.armed]="armed()" [disabled]="disabled()" (click)="stop()">
+        <mc-ph-icon name="stop" [size]="18" />
+        {{ (armed() ? 'autopilot.stop_all.confirm' : 'autopilot.stop_all') | t }}
+      </button>
+      @if (disabled()) {
+        <p class="note">{{ 'autopilot.refused.read_only' | t }}</p>
+      }
+      @if (error(); as words) {
+        <p class="note err" role="alert">{{ words }}</p>
+      }
+    </div>
+  } @else {
   <div class="rows" role="radiogroup" [attr.aria-label]="'autopilot.title' | t">
     @for (kind of kinds; track kind) {
       <button
@@ -40,5 +78,6 @@
   }
   @if (error(); as words) {
     <p class="note err" role="alert">{{ words }}</p>
+  }
   }
 }

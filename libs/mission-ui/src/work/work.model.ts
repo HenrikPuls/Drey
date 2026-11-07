@@ -232,6 +232,14 @@ export interface McRun {
   readonly ticketId?: string;
 }
 
+/** A live run as the phone's Work row words it (`stuck 9 min`, the run's age). */
+export interface McLiveRunSlice {
+  readonly ticketId: string;
+  readonly stuck: boolean;
+  readonly startedAt: string;
+  readonly lastActivity: string;
+}
+
 /**
  * Exactly what the work tab consumes of the device state. The api
  * module's `McState` is bound to `MC_WORK_STATE` by the shell; the tab
@@ -241,6 +249,10 @@ export interface McRun {
  * silent.
  */
 export interface McWorkState {
+  /** Today's spend over the crew's budgets (the phone's cost strip); absent = nothing known. */
+  readonly today?: { readonly cost: number | null; readonly budget: number | null } | null;
+  /** The live runs with the watchdog's flag (the phone's row words). */
+  readonly liveRuns?: readonly McLiveRunSlice[];
   readonly needs: readonly McNeed[];
   readonly board: McBoard | null;
   readonly personas: readonly McPersona[];
@@ -255,6 +267,8 @@ export interface McWorkState {
   moveTicket(ticketId: string, phaseId: string): Promise<McMoveResult>;
   /** The archive of any age, newest first, for "Show older" (E13-21); absent = no such list. */
   loadArchive?(): Promise<readonly McDoneEntry[]>;
+  /** Opens the plan to accept (the phone's row of a plan waiting, board 10c → 10j). */
+  openPlan?(ticketId: string): void;
   /** Opens the ticket screen (E5c) — the card tap's destination. */
   openTicket?(ticketId: string): void;
   /**

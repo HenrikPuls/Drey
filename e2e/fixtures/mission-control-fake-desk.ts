@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { NOTES_FIXTURE, isNotesPath, notesReply } from './mission-control-fake-notes';
+import * as BOARDS from './mission-control-fake-boards';
 
 const APP_DIR = path.resolve('dist/mission-control/browser');
 
@@ -131,12 +132,67 @@ export interface FakeDeskOptions {
   readonly readOnly?: boolean;
   /** `POST /api/chain/autopilot` answers with this refusal code instead of taking the change (req-95b). */
   readonly refuseAutopilot?: 'read_only' | 'bad_resume_at' | 'runner_down';
+  /** Serves the phone boards' sample (10a–10t) in place of the demo data: the fidelity spec's state. */
+  readonly boards?: boolean;
+}
+
+/** The answers of the board sample, by path; undefined = not a sample route. */
+function boardsRoute(pathname: string): unknown {
+  const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\//.exec(pathname);
+  if (estimate !== null) {
+    return BOARDS.ESTIMATES[`${estimate[1]}/${estimate[2]}`] ?? { ok: false, error: 'no basis' };
+  }
+  const ticket = /^\/api\/tickets\/([^/]+)(\/parts|\/plan)?$/.exec(pathname);
+  if (ticket !== null) {
+    const id = decodeURIComponent(ticket[1]!);
+    if (ticket[2] === '/parts') {
+      return id === 'T-0130' ? BOARDS.PARTS_130 : id === 'T-0121' ? BOARDS.PARTS_121 : { ok: false, error: 'no parts' };
+    }
+    if (ticket[2] === '/plan') {
+      return id === 'T-0130' ? BOARDS.PLAN_130 : { ok: true, version: null, edits: 0, summary: null, marks: [] };
+    }
+    const found = BOARDS.BOARD.columns.flatMap((c) => c.tickets).find((t) => t.id === id);
+    return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
+  }
+  const session = /^\/api\/chat\/sessions\/(.+)$/.exec(pathname);
+  if (session !== null) {
+    const file = decodeURIComponent(session[1]!);
+    return file === BOARDS.SESSION_PROPOSAL.file ? BOARDS.SESSION_PROPOSAL : { ...BOARDS.SESSION_CHAT, file };
+  }
+  switch (pathname) {
+    case '/api/board':
+      return BOARDS.BOARD;
+    case '/api/needs':
+      return BOARDS.NEEDS;
+    case '/api/personas':
+      return BOARDS.PERSONAS;
+    case '/api/fleet':
+      return BOARDS.FLEET;
+    case '/api/chat/sessions':
+      return BOARDS.SESSIONS;
+    case '/api/settings':
+      return BOARDS.SETTINGS;
+    case '/api/me':
+      return { ok: true, device: { name: 'iPhone', readOnly: false } };
+    default:
+      return undefined;
+  }
 }
 
 /** Starts the fake desk on a free port; resolves to its origin and a stop function. */
 export async function startFakeDesk(
   options: FakeDeskOptions = {},
 ): Promise<{ origin: string; stop: () => Promise<void>; autopilotWrites: () => readonly unknown[] }> {
+  if (options.boards === true) {
+    NOTES_FIXTURE.files.clear();
+    for (const [path, file] of BOARDS.NOTES) {
+      NOTES_FIXTURE.files.set(path, { ...file });
+    }
+    NOTES_FIXTURE.vault = 'drey-notes';
+  } else {
+    NOTES_FIXTURE.reset();
+    NOTES_FIXTURE.vault = 'Main vault';
+  }
   const autopilotWrites: unknown[] = [];
   const chain: Record<string, unknown> = { ...fleet.chain, autopilot: { state: 'on' } };
   if (!fs.existsSync(path.join(APP_DIR, 'index.html'))) {
@@ -152,6 +208,14 @@ export async function startFakeDesk(
       req.on('close', () => streams.delete(res));
       return;
     }
+    if (options.boards === true && (req.method === 'GET' || req.method === 'HEAD')) {
+      const answer = url.pathname === '/api/fleet' ? { ...BOARDS.FLEET, chain: { ...BOARDS.FLEET.chain, ...(chain['autopilotSet'] === true ? { autopilot: chain['autopilot'] } : {}) } } : boardsRoute(url.pathname);
+      if (answer !== undefined) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(answer));
+        return;
+      }
+    }
     if (url.pathname === '/api/chain/autopilot' && req.method === 'POST') {
       let raw = '';
       req.on('data', (chunk: Buffer) => (raw += chunk.toString()));
@@ -165,6 +229,7 @@ export async function startFakeDesk(
           return;
         }
         chain['autopilot'] = body;
+        chain['autopilotSet'] = true;
         chain['master'] = body.state === 'on' ? 'run' : 'halted';
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ok: true, status: chain }));
