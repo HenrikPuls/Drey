@@ -2,7 +2,8 @@
 
 **Not yet manually verified by the owner.** Wave 4.0 (`9a-frame`). Owner decisions of 2026-11-07, all four as recommended: 9a wins for the whole
 frame over row 7, the real app icon stays, the header menu has no "detach" yet, the Assistant body goes to wave row 4.8. A fifth after the first report: the strips and the tab
-bar end on one line, against the board.
+bar end on one line, against the board. Three more on the same day: the Drey logo replaces the board's "D" for good, an icon may differ when our set does not hold the
+board's glyph, and the text rendering is fine for now.
 
 - **Bars** (`src/styles.css`; the board is content-box, the app border-box, so each token is the whole bar with its line): title bar
   41 (`--bar-h`), tab bar and dock strips 37 (new `--tab-bar-h`, `--dock-strip-h`), meta bar 37, panel header 28, status bar 29. **The tab bar and the strips
@@ -35,11 +36,11 @@ calendar, Files rows. Open: none. Justified:
 
 | Region | Board | Build | Justification |
 |---|---|---|---|
-| Title bar, logo | "D" tile | the real app icon, 22 px, radius 4 | owner decision 2026-11-07 |
+| Title bar, logo | "D" tile | the Drey logo, 22 px, radius 4 | owner decision 2026-11-07 (`decisions.md`): the logo stays and replaces the "D" |
 | Docks below the title bar | strip 41 (line at y 81), so all panels 4 px lower | strip 37 (line at y 77, one with the tab bar) | owner decision 2026-11-07 (`decisions.md`): the board's offset is an error |
 | Title bar | no "Capture by voice" | the plugin's action | belongs to 4.2 (tickets plugin contribution) |
 | View switcher | Notes · Work · Crew | Notes · Work; Layout sits one tab further left | belongs to 4.2 (the preset) |
-| Left strip | a ticket glyph; a three-node Source control glyph | a layers glyph; a branch glyph | plugin-named icons: Tickets belongs to 4.2, Source control has no wave owner, handed to the integrator |
+| Left strip | a ticket glyph; a three-node Source control glyph | `layers`; `git-branch` | owner decision 2026-11-07 (`decisions.md`): the set has neither glyph, its nearest stands in |
 | Right strip | Search, Tasks, Assistant | Search, Assistant | sample content: a panel lives in one dock, the board draws Tasks in both |
 | Bottom dock | none | the Work preset's Capacity strip under the editor, disabled for the shot | belongs to 4.2 (the preset's layout) |
 | Files header | `+` and collapse shown, no fill | shown on hover, with the header's hover fill | the board forces its hover state on; captured for real in `DeskClean.files-hover.png` |
@@ -48,7 +49,7 @@ calendar, Files rows. Open: none. Justified:
 | Assistant body | no rail, target group, composer | today's panel | belongs to 4.8 (`desk-assistant`, owner decision 2026-11-07) |
 | Outline, Tasks body | 26 px rows | the panels' own content | owner decision: 9b is not a target, the panels' content stays (`decisions.md`) |
 | Counts, calendar's today, tree, status text | sample | the seeded English vault, today's date | data; "1 running" appears with a live run |
-| Text | the canvas export's text rendering | Electron's on Windows: same font and size, heavier strokes, a 600-weight line up to 1 px wider | not one of the checklist's reasons: named for the integrator to rule on; no CSS difference found (font, size, weight, line height all as on the board) |
+| Text | the canvas export's text rendering | Electron's on Windows: same font and size, heavier strokes, a 600-weight line up to 1 px wider | owner decision 2026-11-07 (`decisions.md`): fine for now; no CSS difference found (font, size, weight, line height all as on the board) |
 
 ### Milestone 190 — D-37: `npm run e2e` is green again, the two flakes were stale handles in the specs
 

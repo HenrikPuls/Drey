@@ -8,6 +8,15 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **The boards' "D" tile as the app's logo** (owner, 2026-11-07; milestone 192, req-104). Every board draws a
+  "D" tile in the title bar. The Drey logo stays and is used in its place; it is no deviation to re-open on any board.
+- **A new icon for every glyph a board draws** (owner, 2026-11-07; milestone 192, req-104). An icon may differ
+  from a board when the icon set (`src/app/icons/icon.ts`) does not hold that glyph; the nearest one in the set stands
+  in. A glyph the set does hold must match. On 9a: Tickets (`layers` for a ticket) and Source control (`git-branch`).
+- **Chasing the boards' text rendering** (owner, 2026-11-07; milestone 192, req-104; "ok for now"). Electron on
+  Windows draws the same font and size with heavier strokes than the canvas export, a 600-weight line up to
+  1 px wider. A UI session does not work around this; the owner may reopen it.
+
 - **Board 9a's 4 px offset between the dock strips and the tab bar** (owner, 2026-11-07; milestone 192, req-104).
   `DeskClean` ends the strips at y 81 and the tab bar at y 77. The owner: the board is wrong here, the two read as
   one continuous line. Both are 37 px; the tab bar, meta bar and editor stay on the board's position, the dock
