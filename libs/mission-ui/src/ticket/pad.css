@@ -213,3 +213,487 @@
     display: none;
   }
 }
+
+/* The iPad's review face (board 5h): the proof, the files, one file's diff, the decision in the footer. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .ticket:has(.pd-rev) {
+    height: 100%;
+    border-left: 1px solid var(--line);
+  }
+  .pd-rev {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-height: 0;
+    font-size: var(--ph-17);
+  }
+  .pd-rhead {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pd-rtitle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .pd-rid {
+    font-family: var(--mono);
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  .pd-rname {
+    min-width: 0;
+    white-space: nowrap;
+    font-size: var(--ph-18);
+    line-height: 24px;
+  }
+  .pd-rchip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    font-size: var(--ph-15);
+    color: var(--accent-peach);
+    background: color-mix(in srgb, var(--accent-peach) 14%, transparent);
+    border-radius: var(--radius-chip);
+  }
+  .pd-rdot {
+    width: 7px;
+    height: 7px;
+    background: var(--accent-peach);
+    border-radius: 50%;
+  }
+  .pd-rsub {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--ph-15);
+    line-height: 21px;
+    color: var(--text-2);
+  }
+  .pd-rsec {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 16px;
+  }
+  .pd-rsec b {
+    font-size: var(--ph-15);
+  }
+  .pd-rsec span {
+    min-width: 0;
+    white-space: nowrap;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-rproof {
+    display: flex;
+    flex: none;
+    gap: 14px;
+    padding: 0 16px 12px;
+  }
+  .pd-rvideo {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 192px;
+    height: 108px;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-rdur {
+    position: absolute;
+    bottom: 6px;
+    left: 8px;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-player {
+    flex: none;
+    width: 320px;
+    height: 180px;
+    background: var(--panel);
+    border-radius: var(--radius-control);
+  }
+  .pd-rproofmain {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .pd-rstrip {
+    gap: 4px 16px;
+  }
+  .pd-rstrip .pd-stripamount {
+    font-size: var(--ph-14);
+    color: var(--accent-peach);
+  }
+  .pd-rchips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pd-rchip2 {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: 28px;
+    padding: 0 10px;
+    font: inherit;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+    white-space: nowrap;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-rchip2.on {
+    color: var(--text);
+    border-color: var(--control-border);
+  }
+  .pd-rfiles {
+    display: flex;
+    flex: none;
+    gap: 8px;
+    padding: 0 16px 12px;
+  }
+  .pd-rtile {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 52px;
+    padding: 6px 12px;
+    color: var(--text);
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-rtile.on {
+    background: var(--panel-2);
+    border-color: var(--control-border);
+  }
+  .pd-rbox {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    box-sizing: content-box;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    color: var(--on-accent);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-chip);
+  }
+  .pd-rbox.on {
+    background: var(--ok);
+    border-color: var(--ok);
+  }
+  .pd-rfbody {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pd-rfname {
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: var(--ph-14);
+    line-height: 20px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-rfsub {
+    overflow: hidden;
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-rpath {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 10px;
+    box-sizing: content-box;
+    min-height: 52px;
+    padding: 0 16px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .pd-rpname {
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: var(--ph-14);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-rpstat {
+    flex: none;
+    font-family: var(--mono);
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-rgrow {
+    flex: 1 1 0;
+  }
+  .pd-rseg {
+    display: flex;
+    flex: none;
+    gap: 4px;
+    padding: 3px;
+    background: var(--panel);
+    border-radius: var(--radius-control);
+  }
+  .pd-rseg button {
+    height: 44px;
+    padding: 0 16px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+  .pd-rseg button.on {
+    color: var(--text);
+    background: var(--panel-2);
+  }
+  .pd-rnav {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-rscroll {
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 8px 0;
+    overflow: auto;
+  }
+  .pd-rcode {
+    min-width: 640px;
+    font-family: var(--mono);
+    font-size: var(--ph-13);
+    line-height: 22px;
+  }
+  .pd-rwrap {
+    display: flex;
+    flex-direction: column;
+  }
+  .pd-rhunk {
+    padding: 0 16px 6px;
+    color: var(--text-2);
+    white-space: pre;
+  }
+  .pd-rrow {
+    display: grid;
+    grid-template-columns: 44px 44px 20px minmax(0, 1fr);
+    min-height: 22px;
+    background: var(--bg);
+  }
+  .pd-rrow.add {
+    background: color-mix(in srgb, var(--ok) 16%, transparent);
+  }
+  .pd-rrow.del {
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+  }
+  .pd-rrow.sel {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .pd-rno {
+    padding-right: 8px;
+    color: var(--text-2);
+    text-align: right;
+  }
+  .pd-rsign {
+    text-align: center;
+  }
+  .pd-rtext {
+    white-space: pre;
+  }
+  .pd-rrow.add .pd-rsign,
+  .pd-rrow.add .pd-rtext {
+    color: var(--ok);
+  }
+  .pd-rrow.del .pd-rsign,
+  .pd-rrow.del .pd-rtext {
+    color: var(--danger);
+  }
+  .pd-rcard {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    margin: 8px 16px 8px 100px;
+    font-family: var(--sans);
+    font-size: var(--ph-16);
+    line-height: 22px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-rcardhead {
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-rcardrow {
+    display: flex;
+    gap: 8px;
+  }
+  .pd-rbtn {
+    height: 44px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-rbtn:disabled,
+  .pd-rfbtn:disabled,
+  .pd-raccept:disabled {
+    opacity: 0.5;
+  }
+  .pd-rtext-in {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: var(--ph-16);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-rhint,
+  .pd-rnote {
+    margin: 0;
+    padding: 12px 16px 0;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-rlink {
+    display: block;
+    min-height: 44px;
+    padding: 0 16px;
+    font: inherit;
+    font-size: var(--ph-15);
+    line-height: 44px;
+    color: var(--accent);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-rextra {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 8px;
+  }
+  .pd-rextra .ph-h2,
+  .pd-rextra .pd-tiles,
+  .pd-rextra mc-markdown {
+    margin: 8px 16px 0;
+  }
+  .pd-rfind {
+    margin: 0;
+    padding: 0 16px 0 36px;
+    font-size: var(--ph-15);
+    line-height: 22px;
+  }
+  .pd-rfoot {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px var(--pd-foot, 20px);
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+  }
+  .pd-rsend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  .pd-rfootrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pd-rstatus {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  .pd-rfbtn,
+  .pd-raccept {
+    display: flex;
+    flex: none;
+    align-items: center;
+    height: 48px;
+    padding: 0 18px;
+    white-space: nowrap;
+    font: inherit;
+    font-size: var(--ph-16);
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-raccept {
+    font-weight: 600;
+    color: var(--on-accent);
+    background: var(--accent-mint);
+    border: 0;
+  }
+}

@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 export type PhoneIconName =
   | 'plus' | 'search' | 'play' | 'pause' | 'stop' | 'doc' | 'ticket' | 'crew' | 'sliders' | 'chev'
   | 'contrast' | 'chat' | 'bell' | 'device' | 'book' | 'terminal' | 'more' | 'check' | 'mic' | 'send'
-  | 'folder' | 'pencil' | 'x' | 'ask' | 'bold' | 'italic' | 'heading' | 'list' | 'checkbox' | 'link' | 'hash';
+  | 'play-solid' | 'chev-up' | 'chev-down' | 'folder' | 'pencil' | 'x' | 'ask' | 'bold' | 'italic' | 'heading' | 'list' | 'checkbox' | 'link' | 'hash';
 
 /**
  * The line icons the phone boards draw (10a–10t), one place for the paths.

@@ -106,9 +106,20 @@ test.describe('landscape', () => {
   });
 
   test('5h review', async ({ page }) => {
+    await needsOf(page, (needs) =>
+      needs.map((need) => (need['ticketId'] === 'T-0121' ? { kind: 'checkpoint', phase: 'review', ticketId: 'T-0121', title: 'Outline: drag headings to reorder', summary: 'Ready for your review.' } : need)),
+    );
     await open(page);
-    await ticket(page, 'Palette opens twice on slow CI');
-    await page.locator('mc-ticket').getByRole('button', { name: 'Review', exact: true }).first().click();
+    await ticket(page, 'Outline: drag headings to reorder');
+    await page.locator('mc-ticket').getByRole('button', { name: 'More', exact: true }).click();
+    await page.locator('mc-ticket .ph-sheet-row', { hasText: /^Review$/ }).click();
+    await expect(page.locator('mc-ticket .pd-rev')).toBeVisible();
+    await settle(page);
+    await page.locator('mc-ticket .pd-rtile', { hasText: 'drag.ts' }).first().getByRole('checkbox').click();
+    await page.locator('mc-ticket .pd-rrow', { hasText: 'if (range === null)' }).click();
+    await page.locator('mc-ticket #pd-draft-note').fill('What happens with an empty selection? I would expect nothing to move.');
+    await page.locator('mc-ticket .pd-rcard').getByRole('button', { name: 'Add comment' }).click();
+    await page.locator('mc-ticket .pd-rscroll').evaluate((el) => { el.scrollTop = 0; });
     await shot(page, 'PadReview');
   });
 

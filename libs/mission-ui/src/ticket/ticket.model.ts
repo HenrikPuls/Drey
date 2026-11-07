@@ -991,6 +991,8 @@ export interface TicketVm {
   phaseColor(): string | null;
   /** The proof card's diff; null while the desk has not answered (the card stays hidden). */
   diff(): TicketDiff | null;
+  /** Asks the desk for the open ticket's diff (`GET /api/tickets/<id>/diff`); the iPad's review face calls it on opening. Optional: an adapter without it keeps the diff it has. */
+  loadDiff?(): Promise<void>;
   /** Read-only paired devices watch but never act: Accept/Send-back/Edit hide entirely. */
   readOnly(): boolean;
   /** The URL an attachment `<img>` fetches (`GET /api/attachments/<name>`); null until it can serve it. */

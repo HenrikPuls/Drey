@@ -479,6 +479,268 @@
 
       <!-- ==================== the proof face ==================== -->
       @case ('proof') {
+        @if (pad()) {
+          <mc-app-bar [title]="'ticket.pad.review_title' | t: { id: id() }" [back]="id()" (backed)="backToTicket()" />
+          <div class="pd-rev" #pdhost>
+            <div class="pd-rhead">
+              <div class="pd-rtitle">
+                <span class="pd-rid">{{ id() }}</span>
+                <b class="pd-rname">{{ title() }}</b>
+                @if (needsYou()) {
+                  <span class="pd-rchip"><span class="pd-rdot" aria-hidden="true"></span>{{ 'review.needs_review' | t }}</span>
+                }
+              </div>
+              @if (padIntro(); as intro) {
+                <div class="pd-rsub">{{ intro }}</div>
+              }
+            </div>
+
+            @if (proof(); as report) {
+              <div class="pd-rsec">
+                <b>{{ 'review.proof' | t }}</b>
+                @if (padWalkthrough(); as walk) {
+                  <span>{{ walk }}</span>
+                }
+              </div>
+              <div class="pd-rproof">
+                @if (report.video !== null) {
+                  @if (padPlaying() && video(); as clip) {
+                    <video class="pd-player" controls playsinline preload="metadata" [src]="clip.url" [attr.aria-label]="'review.play' | t"></video>
+                  } @else {
+                    <button type="button" class="pd-rvideo" [attr.aria-label]="'review.play' | t" [attr.title]="'review.play' | t" (click)="padPlay()">
+                      <mc-ph-icon name="play-solid" [size]="28" />
+                      <span class="pd-rdur">{{ clock(report.chapters.length > 0 ? report.chapters[report.chapters.length - 1].atSec : 0) }}</span>
+                    </button>
+                  }
+                }
+                <div class="pd-rproofmain">
+                  @if (proofStrip(); as strip) {
+                    <div class="ph-proof pd-rstrip">
+                      <span class="ph-proof-item">
+                        <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                        <span><b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b> {{ 'review.checks' | t }}</span>
+                      </span>
+                      @if (strip.testedBy !== '') {
+                        <span class="ph-proof-item">
+                          <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                          {{ 'review.tested_by' | t: { who: strip.testedBy } }}
+                        </span>
+                      }
+                      @if (strip.reviewer !== '') {
+                        <span class="ph-proof-item">
+                          <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                          {{ 'ticket.phone.proof_review' | t: { name: strip.reviewer } }}
+                        </span>
+                      }
+                      @if (proofCost(); as total) {
+                        <span class="pd-stripcost">{{ 'review.cost' | t }} <span class="pd-stripamount">{{ total }}</span></span>
+                      }
+                    </div>
+                  }
+                  @if (report.chapters.length > 0) {
+                    <div class="pd-rchips">
+                      @for (chapter of report.chapters; track $index) {
+                        <button type="button" class="pd-rchip2" [class.on]="padChapter() === $index" (click)="padSeek($index, chapter.atSec, pdhost)">
+                          {{ clock(chapter.atSec) }} {{ chapter.label }}
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (diff(); as proofDiff) {
+              @if (proofDiff.files.length > 0) {
+                <div class="pd-rsec">
+                  <b>{{ 'review.files' | t }}</b>
+                  <span>{{ 'review.files_viewed' | t: { seen: viewedCount(), total: proofDiff.files.length } }}</span>
+                </div>
+                <div class="pd-rfiles">
+                  @for (file of proofDiff.files; track file.path) {
+                    <div class="pd-rtile" role="button" tabindex="0" [class.on]="padFile()?.path === file.path" (click)="padSelect(file)" (keydown.enter)="padSelect(file)">
+                      <button
+                        type="button"
+                        class="pd-rbox"
+                        role="checkbox"
+                        [class.on]="isViewed(file)"
+                        [attr.aria-checked]="isViewed(file)"
+                        [attr.aria-label]="'review.mark_viewed' | t: { path: file.path }"
+                        (click)="padToggleViewed(file, $event)"
+                      >
+                        @if (isViewed(file)) {
+                          <mc-ph-icon name="check" [size]="12" [stroke]="3" />
+                        }
+                      </button>
+                      <span class="pd-rfbody">
+                        <span class="pd-rfname">{{ file.path.split('/').pop() }}</span>
+                        <span class="pd-rfsub">{{ padFileSub(file) }}</span>
+                      </span>
+                    </div>
+                  }
+                </div>
+                @if (padFile(); as file) {
+                  <div class="pd-rpath">
+                    <span class="pd-rpname">{{ file.path }}</span>
+                    <span class="pd-rpstat">{{ padStat(file) }}</span>
+                    <span class="pd-rgrow"></span>
+                    @if (canShowWhole()) {
+                      <div class="pd-rseg" role="group" [attr.aria-label]="'review.view_label' | t">
+                        <button type="button" [class.on]="!isWhole(file.path)" [attr.aria-pressed]="!isWhole(file.path)" (click)="setWhole(file.path, false)">{{ 'review.changes' | t }}</button>
+                        <button type="button" [class.on]="isWhole(file.path)" [attr.aria-pressed]="isWhole(file.path)" (click)="setWhole(file.path, true)">{{ 'review.whole_file' | t }}</button>
+                      </div>
+                    }
+                    @if (changeCount(file) > 0) {
+                      <button type="button" class="pd-rnav" [attr.aria-label]="'ticket.pad.review_prev' | t" [attr.title]="'ticket.pad.review_prev' | t" (click)="padStep(file, -1, pdhost)">
+                        <mc-ph-icon name="chev-up" [size]="18" />
+                      </button>
+                      <button type="button" class="pd-rnav" [attr.aria-label]="'ticket.pad.review_next' | t" [attr.title]="'ticket.pad.review_next' | t" (click)="padStep(file, 1, pdhost)">
+                        <mc-ph-icon name="chev-down" [size]="18" />
+                      </button>
+                    }
+                  </div>
+                }
+              }
+            }
+
+            <div class="pd-rscroll">
+              @if (diff(); as proofDiff) {
+                @if (padFile(); as file) {
+                  @if (loadingWhole(file)) {
+                    <p class="pd-rnote">{{ 'ticket.pad.review_loading_whole' | t }}</p>
+                  } @else if (wholeTruncated(file)) {
+                    <p class="pd-rnote">{{ 'ticket.pad.review_whole_long' | t }}</p>
+                  }
+                  <div class="pd-rcode">
+                    @for (item of padRows(file); track $index) {
+                      <div class="pd-rwrap">
+                        @if (item.row.kind === 'hunk') {
+                          <div class="pd-rhunk" [attr.data-chg]="null">{{ item.row.text }}</div>
+                        } @else {
+                          <div
+                            class="pd-rrow"
+                            [class.add]="item.row.kind === 'add'"
+                            [class.del]="item.row.kind === 'del'"
+                            [class.sel]="inDraft(file.path, item.row.newNo)"
+                            [class.cur]="item.change !== null && item.change === changeIndex(file)"
+                            [attr.data-chg]="item.first ? file.path + '|' + item.change : null"
+                            (click)="padPick(file, item)"
+                          >
+                            <span class="pd-rno">{{ item.row.oldNo ?? '' }}</span>
+                            <span class="pd-rno">{{ item.row.newNo ?? '' }}</span>
+                            <span class="pd-rsign">{{ item.row.sign }}</span>
+                            <span class="pd-rtext">{{ item.row.text === '' ? ' ' : item.row.text }}</span>
+                          </div>
+                        }
+                        @for (pending of commentsAfter(file.path, item.row.newNo); track pending.index) {
+                          <div class="pd-rcard">
+                            <span class="pd-rcardhead">{{ padCommentHead(pending.comment) }}</span>
+                            <span>{{ pending.comment.text }}</span>
+                            <div class="pd-rcardrow">
+                              <button type="button" class="pd-rbtn" (click)="editComment(pending.index)">{{ 'ticket.pad.review_edit' | t }}</button>
+                              <button type="button" class="pd-rbtn" (click)="deleteComment(pending.index)">{{ 'ticket.pad.review_delete' | t }}</button>
+                            </div>
+                          </div>
+                        }
+                        @if (draftAfter(file.path, item.row.newNo)) {
+                          <div class="pd-rcard">
+                            <label class="pd-rcardhead" for="pd-draft-note">{{ 'review.comment_label' | t }}</label>
+                            <textarea id="pd-draft-note" class="pd-rtext-in" rows="2" [value]="draftText()" (input)="onDraftText($event)"></textarea>
+                            <div class="pd-rcardrow">
+                              <button type="button" class="pd-rbtn" (click)="cancelDraft()">{{ 'review.comment_cancel' | t }}</button>
+                              <button type="button" class="pd-rbtn" [disabled]="draftText().trim() === ''" (click)="addDraft()">{{ 'review.comment_add' | t }}</button>
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                  @if (!readOnly()) {
+                    <p class="pd-rhint">{{ 'ticket.pad.review_hint' | t }}</p>
+                  }
+                  <button type="button" class="pd-rlink" (click)="openFullscreen(file, $event)">{{ 'ticket.pad.review_fullscreen' | t }}</button>
+                }
+                @if (proofDiff.truncated) {
+                  <p class="pd-rnote">{{ 'ticket.pad.review_truncated' | t }}</p>
+                }
+              }
+
+              @if (proof(); as report) {
+                <div class="pd-rextra">
+                  @if (verdict(); as v) {
+                    <p class="pd-rnote">{{ v.stamp }}</p>
+                    @if (proofRecommendation(); as recommendation) {
+                      <p class="pd-rnote">{{ recommendation }}</p>
+                    }
+                  }
+                  @if (report.findings.length > 0) {
+                    <h2 class="ph-h2 pd-h2-0">{{ 'ticket.pad.review_findings' | t }}</h2>
+                    <ul class="pd-rfind">
+                      @for (finding of report.findings; track $index) {
+                        <li>{{ finding }}</li>
+                      }
+                    </ul>
+                  }
+                  @if (report.videoNotKept; as removed) {
+                    <p class="pd-rnote">{{ removed }}</p>
+                  }
+                  @if (shots().length > 0) {
+                    <div class="pd-tiles">
+                      @for (shot of shots(); track shot.name) {
+                        <button type="button" class="pd-tile" (click)="openViewer(shot)">
+                          <img [src]="shot.url" [alt]="shot.name" loading="lazy" />
+                          <span>{{ shot.name }}</span>
+                        </button>
+                      }
+                    </div>
+                  }
+                  @if (verificationText(); as verification) {
+                    <button type="button" class="pd-rlink" [attr.aria-expanded]="verificationOpen()" (click)="verificationOpen.set(!verificationOpen())">{{ 'ticket.pad.review_verification' | t }}</button>
+                    @if (verificationOpen()) {
+                      <mc-markdown [text]="verification" surface="verification" [label]="'ticket.pad.review_verification' | t" />
+                    }
+                  }
+                  @if (costTotal(); as total) {
+                    <p class="pd-rnote">{{ 'review.cost' | t }} {{ total }}</p>
+                  }
+                  @if (promotable() && !readOnly()) {
+                    <button type="button" class="pd-rlink" (click)="promote()">{{ 'ticket.phone.promote' | t }}</button>
+                  }
+                  @if (decisionWaiting() && decisionNeed() === null) {
+                    <a class="pd-rlink" href="#" (click)="goToDecisionCard($event)">{{ 'ticket.pad.go_to_card' | t }}</a>
+                  }
+                </div>
+              }
+            </div>
+
+            <div class="pd-rfoot">
+              @if (sendBackOpen()) {
+                <div class="pd-rsend">
+                  <label for="pd-sendback-note">{{ (comments().length > 0 ? 'ticket.pad.review_note_label' : 'ticket.phone.sendback_why') | t }}</label>
+                  <textarea id="pd-sendback-note" class="pd-rtext-in" rows="2" [value]="note()" (input)="onNote($event)"></textarea>
+                </div>
+              }
+              <div class="pd-rfootrow">
+                <span class="pd-rstatus" role="status" aria-live="polite">{{ padStatus() }}</span>
+                @if (!readOnly()) {
+                  @if (sendBackOpen()) {
+                    <button type="button" class="pd-rfbtn" (click)="toggleSendBack()">{{ 'ticket.phone.cancel' | t }}</button>
+                    <button type="button" class="pd-rfbtn" [disabled]="(note().trim() === '' && comments().length === 0) || sendBackPending()" (click)="sendBack()">
+                      {{ 'ticket.pad.review_send_now' | t }}
+                    </button>
+                  } @else {
+                    <button type="button" class="pd-rfbtn" [disabled]="decisionBusy()" (click)="toggleSendBack()">{{ padSendBackLabel() }}</button>
+                    @if (decisionNeed(); as need) {
+                      @if (questionNeed() === null) {
+                        <button type="button" class="pd-raccept" [disabled]="decisionBusy()" (click)="decisionAccept(need)">{{ 'ticket.pad.accept_merge' | t }}</button>
+                      }
+                    }
+                  }
+                }
+              </div>
+            </div>
+          </div>
+        } @else {
         <mc-app-bar [title]="id()" back="Ticket" (backed)="backToTicket()" />
 
         <ng-container [ngTemplateOutlet]="faceSwitch" />
@@ -797,6 +1059,7 @@
             </div>
           }
         </div>
+        }
       }
 
       <!-- ==================== the thread face ==================== -->

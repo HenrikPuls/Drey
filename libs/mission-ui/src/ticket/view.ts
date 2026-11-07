@@ -297,6 +297,13 @@ export class TicketView {
     const covered = this.pad() && !this.isEmpty() && this.mode() === 'proof';
     untracked(() => this.panes.covered.set(covered));
   });
+  /** The review face's diff is fetched when it opens (the desk answers `GET …/diff`). */
+  private readonly loadPadDiff = effect(() => {
+    if (this.pad() && !this.isEmpty() && this.mode() === 'proof') {
+      this.id();
+      untracked(() => void this.vm.loadDiff?.());
+    }
+  });
   /** The ⋯ sheet: everything the phone's face does not draw (Review, edit, chain). */
   protected readonly moreOpen = signal(false);
 
@@ -917,6 +924,119 @@ export class TicketView {
   }
 
   protected readonly diff = computed(() => this.vm.diff());
+
+  // --- the iPad's review face (board 5h): the same state, drawn as the board ---------
+
+  /** The file whose diff is open; null = the first. */
+  private readonly padFilePath = signal<string | null>(null);
+  protected readonly padFile = computed(() => {
+    const files = this.diff()?.files ?? [];
+    return files.find((file) => file.path === this.padFilePath()) ?? files[0] ?? null;
+  });
+  /** The walkthrough plays in place of its tile once tapped. */
+  protected readonly padPlaying = signal(false);
+  protected readonly padChapter = signal(0);
+
+  protected padSelect(file: TicketDiffFile): void {
+    this.padFilePath.set(file.path);
+  }
+
+  protected padToggleViewed(file: TicketDiffFile, event: Event): void {
+    event.stopPropagation();
+    this.toggleViewed(file);
+  }
+
+  /** The tile's grey line: the file's package folder and its added/removed count. */
+  protected padFileSub(file: TicketDiffFile): string {
+    const parts = file.path.split('/');
+    const folder = parts.length >= 3 ? parts[1]! : parts.length === 2 ? parts[0]! : '';
+    const stat = this.padStat(file);
+    return folder === '' ? stat : this.i18n.t('ticket.pad.review_file_sub', { folder, stat });
+  }
+
+  /** `+84 −6` off the patch itself; a file without removed lines reads `+61`. */
+  protected padStat(file: TicketDiffFile): string {
+    const rows = patchRowsOf(file.patch);
+    const added = rows.filter((row) => row.kind === 'add').length;
+    const removed = rows.filter((row) => row.kind === 'del').length;
+    return removed === 0 ? this.i18n.t('ticket.pad.review_stat_add', { added }) : this.i18n.t('ticket.pad.review_stat', { added, removed });
+  }
+
+  /** The rows the face draws: the file's own header lines are in the path bar already. */
+  protected padRows(file: TicketDiffFile): readonly ChangeRow[] {
+    return this.rowsOf(file).filter((item) => item.row.kind !== 'meta');
+  }
+
+  /** Tap a row of the new file: the comment composer (a second tap stretches the range). */
+  protected padPick(file: TicketDiffFile, item: ChangeRow): void {
+    if (item.row.newNo !== null && !this.readOnly()) {
+      this.pickLine(file, item.row.newNo);
+    }
+  }
+
+  protected padCommentHead(comment: ReviewComment): string {
+    return comment.endLine === null
+      ? this.i18n.t('ticket.pad.review_comment', { line: comment.line })
+      : this.i18n.t('ticket.pad.review_comment_range', { line: comment.line, end: comment.endLine });
+  }
+
+  /** Previous / next change; a step past the file's end opens the neighbouring file. */
+  protected padStep(file: TicketDiffFile, direction: -1 | 1, host: HTMLElement): void {
+    const files = this.diff()?.files ?? [];
+    const target = this.changeIndex(file) + direction;
+    if (target < 0 || target >= this.changeCount(file)) {
+      const neighbour = files[files.findIndex((f) => f.path === file.path) + direction];
+      if (neighbour !== undefined) {
+        this.padFilePath.set(neighbour.path);
+      }
+    }
+    this.stepChange(file, direction, host);
+  }
+
+  protected padPlay(): void {
+    this.padPlaying.set(true);
+  }
+
+  /** A chapter chip: start the walkthrough (if it is not) and seek it. */
+  protected padSeek(index: number, atSec: number, host: HTMLElement): void {
+    this.padChapter.set(index);
+    this.padPlaying.set(true);
+    setTimeout(() => {
+      const player = host.querySelector<HTMLVideoElement>('video.pd-player');
+      if (player !== null) {
+        this.seekTo(player, atSec);
+      }
+    });
+  }
+
+  /** The intro under the title: the ticket's goal sentence and whose build this is. */
+  protected readonly padIntro = computed<string | null>(() => {
+    const who = this.workerName();
+    if (who === null) {
+      return null;
+    }
+    const goal = /^##\s+Goal\s*\r?\n+([^\r\n]+)/m.exec(this.doc()?.text ?? '')?.[1] ?? '';
+    const sentence = /^.+?[.!?](?=\s|$)/.exec(goal.trim())?.[0] ?? goal.trim();
+    return sentence === '' ? this.i18n.t('ticket.pad.review_sub_plain', { who }) : this.i18n.t('ticket.pad.review_sub', { goal: sentence, who });
+  });
+
+  protected readonly padWalkthrough = computed<string | null>(() => {
+    const report = this.proof();
+    if (report === null || report.video === null) {
+      return null;
+    }
+    return this.i18n.t('review.walkthrough', { who: report.tester, n: report.chapters.length });
+  });
+
+  /** The footer's left line: the outcome of the last decision, else the pending comments. */
+  protected readonly padStatus = computed<string>(() => {
+    const done = this.decisionDone() ?? this.decisionError() ?? this.result()?.text ?? this.savedFlash();
+    return done !== null && done !== undefined && done !== '' ? done : this.i18n.t('ticket.pad.review_pending', { n: this.comments().length });
+  });
+
+  protected readonly padSendBackLabel = computed(() =>
+    this.comments().length === 0 ? this.i18n.t('ticket.phone.send_back') : this.i18n.t('ticket.pad.review_send_back', { n: this.comments().length }),
+  );
 
   // --- the CTA row: proof, thread, per chat -------------------------------------
 

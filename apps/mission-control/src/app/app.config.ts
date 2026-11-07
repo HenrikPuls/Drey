@@ -387,6 +387,7 @@ export const appConfig: ApplicationConfig = {
             return detail === null ? null : (phaseColors().get(detail.phase) ?? null);
           },
           diff: () => state.diff() as ReturnType<TicketVm['diff']>,
+          loadDiff: () => state.loadDiff(),
           readOnly: () => state.readOnly(),
           attachmentUrl: (name) => {
             const url = state.attachmentUrl(name);

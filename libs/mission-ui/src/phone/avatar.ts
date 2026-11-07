@@ -8,7 +8,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     <circle cx="12" cy="9.5" r="4.2" fill="var(--on-pastel)" fill-opacity="0.78" />
     <path d="M3.5 24c0-5 3.8-8 8.5-8s8.5 3 8.5 8z" fill="var(--on-pastel)" fill-opacity="0.78" />
   </svg>`,
-  styles: `:host { display: inline-flex; flex-shrink: 0; } .ava { display: block; border-radius: 50%; }`,
+  styleUrl: './avatar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PhoneAvatar {

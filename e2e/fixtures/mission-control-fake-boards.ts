@@ -352,6 +352,83 @@ export const PAD_PARTS_130 = {
   })),
 };
 
+/** 5h: T-0121 as it reads at the review: a finished build with its Verification and a three-chapter walkthrough. */
+const PAD_COST_121 = [
+  '- {phase: plan, persona: paul, model: Claude sonnet, tokens: 21k, dauer: 4m, cost: 0.34, ausgang: done}',
+  '- {phase: build, persona: ben, model: Claude sonnet, tokens: 52k, dauer: 9m, cost: 0.86, ausgang: done}',
+  '- {phase: review, persona: ralf, model: Claude sonnet, tokens: 0, dauer: 0m, cost: 0, ausgang: done}',
+].join('\n');
+
+PAD_TICKET_TEXT['T-0121'] = [
+  '---',
+  'id: T-0121',
+  '---',
+  '',
+  '## Goal',
+  '',
+  'Drag headings in the Outline panel to reorder a note. The text under a heading is part of the move.',
+  '',
+  '## Verification',
+  '',
+  'Tested on 2026-11-06 by Tessa',
+  '',
+  '- [x] Dragging a heading moves its whole section',
+  '- [x] Undo restores it in one step',
+  '- [x] Dropping a heading on itself does nothing',
+  '- [x] The tree and the buffer stay in step',
+  '',
+  '### Video',
+  '',
+  '![](../videos/t-0121.webm)',
+  '',
+  '- 0:06 Drag a heading',
+  '- 0:21 Undo once',
+  '- 0:35 Last heading',
+  '',
+  '## Verlauf',
+  '',
+  PAD_COST_121,
+  '',
+].join('\n');
+
+/** 5h: a patch of one hunk as the board draws it, then the lines that make up the file's count. */
+const padPatch = (head: string[], add: number, del: number, at: number): string =>
+  [
+    ...head,
+    `@@ -${at + 20},${del} +${at + 20},${add} @@`,
+    ...Array.from({ length: del }, (_, i) => `-  legacy${i}();`),
+    ...Array.from({ length: add }, (_, i) => `+  next${i}();`),
+  ].join('\n');
+
+/** 5h: the diff route's answer for T-0121: drag.ts (+84 −6, the board's hunk first), tree.ts, drag.spec.ts. */
+export const PAD_DIFF_121 = {
+  truncated: false,
+  files: [
+    {
+      status: 'M',
+      path: 'plugins/outline/renderer/drag.ts',
+      patch: padPatch(
+        [
+          '@@ -41,7 +41,12 @@ function onDrop',
+          ' function onDrop(event: DragEvent, tree: OutlineTree): void {',
+          '   const target = tree.nodeAt(event.clientY);',
+          '-  tree.moveHeading(source, target);',
+          '+  const range = tree.sectionRange(source);',
+          '+  if (range === null) { return; }',
+          '+  tree.moveRange(range, target, { withBody: !event.altKey });',
+          '   view.dispatch({ effects: refresh.of(null) });',
+          ' }',
+        ],
+        81,
+        5,
+        60,
+      ),
+    },
+    { status: 'M', path: 'plugins/outline/renderer/tree.ts', patch: padPatch([], 22, 3, 10) },
+    { status: 'A', path: 'plugins/outline/renderer/drag.spec.ts', patch: ['@@ -0,0 +1,61 @@', ...Array.from({ length: 61 }, (_, i) => `+  it('case ${i}', () => {});`)].join('\n') },
+  ],
+};
+
 /** 5c: the estimate the board's first part shows. */
 export const PAD_ESTIMATES: Record<string, unknown> = {
   ...ESTIMATES,

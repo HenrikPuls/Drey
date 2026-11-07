@@ -24,7 +24,9 @@ export function phoneSignal(): Signal<boolean> {
  * templates. Same test as the shell's (width + coarse pointer without hover).
  */
 export const TOUCH_FACE_QUERY = `${PHONE_QUERY}, (hover: none) and (pointer: coarse)`;
-export const PAD_QUERY = '(min-width: 768px) and (hover: none) and (pointer: coarse)';
+const WIDE_QUERY = '(min-width: 768px)';
+const COARSE_QUERY = '(hover: none) and (pointer: coarse)';
+export const PAD_QUERY = [WIDE_QUERY, COARSE_QUERY].join(' and ');
 
 function mediaSignal(query: string): Signal<boolean> {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
