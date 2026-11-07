@@ -35,7 +35,7 @@
 }
 
 :host(.drag-active.bottom) {
-  min-height: 140px;
+  min-height: 100px;
 }
 
 .drop-hint {

@@ -14,6 +14,9 @@
       @if (views.modified()) {
         <span class="vs-dot" aria-hidden="true"></span>
       }
+      @if (views.badge(views.activeId())) {
+        <span class="vs-dot" role="img" [attr.aria-label]="'views.needs_you' | t: { view: views.active().label }"></span>
+      }
       <app-icon name="chevron-down" [size]="14" />
     </button>
   } @else {
@@ -32,6 +35,9 @@
           {{ view.label }}
           @if (views.modified() && view.id === views.activeId()) {
             <span class="vs-dot" role="img" [attr.aria-label]="'views.unsaved' | t"></span>
+          }
+          @if (views.badge(view.id)) {
+            <span class="vs-dot" role="img" [attr.aria-label]="'views.needs_you' | t: { view: view.label }"></span>
           }
         </button>
       }

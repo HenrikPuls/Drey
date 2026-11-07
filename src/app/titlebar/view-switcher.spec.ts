@@ -49,6 +49,20 @@ describe('ViewSwitcher', () => {
     expect(dots[0].closest('.vs-btn')?.textContent).toContain('Notes');
   });
 
+  it('shows a dot on a view its plugin flagged (SDK 1.50, board 7h), named for assistive tech', () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    fixture.detectChanges();
+    expect(root().querySelectorAll('.vs-dot').length).toBe(0);
+    views.setBadge('acme', 'acme.work', true);
+    fixture.detectChanges();
+    const dot = root().querySelector('.vs-btn .vs-dot[role="img"]');
+    expect(dot?.closest('.vs-btn')?.textContent).toContain('Work');
+    expect(dot?.getAttribute('aria-label')).toBe('Something needs you in Work');
+    views.setBadge('acme', 'acme.work', false);
+    fixture.detectChanges();
+    expect(root().querySelectorAll('.vs-dot').length).toBe(0);
+  });
+
   it('Layout opens one menu (board 7h): a head line, save, reset, save as new view, rename, delete, a note', () => {
     q<HTMLButtonElement>('.vs-layout')!.click();
     fixture.detectChanges();

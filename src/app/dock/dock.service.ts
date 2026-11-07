@@ -68,7 +68,7 @@ interface DockState {
 }
 
 const WIDTH = { min: 180, max: 560 } as const;
-const HEIGHT = { min: 140, max: 680 } as const;
+const HEIGHT = { min: 100, max: 680 } as const;
 const DEFAULT_LEFT_W = 248;
 const DEFAULT_RIGHT_W = 340;
 const DEFAULT_BOTTOM_H = 280;
@@ -274,7 +274,17 @@ export class DockService {
 
   /** True while a panel is closed: present in its dock's icon strip only. */
   closed(id: WidgetId): boolean {
-    return !this.state().open[id];
+    return !this.state().open[id] && !this.soloBottom(id);
+  }
+
+  /**
+   * True for the only panel of the bottom dock (board 7e): that dock draws
+   * no icon strip, so its one panel has nothing to be closed into and is
+   * always shown (the header's chevron folds it instead).
+   */
+  soloBottom(id: WidgetId): boolean {
+    const bottom = this.state().dock.bottom;
+    return bottom.length === 1 && bottom[0] === id;
   }
 
   /** True while an open panel is folded to its header (the header's chevron). */
@@ -302,7 +312,7 @@ export class DockService {
    */
   noneOpen(side: DockSide): boolean {
     const ids = this.state().dock[side];
-    return ids.every((id) => !this.state().open[id]);
+    return ids.every((id) => this.closed(id));
   }
 
   flexOf(id: WidgetId): number {

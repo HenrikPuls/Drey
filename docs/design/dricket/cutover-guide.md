@@ -1,7 +1,8 @@
 # Owner guide — verification round and cut-over to dricket
 
-Status 2026-11-06 (corrected after the rehearsal on a copy of the real vault:
-`rehearsal-2026-11-06.md`; since E14-7a every start reads the settings the first time).
+Status 2026-11-07 (corrected after the rehearsal on a copy of the real vault:
+`rehearsal-2026-11-06.md`, and after the cut-over itself: `cutover-2026-11-06.md`; since E14-7a
+every start reads the settings the first time).
 For the owner: what to check in the running app (milestones 154–161 are all "Not yet
 manually verified"), and how the cut-over (E14-7) goes. Nothing here touches the real
 `drey-tickets` repository until step C.
@@ -43,7 +44,8 @@ files; `-Reset` compares and reports any difference (your own running Drey write
 that is the only expected source). The rehearsal checked this: unchanged.
 
 Do not pipe the script into `Select-Object -First n`: the pipeline stops the script before
-the launch line.
+the launch line. The script does not start while your real engine is running, because it cannot
+read the locked `engine.log` for its fingerprint: stop the engine first.
 
 Manual equivalent, if you want to do it by hand: `dk init <dir> t`, add a `[stages]` table to
 `dricket.toml` on `main` *before* adding tickets (Drey's phases are the stage ids), and write
@@ -79,7 +81,9 @@ hint; the store is the git repository), and the board shows t-4 (expired foreign
 
 Done once by Claude on 2026-11-06 — numbers, warnings and findings in
 `rehearsal-2026-11-06.md`. Repeat it before the cut-over if the vault changed a lot.
-Use your own short paths below (`E:\dkc` copy, `E:\dkm` store, `E:\dkm-data` dk data).
+Use your own short paths below (`E:\dkc` copy, `E:\dkm` store, `E:\dkm-data` dk data). Name
+**fresh folders** and check first that none of them exists: a leftover store made a first shadow
+report show a throw-away ticket as "only in dricket".
 
 1. **Copy the working tree** (not `git clone`: the vault has uncommitted state, a clone
    loses it; `_worktrees/` are the agent worktrees and not needed), and cut the copy off
@@ -177,7 +181,8 @@ Time: about 15 minutes, mostly the two production builds (`.\dev.ps1 -Built` bui
 
   Any other phase is skipped with a reason in the dry run, never guessed.
 
-Set the names once. They are used by every step below, so stay in this one terminal:
+Build from a commit you can name, and record it: the app and the engine run the code of the checkout
+that started them. Set the names once. They are used by every step below, so stay in this one terminal:
 
 ```powershell
 $legacy = 'E:\projects\drey-tickets'
@@ -185,7 +190,7 @@ $store  = 'E:\projects\drey-board'        # OD-5; must not exist yet
 $data   = 'E:\projects\drey-board-data'
 $allow  = 'E:\projects\drey-board-allow.txt'
 $report = 'E:\projects\drey-board-report.md'
-$pipeline = 'E:\projects\drey-board-pipeline.md'
+$pipeline = 'E:\projects\drey-board-pipeline.md'   # not in a drive root: --pipeline-out fails there (EPERM)
 $dk     = (Get-Command dk).Source
 $plugin = "$env:APPDATA\drey\plugins\tickets\config.json"
 function Stop-DreyEngine {
@@ -205,7 +210,8 @@ Run `npm ci` first if `package-lock.json` changed since your last install.
 
 **1. Freeze.** Quit Drey and every other Drey instance, make no moves from the phone, and do not
 start a chain until step 8 is done. Then stop the engine: it is a detached daemon that outlives
-Drey. End any `opencode` or runner process started for a ticket.
+Drey. End any `opencode` process started for a ticket. The fleet runner is a daemon of its own: with
+`live=0` on its `/health`, send `POST /shutdown` (`plugins/tickets/FLEET.md`).
 
 ```powershell
 Stop-DreyEngine
@@ -213,8 +219,9 @@ git -C $legacy status --short
 ```
 
 Commit what the migration reads, because it reads the working tree and the tag marks a commit.
-On 2026-11-06 that was three modified archive files. Look at them first. The rest stays where it
-is, since this repository stays on disk as the meta vault:
+On 2026-11-06 that was three modified archive files. Look at them first, and do not commit damage:
+T-0084's working copy had a byte order mark and a mis-decoded text, and was repaired before this step.
+The rest stays where it is, since this repository stays on disk as the meta vault:
 
 ```powershell
 git -C $legacy diff --stat -- tickets/archive
@@ -253,7 +260,8 @@ Select-String -Path "$legacy\tickets\*\T-*.md" -Pattern '^\s*pid:' | ForEach-Obj
 Get-Process -Id 27872, 49864 -ErrorAction SilentlyContinue
 ```
 
-The second command must print nothing. The stamps are stale and are never carried to the store;
+The second command should print nothing. If it prints a process, compare its start time with the
+stamp's `started`: a later start is a reused number, not the run (pid 49864 on 2026-11-06). The stamps are stale and are never carried to the store;
 `--allow-live-runs` below is your statement that you checked. Use the pids the first command
 printed if they differ.
 
@@ -333,8 +341,12 @@ Set-TicketsConfig @{ 'backend' = 'dricket' }
 - the board shows the same tickets as before, in the six columns, and no unknown column;
 - one move, one priority change;
 - open a ticket document (asks once to add the checkout as a vault), edit, Ctrl+S;
-- one comment;
-- one short fleet run on a throw-away ticket: claim, extend and release show in `dk show`;
+- one comment, from a terminal (`dk comment <id> -m "..."`): the app has no field to write one;
+- one short fleet run on a throw-away ticket: claim and release show in `dk show`, extend only if the
+  run outlasts its lease. **Give that ticket a throw-away repository** (a local bare repo and a clone,
+  named in `_meta/repos.md`), never `repos: drey`: its Accept merges into the target repository's
+  main and pushes. It also needs an acceptance criterion as a backticked checkbox line,
+  `- [ ] \`command\``, or the start is refused (D-31). Keep the Autopilot off;
 - Accept on that ticket in Ready to try: the commit step runs, and with Drey open the ticket lands
   in Done (while the step holds its claim, dk shows the ticket in Building);
 - an old ticket opens: `dk show t-49`.
@@ -347,6 +359,8 @@ Each action above is one `dricket: ...` commit.
 
 **9. Your round.** Use the app for real work for as long as you want; there is no fixed period
 (owner, 2026-11-05). Requirements go to `specs/roadmap.md`, not into hand edits of the store.
+Accept on a `repos: drey` ticket merges and pushes for real. While D-41 is open, a ticket in Prioritized
+can start with nobody asking, even with the Autopilot off: keep there only what may run.
 When you are satisfied, E14-9b deletes the legacy code (scope in
 `docs/design/dricket/decommission.md`).
 

@@ -2,7 +2,7 @@
   <div class="drop-hint">Drop a panel here</div>
 }
 
-@if (!isEmpty()) {
+@if (!isEmpty() && !soloBottom()) {
   <app-dock-strip [side]="side()" />
   @if (showPickHint()) {
     <div class="drop-hint">Pick a panel above</div>

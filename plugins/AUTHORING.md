@@ -113,6 +113,14 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.50 adds two things to view presets (boards 7e/7h, milestone 199): `layout.openTabs`
+  -- `[{ kind, path }]`, tabs the view opens for itself through the doc kind's `restore`
+  every time it is switched to and does not hold them (a view owns its tabs); and
+  `ui.setViewBadge(id, on)` -- a dot on one of this plugin's own view tabs in the switcher
+  ("something needs you in <view>"; another plugin's or a user view is ignored with a
+  logged warning). Also in 1.50, without an API: the bottom dock with a single panel
+  draws no icon strip and that panel is never closed (the header's chevron folds it);
+  the bottom dock's minimum height is 100 px.
   1.49 adds to a status item: `expanded` on the spec (the item opens a popup; `true` draws it lit and
   sets `aria-expanded`) and `handle.element()` (the item on screen, to anchor that popup to).
   1.48 adds the optional `title(vaultId, path, content)` to a `DocumentRoute`: what an owned document

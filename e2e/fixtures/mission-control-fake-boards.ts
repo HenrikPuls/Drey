@@ -302,7 +302,7 @@ PAD_TICKET_TEXT['T-0130'] = [
 export const PAD_PLAN_130 = {
   ok: true,
   version: 7,
-  edits: 1,
+  edits: 0,
   summary: null,
   marks: [
     { no: 1, text: 'Windows dictation (Win+H) is the speech engine; Drey only opens the capture window and focuses it.', by: 'model' },

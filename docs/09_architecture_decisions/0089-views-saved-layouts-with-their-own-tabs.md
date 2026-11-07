@@ -258,3 +258,25 @@ preset names the target by id (the tickets plugin's Mission Control is
   working layout still survives a restart through the session restore (like
   open tabs); it is never the saved layout. First start after this change:
   a view's current layout is adopted as its saved one.
+
+## Later change — a view's own tabs and a badge on its tab (milestone 199, req-126, SDK 1.50)
+
+Board 7h shows a dot on the Work tab while Notes is active ("something
+needs you in Work"), and board 7i says tabs belong to views; wave 4.2 found
+that a plugin could do neither: it cannot mark its view tab, and a preset
+whose content is a tab (the Crew view's Crew tab) opened nothing on the
+switch. Two additive SDK surfaces close that:
+
+- `ViewPresetLayout.openTabs: [{ kind, path }]` -- applied on every switch
+  to the view, for each tab the view does not hold, through the doc kind's
+  own `restore(path, null)` (the same seam the session restore uses, so the
+  plugin's opener and title are reused and the host learns nothing about the
+  content). Not only the first time, unlike the dock layout: a closed tab
+  comes back on the next visit, because the view owns it. The opener is
+  handed to `ViewService.registerPreset` by the plugin host, which keeps the
+  views module free of the plugin-host module (no import cycle).
+- `ui.setViewBadge(id, on)` -- a plugin flags one of its own presets; the
+  switcher draws the same 7 px dot the "layout changed" state uses, with an
+  `aria-label` naming the view. Another plugin's preset or a user view is
+  refused with a logged warning; the badge goes with the preset when it
+  unregisters. The host attaches no meaning beyond the dot.

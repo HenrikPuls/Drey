@@ -24,6 +24,12 @@ export const CREW_VIEW_ID = 'tickets.crew';
 
 export const CREW_VIEW_LABEL = 'Crew';
 
+/** The Board and Crew tabs (E13-8): doc kind + the one key each has. */
+export const BOARD_KIND = 'tickets-board';
+export const BOARD_KEY = 'board://all';
+export const TEAM_KIND = 'tickets-team';
+export const TEAM_KEY = 'team://all';
+
 export function createCrewPreset(): ViewPresetContrib {
   return {
     id: CREW_VIEW_ID,
@@ -33,6 +39,8 @@ export function createCrewPreset(): ViewPresetContrib {
       right: [...WORK_PANELS.right],
       bottom: [],
       folded: ['right'],
+      // Board 7h: the Crew view owns its tab -- it comes back on every visit (SDK 1.50).
+      openTabs: [{ kind: TEAM_KIND, path: TEAM_KEY }],
     },
   };
 }

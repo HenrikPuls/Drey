@@ -79,9 +79,22 @@ describe('DockService', () => {
     expect(dock.bottomIds()).toEqual(['calendar']);
     expect(dock.leftIds()).toEqual(['files', 'windows']);
     dock.setBottomHeight(10);
-    expect(dock.dockHeight()).toBe(140);
+    expect(dock.dockHeight()).toBe(100);
     dock.setBottomHeight(9000);
     expect(dock.dockHeight()).toBe(680);
+  });
+
+  it('the only panel of the bottom dock is never closed: no strip to close it into (board 7e)', () => {
+    const dock = make();
+    dock.move('calendar', 'bottom', 0);
+    expect(dock.soloBottom('calendar')).toBe(true);
+    dock.toggle('calendar');
+    expect(dock.closed('calendar')).toBe(false);
+    expect(dock.noneOpen('bottom')).toBe(false);
+    // A second panel brings the strip back; the earlier toggle now counts.
+    dock.move('files', 'bottom', 1);
+    expect(dock.soloBottom('calendar')).toBe(false);
+    expect(dock.closed('calendar')).toBe(true);
   });
 
   it('drops widget ids the registry no longer knows from a stored blob (the removed entry panel)', () => {
@@ -370,8 +383,11 @@ describe('DockService', () => {
 
     it('the bottom dock never folds -- it just reports nothing open', () => {
       const dock = make();
+      // Two panels: a lone bottom panel has no strip and never closes (board 7e).
       dock.move('windows', 'bottom', 0);
+      dock.move('calendar', 'bottom', 1);
       dock.toggle('windows');
+      dock.toggle('calendar');
       expect(dock.noneOpen('bottom')).toBe(true);
       expect(dock.sideFolded('bottom')).toBe(false);
     });
@@ -483,6 +499,7 @@ describe('DockService', () => {
   it('openAndExpand opens a closed docked panel', () => {
     const dock = make();
     dock.move('windows', 'bottom', 0);
+    dock.move('calendar', 'bottom', 1); // a lone bottom panel could not be closed (board 7e)
     dock.toggle('windows');
     expect(dock.closed('windows')).toBe(true);
     dock.openAndExpand('windows');

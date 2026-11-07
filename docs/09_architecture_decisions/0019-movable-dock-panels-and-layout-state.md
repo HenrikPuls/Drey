@@ -307,3 +307,16 @@ header row; it goes in the status value or the body. Sizes come from the tokens
 Stored layouts also keep plugin panels now: the layout is read before plugins
 register, so the service holds it and places each panel as it arrives. Until
 then a plugin panel fell back to its default dock on every start.
+
+## Later change — board 7e: the bottom dock with one panel draws no icon strip (milestone 199, req-126)
+
+Board 7e puts the Capacity band's header directly under the Board tab, with
+no strip row above it, in a band of about 103 px. The strip's purpose is to
+open and close the panels of a dock; a dock with a single panel has nothing
+to switch between, so it draws none. Its one panel is therefore never
+*closed* (`DockService.closed` is false for `soloBottom`; a strip toggle
+recorded earlier counts again once a second panel arrives and the strip is
+back), and the header's chevron -- the fold to the header of milestone 192 --
+is the way to make it small. `HEIGHT.min` went from 140 to 100 so the band
+fits. Side docks are unchanged: their strip also carries the fold-away
+affordance and the drag target, and no board shows one without it.

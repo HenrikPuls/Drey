@@ -14,7 +14,7 @@
         }
       </div>
       <div class="pd-tabs" role="tablist" [attr.aria-label]="'crew.pad.tabs' | t">
-        <button type="button" role="tab" [class.on]="tab() === 'chat'" [attr.aria-selected]="tab() === 'chat'" (click)="setTab('chat')">{{ 'crew.pad.tab_chat' | t }}</button>
+        <button type="button" role="tab" [class.on]="tab() === 'chat'" [attr.aria-selected]="tab() === 'chat'" (click)="setTab('chat')">{{ (improveCount() > 0 ? 'crew.pad.tab_chat_n' : 'crew.pad.tab_chat') | t: { n: improveCount() } }}</button>
         <button type="button" role="tab" [class.on]="tab() === 'mem'" [attr.aria-selected]="tab() === 'mem'" (click)="setTab('mem')">{{ (memCount() > 0 ? 'crew.pad.tab_memory_n' : 'crew.pad.tab_memory') | t: { n: memCount() } }}</button>
         <button type="button" role="tab" [class.on]="tab() === 'setup'" [attr.aria-selected]="tab() === 'setup'" (click)="setTab('setup')">{{ 'crew.pad.tab_setup' | t }}</button>
       </div>

@@ -238,6 +238,58 @@ describe('ViewService presets and home views (SDK 1.39)', () => {
     expect(views.views().map((v) => v.label)).toEqual(['Notes']);
   });
 
+  it('a plugin flags its own preset with a badge (SDK 1.50); another plugin or a user view is refused', () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    const user = views.saveCurrentAs('Mine')!;
+    views.setBadge('acme', 'acme.work', true);
+    expect(views.badge('acme.work')).toBe(true);
+    views.setBadge('other', 'acme.work', false); // not its preset: ignored
+    expect(views.badge('acme.work')).toBe(true);
+    views.setBadge('acme', user, true); // a user view: ignored
+    expect(views.badge(user)).toBe(false);
+    views.setBadge('acme', 'acme.work', false);
+    expect(views.badge('acme.work')).toBe(false);
+  });
+
+  it('the badge goes with the preset when its plugin unregisters it', () => {
+    const off = views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    views.setBadge('acme', 'acme.work', true);
+    off();
+    expect(views.badge('acme.work')).toBe(false);
+  });
+
+  it('opens the preset\'s own tabs through the host\'s opener on every visit, only those the view does not hold (SDK 1.50)', () => {
+    const opened: string[] = [];
+    views.registerPreset(
+      'acme',
+      { id: 'acme.crew', label: 'Crew', layout: { openTabs: [{ kind: 'acme-team', path: 'team://all' }] } },
+      (kind, path) => {
+        opened.push(`${kind} ${path}`);
+        TestBed.inject(EditorService).addPluginDoc(kind, path, 'Crew');
+      },
+    );
+    views.switchTo('acme.crew');
+    expect(opened).toEqual(['acme-team team://all']);
+    expect(TestBed.inject(PaneService).tabsOfView('acme.crew')).toContain('team://all');
+
+    views.switchTo('notes');
+    expect(TestBed.inject(PaneService).tabsOfView('notes')).not.toContain('team://all'); // the tab belongs to the Crew view
+    views.switchTo('acme.crew');
+    expect(opened.length).toBe(1); // held already: not opened twice
+  });
+
+  it('an opener that throws costs the switch nothing', () => {
+    views.registerPreset(
+      'acme',
+      { id: 'acme.crew', label: 'Crew', layout: { openTabs: [{ kind: 'gone', path: 'x://1' }] } },
+      () => {
+        throw new Error('kind not registered');
+      },
+    );
+    expect(() => views.switchTo('acme.crew')).not.toThrow();
+    expect(views.activeId()).toBe('acme.crew');
+  });
+
   it('applies the preset layout the first time the view is shown, then keeps the owner\'s changes', () => {
     views.registerPreset('acme', {
       id: 'acme.work',
