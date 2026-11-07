@@ -125,10 +125,10 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
     component: SettingsShortcuts,
   },
   { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
-  { id: 'mcp', label: 'MCP', hint: 'Vault server for other apps', component: SettingsMcp },
+  { id: 'mcp', label: 'MCP server', hint: 'Vault server for other apps', component: SettingsMcp },
   {
     id: 'widgets',
-    label: 'Panels & plugins',
+    label: 'Panels and plugins',
     hint: 'Toggle panels & plugins',
     component: SettingsDockWidgets,
   },

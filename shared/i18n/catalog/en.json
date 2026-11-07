@@ -232,6 +232,13 @@
   "settings.scope.all_devices": "All devices",
   "settings.scope.device": "This device",
   "settings.scope.vault": "This vault",
+  "settings.scope.note_all_devices": "Synced to every device you pair",
+  "settings.scope.note_device": "Overrides for this computer only",
+  "settings.scope.note_vault": "Stored in the vault, shared by everyone who opens it",
+  "settings.search.placeholder": "Search settings",
+  "settings.search.found": "{n, plural, one {# setting} other {# settings}}",
+  "settings.search.clear": "Clear search",
+  "settings.results.title": "Search results",
 
   "shell.area": "Area",
   "shell.left_sidebar": "Left sidebar",

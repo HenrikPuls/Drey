@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
+import type { MessageKey } from '../../../shared/i18n';
 import { I18nPipe } from '../i18n';
 import { Icon } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
@@ -18,10 +19,8 @@ import { SettingsCategoryRegistry } from './settings-registry.service';
 import {
   SETTINGS_SCOPES,
   activeSection,
-  countSettings,
   filterHitsByScope,
   type SettingsScope,
-  type SettingsSection,
   searchSettings,
   type SettingsSearchEntry,
   type SettingsSearchHit,
@@ -110,19 +109,34 @@ export class Settings {
   }
   protected readonly searching = computed(() => this.query().trim() !== '' || this.scope() !== null);
 
-  protected pageCount(id: string): number {
-    return countSettings(this.registry.searchSources().find((s) => s.id === id)?.entries);
+  /** How many of the current hits a category holds (the tree shows it while searching). */
+  protected categoryHits(id: string): number {
+    return this.hits().filter((hit) => hit.categoryId === id).length;
   }
 
-  protected sectionCount(categoryId: string, section: SettingsSection): number {
-    return countSettings(
-      this.registry.searchSources().find((s) => s.id === categoryId)?.entries,
-      section.id,
-    );
+  protected sectionHits(categoryId: string, sectionId: string): number {
+    return this.hits().filter((hit) => hit.categoryId === categoryId && hit.entry.section === sectionId).length;
   }
 
+  /** The tab drawn as chosen: "All devices" until another is picked (board 7g). */
+  protected readonly shownScope = computed<SettingsScope>(() => this.scope() ?? 'all-devices');
+
+  protected readonly scopeNoteKey = computed<MessageKey>(() => {
+    const shown = this.shownScope();
+    return shown === 'device'
+      ? 'settings.scope.note_device'
+      : shown === 'vault'
+        ? 'settings.scope.note_vault'
+        : 'settings.scope.note_all_devices';
+  });
+
+  /**
+   * "All devices" is the page as it is (no filter); "This device" and "This
+   * vault" list the settings stored for that scope, a second click leaves
+   * the list again.
+   */
   protected pickScope(scope: SettingsScope): void {
-    this.scope.update((current) => (current === scope ? null : scope));
+    this.scope.update((current) => (scope === 'all-devices' || current === scope ? null : scope));
   }
 
   protected clearSearch(): void {
@@ -146,8 +160,14 @@ export class Settings {
   }
 
   protected selectCategory(id: string): void {
+    const again = this.selected() === id && !this.searching();
     this.clearSearch();
-    this.expandChoice.update(({ [id]: _unset, ...rest }) => rest);
+    if (again) {
+      // A second click on the open category folds or unfolds its sections (board 7g).
+      this.toggleExpanded(id);
+    } else {
+      this.expandChoice.update(({ [id]: _unset, ...rest }) => rest);
+    }
     this.currentSection.set(null);
     this.selected.set(id);
     this.afterRender(() => {
@@ -204,6 +224,11 @@ export class Settings {
   private updateSpy(): void {
     const root = this.detail()?.nativeElement;
     if (!root || this.searching()) {
+      return;
+    }
+    if (root.scrollTop === 0) {
+      // At the top of a page no section is singled out (board 7g: only the category is lit).
+      this.currentSection.set(null);
       return;
     }
     this.currentSection.set(activeSection(this.anchors(), root.scrollTop, SPY_OFFSET));

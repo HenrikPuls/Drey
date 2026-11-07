@@ -69,14 +69,14 @@ describe('Settings screen (E13-22)', () => {
 
   it('lists sections under the selected category, expandable and collapsible', () => {
     expect(labels()).toEqual(['Part one', 'Part two']);
-    expect(entries().map((e) => e.querySelector('.count')?.textContent?.trim())).toEqual([undefined, '1']);
-    expect(root.querySelectorAll('.twisty')).toHaveLength(1);
-    const twisty = root.querySelector<HTMLElement>('.twisty')!;
-    expect(twisty.getAttribute('aria-expanded')).toBe('true');
-    click(twisty);
+    // Counts only show while searching (board 7g).
+    expect(entries().map((e) => e.querySelector('.count'))).toEqual([null, null]);
+    const long = category('Long');
+    expect(long.getAttribute('aria-expanded')).toBe('true');
+    click(long);
     expect(entries()).toHaveLength(0);
-    expect(root.querySelector('.twisty')!.getAttribute('aria-expanded')).toBe('false');
-    click(root.querySelector('.twisty'));
+    expect(category('Long').getAttribute('aria-expanded')).toBe('false');
+    click(category('Long'));
     expect(entries()).toHaveLength(2);
   });
 
@@ -90,10 +90,17 @@ describe('Settings screen (E13-22)', () => {
       }),
     );
     Object.defineProperty(detail, 'getBoundingClientRect', { value: () => ({ top: 0 }) });
+    // At the very top no section is singled out; only the category is lit (board 7g).
     detail.scrollTop = 0;
     detail.dispatchEvent(new Event('scroll'));
     fixture.detectChanges();
+    expect(root.querySelector('.section-entry.active')).toBeNull();
+    expect(root.querySelector('.category.active')?.textContent).toContain('Long');
+    detail.scrollTop = 10;
+    detail.dispatchEvent(new Event('scroll'));
+    fixture.detectChanges();
     expect(root.querySelector('.section-entry.active')?.textContent?.trim()).toBe('Part one');
+    expect(root.querySelector('.category.active')).toBeNull();
     detail.scrollTop = 390;
     detail.dispatchEvent(new Event('scroll'));
     fixture.detectChanges();
@@ -115,20 +122,25 @@ describe('Settings screen (E13-22)', () => {
     search.dispatchEvent(new Event('input'));
     fixture.detectChanges();
     const hit = root.querySelector('.result')!;
-    expect(hit.querySelector('.result-where')?.textContent?.trim()).toBe('Long › Part two');
+    expect(hit.querySelector('.result-where')?.textContent?.trim()).toBe('Long › Part two ›');
     click(hit);
     expect(root.querySelector('.results')).toBeNull();
     expect(root.querySelector('.category.active')?.textContent).toContain('Long');
   });
 
-  it('has no placeholder text and a labelled search field', () => {
+  it('owner decision: the search field of board 7g carries its placeholder', () => {
     const search = root.querySelector<HTMLInputElement>('input[type="search"]')!;
     expect(search.getAttribute('aria-label')).toBe('Search settings');
-    expect(search.hasAttribute('placeholder')).toBe(false);
+    expect(search.getAttribute('placeholder')).toBe('Search settings');
+  });
+
+  it('draws no footer, no Close button and no X (board 7g); Escape and the backdrop leave', () => {
+    expect(root.querySelector('footer, .actions-bar, .close')).toBeNull();
+    expect(root.textContent).not.toContain('Changes are saved automatically');
   });
 
   it('is operable by keyboard: every entry is a native button', () => {
-    for (const el of [...entries(), ...root.querySelectorAll('.twisty, .category')]) {
+    for (const el of [...entries(), ...root.querySelectorAll('.category')]) {
       expect(el.tagName).toBe('BUTTON');
       expect((el as HTMLButtonElement).tabIndex).toBeGreaterThanOrEqual(0);
     }
@@ -160,8 +172,24 @@ describe('Settings screen (E13-22)', () => {
     expect(root.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe('');
   });
 
-  it('shows the count of a page beside its label', () => {
+  it('shows the hits of a page beside its label while searching, and dims the rest', () => {
+    expect(category('Long').querySelector('.count')).toBeNull();
+    typeQuery('sync interval');
     expect(category('Long').querySelector('.count')?.textContent?.trim()).toBe('1');
+    expect(category('Long').classList.contains('dim')).toBe(false);
+    expect(root.querySelector('.found')?.textContent?.trim()).toBe('1 setting');
+    expect([...root.querySelectorAll('.category.dim')].length).toBeGreaterThan(0);
+  });
+
+  it('draws "All devices" as the chosen tab until another is picked, with its note', () => {
+    const tabs = [...root.querySelectorAll<HTMLElement>('.scope-tab')];
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector('.scope-note')?.textContent).toBe('Synced to every device you pair');
+    click(tabs[1]);
+    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
+    expect(root.querySelector('.scope-note')?.textContent).toBe('Overrides for this computer only');
+    click(tabs[0]);
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
   });
 
   it('offers the three scope tabs, filters the hits by scope and toggles back', () => {

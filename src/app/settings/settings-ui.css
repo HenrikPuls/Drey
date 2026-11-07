@@ -16,10 +16,11 @@
  */
 
 .settings-ui {
-  --set-fs-title: 1.07rem; /* page title */
-  --set-fs-body: 0.93rem; /* control labels, row text, section headings */
-  --set-fs-small: 0.86rem; /* field labels, hints, buttons, inputs */
-  --set-fs-tiny: 0.78rem; /* badges */
+  --set-fs-title: 26px; /* page title (board 7g; px, the root is 14 px) */
+  --set-fs-group: 18px; /* group heading */
+  --set-fs-body: 14px; /* control labels, row text */
+  --set-fs-small: 14px; /* field labels, hints, buttons, inputs */
+  --set-fs-tiny: 13px; /* units, badges */
   --set-fs-code: 0.82rem;
   --set-hint: var(--text-4);
   --set-gap: 16px; /* between fields */
@@ -28,7 +29,7 @@
   /* E13-22: ONE page width for every Settings page -- it grows with the
      window (the dialog does), and wide editors fill it. No page sets its
      own cap. */
-  --set-page-w: min(100%, 1040px);
+  --set-page-w: min(100%, 760px);
 
   font-size: var(--set-fs-body);
   line-height: 1.5;
@@ -38,23 +39,23 @@
 /* ---- Page frame: title, description, the field column ---- */
 
 :where(.settings-ui) .pane-head {
-  margin-bottom: 20px;
+  margin-bottom: 4px;
   max-width: var(--set-page-w);
 }
 
 :where(.settings-ui) .pane-head h2 {
-  margin: 0;
+  margin: 0 0 4px;
   font-family: var(--font-sans);
   font-size: var(--set-fs-title);
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 700;
+  line-height: 34px;
   color: var(--text-heading);
 }
 
 :where(.settings-ui) .pane-description {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: var(--set-fs-small);
-  line-height: 1.55;
+  line-height: 21px;
   color: var(--set-hint);
 }
 
@@ -70,22 +71,17 @@
 :where(.settings-ui) section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   margin: 0;
 }
 
-:where(.settings-ui) section:not(:first-child) {
-  margin-top: 4px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-}
-
+/* Board 7g: a group is a heading, no divider line. */
 :where(.settings-ui) h3 {
-  margin: 0;
+  margin: 22px 0 4px;
   font-family: var(--font-sans);
-  font-size: var(--set-fs-body);
+  font-size: var(--set-fs-group);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 26px;
   letter-spacing: 0;
   color: var(--text-primary);
 }
@@ -107,7 +103,7 @@
 :where(.settings-ui) .empty {
   margin: 0;
   font-size: var(--set-fs-small);
-  line-height: 1.55;
+  line-height: 21px;
   color: var(--set-hint);
 }
 
@@ -132,17 +128,22 @@
   opacity: 0.5;
 }
 
+/* A setting (board 7g): bold name, description, control -- stacked. */
 :where(.settings-ui) .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  padding: 12px 0 12px 14px;
+  margin-left: -14px;
+  border-left: 2px solid transparent;
 }
 
 :where(.settings-ui) .field > label,
 :where(.settings-ui) .field-label {
   font-size: var(--set-fs-small);
-  color: var(--text-3);
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 /* A dependent option, aligned under its switch's label, not its checkbox. */
@@ -165,10 +166,10 @@
   ) {
   min-width: 0;
   height: var(--set-control-h);
-  padding: 0 9px;
+  padding: 0 10px;
   background: var(--bg-input);
   border: 1px solid var(--field-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-chip);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--set-fs-small);
@@ -233,8 +234,8 @@
 
 :where(.settings-ui) input:is([type='checkbox'], [type='radio']) {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
@@ -253,12 +254,13 @@
 
 /* Centre the box on the label's first line. */
 :where(.settings-ui) .switch-row > input {
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 :where(.settings-ui) .switch-label {
   display: block;
   font-size: var(--set-fs-body);
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -266,7 +268,7 @@
   display: block;
   margin-top: 2px;
   font-size: var(--set-fs-small);
-  line-height: 1.55;
+  line-height: 21px;
   color: var(--set-hint);
 }
 
@@ -294,12 +296,12 @@
   gap: 6px;
   flex: none;
   align-self: flex-start;
-  height: var(--set-control-h);
+  height: 30px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-chip);
   font: inherit;
-  font-size: var(--set-fs-small);
+  font-size: var(--set-fs-tiny);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -310,8 +312,8 @@
 
 :where(.settings-ui) button.ghost {
   background: transparent;
-  border-color: var(--border-strong);
-  color: var(--text-2);
+  border-color: var(--field-border);
+  color: var(--text-primary);
 }
 
 :where(.settings-ui) button.ghost:hover:not(:disabled) {

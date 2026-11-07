@@ -3,13 +3,13 @@
 .tickets-autopilot-pop {
   position: fixed;
   right: 12px;
-  bottom: calc(var(--status-h) + 8px);
+  bottom: calc(var(--status-h) + 7px); /* the board: 36 px above the frame's bottom, the bar is 29 */
   z-index: var(--z-modal);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 340px;
+  width: 370px; /* the board's 340 px is the content box: 340 + 2 × 14 padding + 2 border */
   max-width: calc(100vw - 16px);
   padding: 14px;
   background: var(--bg-dock);
@@ -96,7 +96,7 @@
 .tickets-autopilot-chip,
 .tickets-autopilot-time {
   box-sizing: border-box;
-  height: 26px;
+  height: 28px; /* the board's chip is 26 px content + 2 px border */
   max-width: 100%;
   padding: 0 10px;
   background: transparent;
@@ -105,7 +105,7 @@
   color: var(--text-4);
   font: inherit;
   font-size: 13px;
-  line-height: 24px;
+  line-height: 26px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -165,4 +165,45 @@
   color: var(--status-deleted);
   font-size: 13px;
   line-height: 19px;
+}
+
+/* The chip in the Crew head (board 7f): the state with its dot, opening the same popover. */
+.desk-autopilot-chip {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.desk-autopilot-chip:hover {
+  background: var(--hover-bg);
+}
+
+.desk-autopilot-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.desk-autopilot-dot-positive {
+  background: var(--status-added);
+}
+
+.desk-autopilot-dot-attention {
+  background: var(--accent-peach);
+}
+
+.desk-autopilot-dot-neutral {
+  background: var(--text-4);
 }

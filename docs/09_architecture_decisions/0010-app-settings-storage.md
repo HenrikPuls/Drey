@@ -286,3 +286,11 @@ longer compiles knowledge about the assistant's features.
 - The ADR-0020 later change (Appearance previews from the draft until
   Save) is reduced to: the draft shows a change before its automatic
   save.
+
+## Later change — board 7g: no footer, no Close button (milestone 197, 2026-11-07)
+
+Board 7g draws the Settings surface with a search block across the top, the scope tabs, a section tree and the page —
+and no footer, no *Close* and no X. The footer's "Changes are saved automatically" and *Close* are gone; `Escape` and a
+click beside the panel still flush a pending save and close, and a failed save still shows its error with *Close without
+saving* in a strip below the page. The saving rule itself (every change applies as it is made) is unchanged. The surface
+is still a modal overlay; whether it becomes an editor tab as the board draws it is the owner's ruling.

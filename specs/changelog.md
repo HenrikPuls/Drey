@@ -24,6 +24,75 @@ board elements from its own files and handed them to the frame; the owner ruled 
   docs/05 §5.0, the manual's Capacity paragraph.
 - **Roadmap:** req-126 entered and left with this change.
 
+### Milestone 197 — wave 4.4: Settings and the desktop Autopilot item match boards 7g and 10t
+
+**Not yet manually verified by the owner.** Wave row 4.4 (`desk-settings-autopilot`). Boards: `DeskSettings` (7g) and the desktop part of
+`Autopilot` (10t). The container of 7g — Settings as an editor tab — is the owner's ruling (a / b / c, below) and stays open.
+
+- **Settings surface (`src/app/settings/**`).** Search block across the top (38 px outer, radius 8, icon, placeholder, `N settings`
+  while searching, a clear button), the scope tabs under it (34 px, 2 px bar, the scope's note on the right), then a 257 px section tree
+  (single-line 30 px rows, chevron slot on the left, children indented 28 px behind the same slot, hit counts only while searching, rows
+  without hits dimmed, a second click on the open category folds it) and the page (`padding 18px 32px 32px`, one 760 px column). No
+  footer, no Close button, no X: `Esc` and a click beside the panel still flush and close; a failed save keeps its message and
+  *Close without saving* in a strip under the page (ADR-0010 later change, manual). "All devices" is drawn as the chosen tab
+  until another scope is picked (it is the unfiltered page); no section is lit at the top of a page, and a lit section replaces the
+  category's highlight, as on the board. Catalog keys `settings.scope.note_*`, `settings.search.*`, `settings.results.title`.
+- **Vocabulary (`settings-ui.css`, one stylesheet for core and plugin pages).** Page title 26/34 bold, group heading (`h3`) 18/26 with
+  22 px above and no divider, a setting = bold 14 px name, 14/21 description, then the control, with the board's 2 px left bar and
+  14 px hang (`.field`, `.tset-set`); fields radius 4 / 10 px padding, buttons 30 px / 13 px / radius 4, checkboxes 18 px. Sizes are px
+  now (the root is 14 px, so the old rem scale drew 14 px text at 13 px). Core pages inherit all of it; their own HTML is unchanged.
+- **Settings → Tickets (`plugins/tickets/renderer/settings*`).** The rows of the board with its strings: *Crew › Personas*, *Flow ›
+  Default flow* (the flow as one line), *Autopilot › Autopilot* (state in words + **Change…**, which opens the status item's popover) and
+  *Resume paused autopilot at*, *Budget and runners*, *Walkthrough videos*, then the page's own *Devices*. Sections follow the tree:
+  Crew, Flow, Autopilot, Budget and runners, Walkthrough videos, Devices, Store and Git, Pipeline and prompts. The old label-left
+  look is gone from the page's remaining parts too (`tset-kv` is stacked, the hint above the control). Two category names follow the
+  board: **MCP server**, **Panels and plugins**.
+- **Crew head chip (board 7f; handed over by 4.2).** `● Autopilot · On` (30 px, radius 8) between the budget and *Pause all*; a click opens
+  the same popover. `DeskDeps.toggleAutopilot` (optional) carries it.
+- **Autopilot popover (10t).** Measured against the board's markup, not by eye: the board's 340 px is a content box (outer 370), its chips
+  are 28 px outer, and it sits 7 px (not 8) above the bar; every child rectangle now equals the board's (dialog 370×218, title 15/15,
+  segments 45, sentence 93, chips 122, divider 160, stop 171; `test-results/fidelity/Autopilot.desktop-rects.json`).
+- **Hunks outside the row's files:** `plugins/tickets/renderer/index.ts` (the module-level popover toggle, the page's `openAutopilot` hook,
+  `deskDeps.toggleAutopilot`), `plugins/tickets/renderer/desk-deps.ts` (one optional field), `plugins/tickets/renderer/team/team-view.ts`
+  (the chip; 4.2's file, merged), `e2e/plugins.spec.ts` (the renamed category). `public/manual/manual.md` is the build's copy of the manual.
+- **Specs:** `settings.spec` (placeholder, no footer, tree folding, counts while searching, scope tab default and note, spy at the top),
+  `desk-settings.spec` (the board's rows, sections, Change…), `settings-sections.spec`, `team-view.spec` (the chip),
+  `e2e/fidelity-desk-settings.spec.ts` (opt-in, `DREY_FIDELITY_SHOTS=1`, the screenshots below); the e2e of the area were adapted to the
+  surface without footer (`settings-appearance`, `settings-vscode`, `flow-settings`).
+- **Gate:** `npm run test:all` — lint, the seven typechecks, cycles and the renderer suite green; the plugin suite failed once on
+  `engine.spec` ("serves the notes of the vault the config names", an `ENOENT` on a temp `config.json.tmp` rename under load) and passes
+  alone (30 of 30). E2E: `settings-appearance`, `settings-vscode`, `tickets-fleet-snapshot`, `mission-control-autopilot`, `flow-settings`,
+  `plugins`, `desk-board-team` green.
+
+**Fidelity:** boards `DeskSettings` (7g) and `Autopilot` (10t, desktop status bar). Built app (`npm run build`, packaged-style `dist/`),
+content size 1440×900, device scale factor 1. Screenshots `test-results/fidelity/DeskSettings.png` (+ `.budget`, `.videos`, `.devices`
+for the page below the board's fold), `Autopilot.desktop-on.png`, `.desktop-paused.png`, `.desktop-off.png`; compared in
+`boards/compare.html` (side by side, overlay, swipe, diff; the Settings panel cropped to the board's search-bar origin, the status frame
+cropped to the board's 880×272 frame) and by element rectangles taken from the board's markup. Measured equal: scope tabs, search input,
+group headings (y 161), setting rows (name 203 → control 254, +93 as on the board), buttons 78.1×30, the popover and all its children,
+the item 114.8×28, the popover's right edge item + 51 px, 7 px above the bar.
+
+| Region | Board | Build | Row |
+|---|---|---|---|
+| 7g container | `Settings ×` tab in the editor area, frame around it | modal overlay (title bar, tab bar, status bar behind the backdrop) | **open — the owner's ruling (a/b/c)**: Settings as an editor tab is a base change (ADR-0010) |
+| 7g search | filter button (changed only), `Changed · default N` labels, the accent bar on a changed row | clear button only; the bar is drawn transparent | feature not yet built — req-132 |
+| 7g tree | `Commonly used` first | not there | feature not yet built — req-133 |
+| 7g tree | Appearance, Assistant ›, Editor ›, Files, Keyboard shortcuts, MCP server, Panels and plugins, Tickets, Vault, About | the app's pages: Assistant tools, Daily notes, Entry format, LLM, Spelling, Updates, Actions, Git, Tags, Tasks beside them, no groups, a scrollbar | **open — for the integrator**: the app has pages the board does not list; no id exists |
+| 7g page | Crew has Personas only; Flow has the line only | also *Your name* and the ticket pick next to *Open flow editor*; Fleet, Workers, Store, Pipeline, Prompts and the Remote rows | **open — for the integrator**: settings the board does not show, kept so none is lost; the ticket pick is the roadmap's "Default flow row without the ticket dropdown" (E12-3b / E13-12b) |
+| 7g Autopilot | `On` + Change…; `Resume … at` field with the unit `every day` | state in words + Change…; the field without the unit | feature not yet built — a recurring resume (no id; the engine's `resumeAt` is a one-shot instant, so "every day" would be false) |
+| 7g Budget | `Daily budget` as a field (`15 USD per day`, changed), `Pause when the budget is spent` | the personas' budgets added up | feature not yet built — E13-12b |
+| 7g Devices | two rows (Serve …, Pair a device with `2 paired:`) | the Remote section's rows (enabled, reach, port, address, bypass, pairing form, device list) | **open — for the integrator**: more settings than the board draws; no id |
+| 7g search results | each hit a full setting row | a hit is its name, path and description; a click opens the page at it | **open — for the integrator**: needs a renderer per setting; no id |
+| 7g search field | placeholder `Search settings` | placeholder `Search settings` | owner decision (integrator, 2026-11-07): the 7g field carries its placeholder, an exception to the no-placeholder rule |
+| 7g text | sample values (Paul, Ben…, `On`, `Plan → Build → Review → Test`, `Local 2 · Claude Code 3…`) | the vault's data (e.g. `Off` while the e2e has no runner) | data instead of sample content |
+| 7g tokens | `#222326` / `#18191b` bars | the theme's derived tokens (`#202124` bar) | token in place of a hex (frame, 4.0) |
+| 10t bar | `2 running · 1 stuck · 1 queued` left of the item | not there | feature not yet built — no id (milestone 180 split the old "2 running · 3 need you" into cost and needs-you) |
+| 10t item | dot grey when Off, peach when Paused | no dot when Off, the needs-you orange when Paused | **open — belongs to the frame / SDK**: `StatusItemSpec.dot` has `attention` and `positive` only; recommend `paused` (peach) and `neutral` (grey) kinds. The Crew chip already draws the board's colours |
+| 10t popover | radius 12 / 6 | 16 / 8 | owner ruling 2026-11-07: the 4 / 8 / 16 scale stays (`decisions.md`) |
+| 10t popover | `Resume at 18:00` chip also on On | on Paused only | the engine accepts a resume time only on Paused (milestone 189, deviation 1) |
+| 10t item | text 4 px further left | the same boxes; the cost text is wider (`$4.10 of $29 today`) | data instead of sample content |
+| text | glyph strokes | | text rasterization (Electron vs headless Edge), no CSS difference found |
+
 ### Milestone 196 — wave 4.3: the ticket pages match boards 7b, 7c, 7d, 7j and the 9a card; E13-10 / E12-17 Parts block, E12-19 Review splitter
 
 **Not yet manually verified by the owner.** Wave row 4.3 (`desk-ticket-pages`), rulings of the integrator on Q1–Q5 of the measure sheet.

@@ -20,6 +20,8 @@ export interface DeskDeps {
   mutate(label: string, run: () => Promise<unknown>): Promise<MutationResult>;
   /** A chain control (`chainMaster`, `chainAbort`) applied to the shared chain state. */
   chainAction(method: string, payload: unknown): Promise<void>;
+  /** Opens or closes the Autopilot popover (the Crew head's chip, board 7f). */
+  toggleAutopilot?(): void;
   /** Opens a ticket as its page (file and thread). */
   openTicket(card: TicketCard): void;
   /** Opens the capture dialog (a new idea lands in the first column). */

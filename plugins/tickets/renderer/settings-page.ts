@@ -28,12 +28,11 @@ function anchored<T extends HTMLElement>(element: T, id: TicketsSectionId): T {
  * page follows the board's change events, so it never shows a copy that
  * drifted from disk.
  */
-export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSettingsHooks, 'openTeam' | 'openFlow'>): PluginSettingsPageContrib {
+export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSettingsHooks, 'openTeam' | 'openFlow' | 'openAutopilot'>): PluginSettingsPageContrib {
   return {
     id: 'tickets',
     label: 'Tickets',
     hint: 'Crew, flow, budget, devices',
-    description: 'The crew, the flow, the budget and the devices that reach Mission Control.',
     sections: TICKETS_SECTIONS,
     entries: TICKETS_ENTRIES,
     mount: (body) => {
@@ -112,6 +111,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
         desk.root,
         fleetSection(api),
         workers.root,
+        desk.videos,
         remote.root,
         repo,
         storeSection(api),

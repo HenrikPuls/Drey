@@ -28,8 +28,10 @@ test('every page is the same width', async ({ page }) => {
 
 test('counts show, search says what is missing and clears, scope tabs list a scope', async ({ page }, info) => {
   await open(page);
-  await expect(page.locator('app-settings .category .count').first()).toBeVisible();
   await page.screenshot({ path: info.outputPath('settings.png') });
+  await page.locator('app-settings input[type="search"]').fill('watch');
+  await expect(page.locator('app-settings .category .count').first()).toBeVisible();
+  await page.locator('app-settings button[aria-label="Clear search"]').click();
 
   await page.locator('app-settings input[type="search"]').fill('zzzqq');
   await expect(page.locator('app-settings .no-match')).toContainText('No setting matches "zzzqq"');

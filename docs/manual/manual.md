@@ -1903,23 +1903,24 @@ Open with the status-bar entry or `Ctrl+,`. Core categories are
 alphabetical, plugin-contributed ones follow, *About* closes the list.
 Every change applies as you make it — there is no *Save* and no
 *Discard*. A switch or a list choice acts at once; a typed value is
-stored when you leave the field or press Enter. The footer shows
-"Changes are saved automatically" and one *Close* button.
+stored when you leave the field or press Enter. There is no footer and no
+*Close* button: `Esc` or a click beside the panel leaves Settings, and only a
+failed save shows a message (with *Close without saving*).
 
 The screen grows with the window, and every page uses the same width — wide
 tables and editors fill it instead of the page jumping between a narrow and a
 wide layout. A long page is split into sections: a category with sections has a
 small arrow in the list; open it to see the sections, click one to scroll the
 page to it. The page scrolls as one column and the section in view is
-highlighted in the list. The search field at the top of the list filters the
+highlighted in the list. The search field across the top filters the
 settings of **all** pages by name, description or key; click a result to open
 its page at that setting. `Esc` clears the search first and closes Settings on
-the second press. Each page and section shows how many settings it holds. When
-nothing matches, the list says *No setting matches "…"* with a *Clear search*
-button. The tabs *All devices*, *This device* and *This vault* above the page
+the second press. While you search, the list shows how many hits each page and
+section holds and dims the ones without. When nothing matches, the page says
+*No setting matches "…"* with a *Clear search* button. The tabs *All devices*, *This device* and *This vault* above the page
 narrow the list to the settings stored for that scope (the app on this computer,
-the vault you have open, or shared by every device); click the tab again to
-show everything.
+the vault you have open, or shared by every device); click the tab again, or
+*All devices*, to show everything.
 
 | Category | What lives there |
 | --- | --- |

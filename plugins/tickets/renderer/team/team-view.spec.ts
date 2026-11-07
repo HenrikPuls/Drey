@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- the spec stands in for the host, which owns the catalog at runtime
+import { i18n } from '../../../../shared/i18n';
 import type { PersonaView } from '../../shared/remote-protocol';
 import type { ChainStatus, RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
@@ -60,6 +62,7 @@ let activePath: string | null = 'board://all';
 function deps(): DeskDeps {
   return {
     api: {
+      i18n,
       ui: { icon: () => document.createElement('i') },
       documents: { active: () => ({ path: activePath }), onChange: () => () => undefined },
     },
@@ -78,6 +81,7 @@ function deps(): DeskDeps {
     chainAction: async (method: string, payload: unknown) => {
       invoked.push([method, payload]);
     },
+    toggleAutopilot: () => invoked.push(['autopilot-popover', null]),
     openTicket: (card: TicketCard) => opened.push(card.id),
     newIdea: () => opened.push('new-idea'),
     titleOf: (id: string) => (id === 'T-0126' ? 'Git panel: stage single hunks' : null),
@@ -119,6 +123,20 @@ describe('the Crew tab', () => {
     expect(tessa.querySelector('.desk-persona-role')!.textContent).toBe('Tester · $0.36 today');
     expect([...tessa.querySelectorAll('.desk-persona-controls button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Nudge the worker', 'Hand to Claude Code', 'Stop']);
     expect(host.querySelector('[data-persona="ben"] .desk-persona-role')!.textContent).toBe('Builder · $2.67 today');
+  });
+
+  it('draws the Autopilot chip between the budget and Pause all, and a click opens the popover (board 7f)', () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    mountTeam(deps(), store(personas), host);
+    const chip = host.querySelector<HTMLButtonElement>('.desk-autopilot-chip')!;
+    expect(chip.textContent).toBe('Autopilot · On');
+    expect(chip.title).toBe('Autopilot: On (Mod+Alt+P)');
+    expect(chip.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(chip.querySelector('.desk-autopilot-dot-positive')).not.toBeNull();
+    expect(chip.previousElementSibling?.classList.contains('desk-budget')).toBe(true);
+    expect(chip.nextElementSibling?.getAttribute('aria-label')).toBe('Pause all after this step');
+    chip.click();
+    expect(invoked).toContainEqual(['autopilot-popover', null]);
   });
 
   it('wires Nudge and Hand to Claude Code to the fleet; Stop asks first', async () => {
