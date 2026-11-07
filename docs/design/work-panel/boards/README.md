@@ -2,7 +2,9 @@
 
 Exported on 2026-11-06 from the owner's design canvas "Drey Tickets — Workflow
 redesign" (artifact `a401ec8a-b3e4-459f-b9df-ff8893105b9f`, version
-`1793992275-ade0`). **This folder is what "it looks like the design" means.**
+`1793992275-ade0`; the four 9c boards `DeskFind`, `DeskFindParts`, `FindDirections`
+and `FindSimple` and `canvas.json` from version `1794095441-aecd`, 2026-11-08).
+**This folder is what "it looks like the design" means.**
 A session that builds or changes a screen reads the board's HTML for the exact
 measures, colours, spacing and strings, opens the PNG to see it, and compares
 its own screenshot against the PNG before it reports done (see
@@ -12,11 +14,11 @@ appearance** where they disagree.
 
 Files: one `<Name>.dc.html` per board (plain HTML, inline styles; the
 `<x-dc>` / `<helmet>` wrappers are the canvas runtime's), `support.js` — a
-small stand-in for that runtime, so the seven boards that hold a template
-(`{{holes}}` from `renderVals()`, `<sc-for>`, `<sc-if>`: DeskClean,
+small stand-in for that runtime, so the eight boards that hold a template
+(`{{holes}}` from `renderVals()`, `<sc-for>`, `<sc-if>`: DeskClean, DeskFind,
 DeskPersona, DeskSettings, PadFlow, PadReview, PadSettings, PadTeam) render
 outside the canvas (it runs the board's own embedded sample-data script; the
-other 33 boards are static and ignore it), one
+other 36 boards are static and ignore it), one
 `<Name>.png` rendered at the board's own size with headless Edge
 (`--window-size=<w>,<h> --screenshot`), `canvas.json` (positions, sizes,
 titles, order, notes) and `notes.md` (the sticky notes, decisions 1–31 under
@@ -56,6 +58,10 @@ above.
 | 7k · Persona setup: profile, picture, work, permissions, prompt blocks | `DeskPersona` | 1440×900 | desktop |
 | 9a · Drey today, cleaned up — ticket T-0017 in Work, Assistant without the rail | `DeskClean` | 1440×900 | desktop |
 | 9b · Drey today — Calendar, Source control, Outline, Search and Tasks redesigned — **not a target design** (owner, 2026-11-06; a sketch, nothing is measured against it) | `DeskPanels` | 1440×900 | desktop |
+| 9c · Find: Search and Tasks in one left-dock panel, Search mode (req-161, accepted 2026-11-08) | `DeskFind` | 1440×900 | desktop |
+| 9c · Find, the parts at 1:1: Tasks mode, folded, status, field, Replace, tag completion, menus, hits, task rows, due order | `DeskFindParts` | 1480×1160 | desktop |
+| 9c · Find simplified — the owner's ruling (mode as title, one menu, Replace switch); superseded by `DeskFind`, history only | `FindSimple` | 1120×760 | sketch |
+| 9c · req-161 directions: A chosen, B and C rejected — history only | `FindDirections` | 1120×780 | sketch |
 | 10a · Mission Control, answer card with big touch targets | `MPhoneChat` | 390×844 | phone |
 | 10b · menu: the root screen with Notes, Work, Crew, Settings and chats | `MPhoneMenu` | 390×844 | phone |
 | 10c · Work: the desktop ticket list, sized for touch | `MPhoneWork` | 390×844 | phone |
