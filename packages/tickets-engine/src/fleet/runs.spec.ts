@@ -122,6 +122,7 @@ async function writeTicket(): Promise<string> {
 
 function request(overrides: Partial<RunRequest> = {}): RunRequest {
   return {
+    origin: 'spec',
     ticketId: 'T-0001',
     ticketsVaultPath: vaultDir,
     ticketRelPath: 'tickets/plan/T-0001.md',
@@ -1018,6 +1019,152 @@ describe('RunSupervisor', () => {
     expect(second.sup.get('R-old')?.state).toBe('stopped');
   });
 
+  describe('a detached run whose worker is gone (D-34)', () => {
+    /** Answers the liveness probes: only the pids named are running, started at the given instant. */
+    const running = (pids: Readonly<Record<number, string>>) => async (cmd: string, args: readonly string[]): Promise<string> => {
+      const pid = Number(args.join(' ').match(/\d+/)?.[0] ?? '0');
+      if (cmd === 'powershell.exe') {
+        const started = pids[pid];
+        if (started === undefined) {
+          throw new Error('gone');
+        }
+        return String(Date.parse(started));
+      }
+      if (pids[pid] === undefined) {
+        if (cmd === 'tasklist') {
+          return 'INFO: No tasks';
+        }
+        throw new Error('gone');
+      }
+      return cmd === 'ps' ? new Date(pids[pid]!).toUTCString() : `"${pid}"`;
+    };
+
+    async function seedDetached(rel: string, pid: number): Promise<void> {
+      const dir = path.join(fleetRoot, 'runs', 'R-old');
+      await fsp.mkdir(dir, { recursive: true });
+      const info: RunInfo = {
+        id: 'R-old',
+        ticketId: 'T-0001',
+        provider: 'opencode',
+        state: 'detached',
+        pid,
+        startedAt: '2026-10-17T11:00:00Z',
+        endedAt: '2026-10-17T11:30:00Z',
+        sessionRef: 'ses_old',
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsd: null,
+        lastActivity: '2026-10-17T11:20:00Z',
+        steerCount: 0,
+        lastSteerRung: null,
+        worktreePath: 'x',
+        branch: 't/T-0001',
+        gateFailure: 'the runner restarted while the worker lived on; watch or resume it manually',
+      };
+      await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+    }
+
+    it('settles at the reaper: the fleet stops counting it', async () => {
+      const rel = await writeTicket();
+      await seedDetached(rel, 70832);
+      const { sup } = supervisor({ exec: running({}) });
+      await sup.adopt();
+      expect(sup.get('R-old')?.state).toBe('detached');
+      await sup.reap();
+      await settled(sup, 'R-old', 'failed');
+      expect(sup.get('R-old')?.pid).toBeNull();
+      expect(JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', 'R-old', 'run.json'), 'utf8')).info.state).toBe('failed');
+    });
+
+    it('a reused pid (a process started after the run last showed life) is not the worker', async () => {
+      const rel = await writeTicket();
+      await seedDetached(rel, 49864);
+      const { sup } = supervisor({ exec: running({ 49864: '2026-10-18T18:15:00Z' }) });
+      await sup.adopt();
+      await sup.reap();
+      await settled(sup, 'R-old', 'failed');
+    });
+
+    it('a worker still alive keeps its run detached: it may yet be working', async () => {
+      const rel = await writeTicket();
+      await seedDetached(rel, 4242);
+      const { sup } = supervisor({ exec: running({ 4242: '2026-10-17T11:00:00Z' }) });
+      await sup.adopt();
+      await sup.reap();
+      expect(sup.get('R-old')?.state).toBe('detached');
+    });
+  });
+
+  describe('a record from before the cut-over, on a board that moved to a store (D-42)', () => {
+    async function seedLive(rel: string): Promise<void> {
+      const dir = path.join(fleetRoot, 'runs', 'R-frozen');
+      await fsp.mkdir(dir, { recursive: true });
+      const info: RunInfo = {
+        id: 'R-frozen',
+        ticketId: 'T-0001',
+        provider: 'opencode',
+        state: 'running',
+        pid: 70832,
+        startedAt: '2026-10-17T11:00:00Z',
+        endedAt: null,
+        sessionRef: 'ses_frozen',
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsd: null,
+        lastActivity: '2026-10-17T11:20:00Z',
+        steerCount: 0,
+        lastSteerRung: null,
+        worktreePath: 'x',
+        branch: 't/T-0001',
+        gateFailure: null,
+      };
+      await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+    }
+
+    it('the boot writes nothing to the legacy tree and commits nothing', async () => {
+      const rel = await writeTicket();
+      await seedLive(rel);
+      const before = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+      const { sup, git } = supervisor({ storeBacked: () => true, exec: async () => 'INFO: No tasks' });
+      await sup.adopt();
+      expect(sup.get('R-frozen')?.state).toBe('detached');
+      await sup.reap();
+      await settled(sup, 'R-frozen', 'failed');
+      expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toBe(before);
+      expect(git.calls.filter((c) => c.args[0] === 'commit')).toEqual([]);
+    });
+
+    it('on a file board the boot still clears the stamp', async () => {
+      const rel = await writeTicket();
+      await seedLive(rel);
+      const before = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+      const { sup } = supervisor({ exec: async () => 'INFO: No tasks' });
+      await sup.adopt();
+      expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).not.toBe(before);
+    });
+  });
+
+  describe('every start says who asks (D-41)', () => {
+    it('a start with no origin is refused, and nothing spawns', async () => {
+      const rel = await writeTicket();
+      const { sup, adapter } = supervisor();
+      const { origin: _none, ...nameless } = request({ ticketRelPath: rel });
+      const outcome = await sup.start(nameless);
+      expect(outcome).toMatchObject({ ok: false, error: expect.stringContaining('names no origin') });
+      expect(adapter.starts).toHaveLength(0);
+    });
+
+    it('the origin lands in the runner log and on the record', async () => {
+      const rel = await writeTicket();
+      const logs: string[] = [];
+      const { sup } = supervisor({ log: (line) => logs.push(line) });
+      const started = await sup.start(request({ ticketRelPath: rel, origin: 'drey:run-dialog' }));
+      const id = (started as { run: { id: string } }).run.id;
+      expect(logs).toContain(`run ${id} (T-0001): asked by drey:run-dialog`);
+      expect(sup.get(id)?.origin).toBe('drey:run-dialog');
+    });
+  });
+
   it('validates the deterministic branch and the machine gate before spawning', async () => {
     const { sup } = supervisor();
     await writeTicket();
@@ -1025,7 +1172,7 @@ describe('RunSupervisor', () => {
     expect(wrongBranch.ok).toBe(false);
     const noGate = await sup.start(request({ acceptance: [] }));
     expect(noGate.ok).toBe(false);
-    expect((noGate as { error: string }).error).toContain('no acceptance criteria');
+    expect((noGate as { error: string }).error).toContain('carries no gate commands');
     const wrongPath = await sup.start(request({ ticketRelPath: 'tickets/build/T-0001.md' }));
     expect(wrongPath.ok).toBe(false);
     expect((wrongPath as { error: string }).error).toContain('does not match id and phase');

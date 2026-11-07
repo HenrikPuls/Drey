@@ -16,6 +16,7 @@ import {
   branchForTicket,
   DEFAULT_PRIORITY_CONFIG,
   openTicketCount,
+  parseHandover,
   type BoardSnapshot,
   type CreateResult,
   type MutationResult,
@@ -1498,6 +1499,7 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
       close();
       void runMutation('Starting the run', () =>
         invokeBoard('fleetStart', {
+          origin: 'drey:run-dialog',
           id: card.id,
           worker: workerValue,
           permissionMode: permission.value,
@@ -1580,7 +1582,7 @@ async function startInteractive(
 ): Promise<string | null> {
   const label = 'Starting the plan dialog';
   const result = await runMutation(label, () =>
-    invokeBoard('fleetStart', { id: card.id, worker: card.worker, permissionMode: 'accept-edits', interactive: mode }),
+    invokeBoard('fleetStart', { origin: 'drey:plan-dialog', id: card.id, worker: card.worker, permissionMode: 'accept-edits', interactive: mode }),
   );
   if (!result.ok) {
     return null;
@@ -2885,9 +2887,11 @@ function openCardMenu(
       item(`Plan with agent (${card.worker})`, () => void startInteractive(api, card, mode));
     }
   }
-  if (live === null) {
+  // D-29: an owner's column offers no run; the engine refuses one anyway.
+  const runnable = snapshot?.columns.find((c) => c.phase.id === card.phase)?.phase;
+  if (live === null && runnable !== undefined && parseHandover(runnable.handover).mode === 'agent') {
     item(`Run agent (${card.worker})…`, () => openRunModal(api, card));
-  } else {
+  } else if (live !== null) {
     item('Open ticket', () => void openTicketPage(api, card));
     item('Stop run', () => {
       void run('Stopping the run', () => invokeBoard('fleetStop', { runId: live.id, reason: null }));

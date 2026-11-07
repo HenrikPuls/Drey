@@ -68,7 +68,7 @@ import { type ChainConfig, type ChainStoreConfig, FleetCaps, FleetHandoverConfig
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
 import { appendMemory, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
-import { HUMAN_PERSONA_ID, humanPersona, inPipelineOrder, isHumanPersona, personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter } from '../core/persona';
+import { HUMAN_PERSONA_ID, humanPersona, inPipelineOrder, isHumanPersona, loadPersonaSkills, personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter, type PersonaSkill } from '../core/persona';
 import { appendThreadOwner, newThreadText, parseThread, threadPathFor } from '../core/persona-thread';
 import { scanRepoFolder } from './repos-scan';
 
@@ -2599,7 +2599,7 @@ export class EngineBoardService {
       return { ok: false, error: `${ticketId} has a live run — stop it or wait for it first` };
     }
     const started = await this.startRunInQueue(
-      { ticketId, workerChoice: null, permissionMode: this.autoPermissionMode, handover: 'fresh', interactive: null },
+      { origin: 'accept', ticketId, workerChoice: null, permissionMode: this.autoPermissionMode, handover: 'fresh', interactive: null },
       true,
     );
     if (!started.ok) {
@@ -2960,6 +2960,8 @@ export class EngineBoardService {
    * with the reason a human can act on.
    */
   startRun(input: {
+    /** Who asks (D-41): logged, carried to the runner; a start without one is refused. */
+    origin: string;
     ticketId: string;
     workerChoice: string | null;
     permissionMode: PermissionMode;
@@ -2972,14 +2974,19 @@ export class EngineBoardService {
      */
     interactive: InteractiveMode | null;
   }): Promise<{ ok: boolean; error?: string; runId?: string }> {
+    if (typeof input.origin !== 'string' || input.origin.trim() === '') {
+      this.host.log(`run start refused for ${input.ticketId}: it names no origin`, 'warn');
+      return Promise.resolve({ ok: false, error: 'a run start must say who asks for it (origin)' });
+    }
     return this.enqueue(() => this.startRunInQueue(input, false));
   }
 
   /** {@link startRun} inside the queue; `commitStep` is Accept's run on Ready to try (req-99a). */
   private async startRunInQueue(
-    input: { ticketId: string; workerChoice: string | null; permissionMode: PermissionMode; handover: HandoverMode | 'auto' | null; interactive: InteractiveMode | null },
+    input: { origin: string; ticketId: string; workerChoice: string | null; permissionMode: PermissionMode; handover: HandoverMode | 'auto' | null; interactive: InteractiveMode | null },
     commitStep: boolean,
   ): Promise<{ ok: boolean; error?: string; runId?: string }> {
+    this.host.log(`run start: ${input.ticketId} asked by ${input.origin}`);
     const dricket = await this.refreshDricket();
     const vault = await this.detect();
     if (vault === null) {
@@ -3089,9 +3096,11 @@ export class EngineBoardService {
         prompt: await loader.prompt(personaResolution.persona.id),
         memory: await loader.memory(personaResolution.persona.id),
         coaching: await loader.thread(personaResolution.persona.id),
+        skills: await this.personaSkillsFor(vault, personaResolution.persona),
       };
     }
     const composed = composeRunRequest({
+      origin: input.origin,
       card,
       ticketText: text,
       vaultPath: vault.path,
@@ -3121,6 +3130,7 @@ export class EngineBoardService {
       ...(personaDispatch !== null ? { persona: personaDispatch } : {}),
       ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
       ...(input.interactive !== null ? { interactive: input.interactive } : {}),
+      ...(commitStep ? { commitStep: true } : {}),
       ...(dricket !== null ? { dk: await this.runTarget(dricket, snap.pipeline, phaseId) } : {}),
     });
     if (!composed.ok) {
@@ -3137,6 +3147,15 @@ export class EngineBoardService {
       return { ok: true, runId: outcome.run.id };
     }
     return { ok: false, error: outcome.error };
+  }
+
+  /** The texts of the skills a persona's record names (D-46); one with no text is a log line, the run goes on. */
+  private async personaSkillsFor(vault: EngineVault, persona: Persona): Promise<readonly PersonaSkill[]> {
+    const { skills, missing } = await loadPersonaSkills((rel) => this.readOptional(vault.id, rel), persona.id, persona.skills);
+    if (missing.length > 0) {
+      this.host.log(`persona ${persona.id}: no text for skill ${missing.join(', ')}`, 'warn');
+    }
+    return skills;
   }
 
   // --- worktree cleanup (T-0044, ADR-0080) ---------------------------

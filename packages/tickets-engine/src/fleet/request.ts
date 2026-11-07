@@ -16,13 +16,16 @@ import {
   type RepoRef,
   type TicketCard,
 } from '../contracts/tickets';
-import { acceptanceCommands, ticketSections } from '../core/ticket-files';
+import { acceptanceCommands, acceptanceFinding, ticketSections } from '../core/ticket-files';
 import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
-import { personaCoachingSection, personaMemorySection } from './context-pack';
+import { isAutoPhase } from './chain';
+import { personaCoachingSection, personaMemorySection, personaSkillsSection } from './context-pack';
 import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunDkTarget, type RunRequest, type WorkerProviderId } from './protocol';
-import { worktreePathFor } from './worktree-home';
+import { ticketCopyPathFor, worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
+  /** Who asks for this run (D-41); it rides the request to the runner's log and record. */
+  readonly origin: string;
   readonly card: TicketCard;
   /** The ticket file's full text. */
   readonly ticketText: string;
@@ -90,6 +93,8 @@ export interface ComposeRunInput {
    * holds the worker from turn one and never gates or moves.
    */
   readonly interactive?: InteractiveMode;
+  /** Accept's run on Ready to try (req-99a): the one run a manual column may carry, besides the owner's dialog (D-29). */
+  readonly commitStep?: boolean;
   /** E14-5: the ticket lives in a dricket store - the run claims and releases it through `dk`. */
   readonly dk?: RunDkTarget;
   /**
@@ -120,6 +125,8 @@ export interface PersonaDispatch {
   readonly memory: string;
   /** The persona's coaching thread text ('' when thread.md is absent) — U4. */
   readonly coaching: string;
+  /** The texts of the skills its record names (D-46); absent = none. */
+  readonly skills?: readonly { readonly name: string; readonly text: string }[];
 }
 
 export type ComposeRunResult =
@@ -137,6 +144,15 @@ export type ComposeRunResult =
   | { readonly ok: false; readonly error: string };
 
 export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
+  // D-29: every start passes here, so this is where the owner's columns are closed. A manual column is
+  // the owner's: nothing is run out of it, whoever asks. Only the owner's own dialog and Accept's commit step work there.
+  const phaseOfRun = input.workingPhase;
+  if (phaseOfRun !== null && !isAutoPhase(phaseOfRun) && input.interactive === undefined && input.commitStep !== true) {
+    return {
+      ok: false,
+      error: `${input.card.id} sits in ${phaseOfRun.title}, the owner's column: the fleet takes nothing from it. Move it into an agent column to run it.`,
+    };
+  }
   // A scout ticket (form: scout, E8, concept §5.6) runs an exploration,
   // not a build: no worktree is prepared — the named repo's checkout
   // (else the tickets vault itself) is the run's read ground, the gate
@@ -196,7 +212,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
   if (acceptance.length === 0 && !scout && input.structuralGateAllowed !== true && input.interactive === undefined) {
     return {
       ok: false,
-      error: `${input.card.id} has no acceptance criteria — the machine gate would have nothing to run`,
+      error: `${input.card.id} has no runnable acceptance criteria: ${acceptanceFinding(input.ticketText)}`,
     };
   }
   const handover = input.workingPhase?.handover ?? null;
@@ -232,7 +248,8 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
   const promptText = personaPrompt ?? input.promptText;
   const branch = input.card.meta.branch ?? branchForTicket(input.card.id);
   const sections = ticketSections(input.ticketText);
-  const ticketFile = path.join(input.vaultPath, input.card.path);
+  // D-30: a store card's path is virtual, no such file exists: the worker gets a copy the runner takes back.
+  const ticketFile = input.dk !== undefined ? ticketCopyPathFor(input.vaultPath, input.card.id) : path.join(input.vaultPath, input.card.path);
   // The scout run's directory is its read ground — the named repo's
   // checkout, else the tickets vault — computed here and carried on the
   // request like the worktree home (ADR-0080): the runner never derives
@@ -255,7 +272,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         ...(extraReadGrounds.length > 0 ? { extraRepos: extraReadGrounds } : {}),
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
         ...(persona !== null
-          ? { memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id }
+          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id }
           : {}),
       })
     : composeInstruction({
@@ -271,6 +288,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         prompt: promptText,
         acceptance,
         ticketFile,
+        ...(input.dk !== undefined ? { ticketFileIsCopy: true } : {}),
         ...(repo!.link !== undefined && repo!.link.length > 0 ? { links: repo!.link } : {}),
         ...(extraRepos.length > 0
           ? { extraRepos: extraRepos.map((r) => ({ name: r.name, worktreePath: r.worktreePath, base: r.baseRef })) }
@@ -281,7 +299,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         caps: input.caps ?? DEFAULT_FLEET_CAPS,
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
         ...(persona !== null
-          ? { memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching) }
+          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching) }
           : {}),
       });
   // A scout run never gates and never moves (concept §5.6) — the same
@@ -289,6 +307,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
   // sits until the owner promotes it from the report card.
   const moves = !scout && input.interactive === undefined;
   const request: RunRequest = {
+    origin: input.origin,
     ticketId: input.card.id,
     ...(scout ? { form: 'scout' as const } : {}),
     ticketsVaultPath: input.vaultPath,

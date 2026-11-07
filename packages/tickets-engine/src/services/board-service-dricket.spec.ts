@@ -362,11 +362,75 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     };
     const runner = new EngineBoardService(hostOf(), new TicketsGit(() => 'git', async () => ''), 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', {});
     try {
-      const reply = await runner.startRun({ ticketId: 'T-0002', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null });
+      const reply = await runner.startRun({ origin: 'spec', ticketId: 'T-0002', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null });
       expect(reply).toMatchObject({ ok: false, error: 'stub: not spawning' });
       expect(started).toHaveLength(1);
       expect(started[0]!.dk).toMatchObject({ store: storeDir, trailers: false, parkStage: null, retreatStage: 'inbox' });
       expect(started[0]!.ticketId).toBe('T-0002');
+      expect(started[0]!.origin).toBe('spec'); // D-41: who asked rides to the runner
+
+      // D-41: a start nobody names is refused here, whichever route it came by.
+      const nameless = { ticketId: 'T-0002', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null } as const;
+      expect(await runner.startRun({ ...nameless, origin: ' ' })).toMatchObject({ ok: false, error: expect.stringContaining('origin') });
+      expect(await runner.startRun(nameless as unknown as Parameters<typeof runner.startRun>[0])).toMatchObject({ ok: false, error: expect.stringContaining('origin') });
+      expect(started).toHaveLength(1);
+    } finally {
+      runner.dispose();
+    }
+  });
+
+  it("an owner's start carries the persona's skills like a dispatch does (D-46)", async () => {
+    const kt = abs('kt').split(path.sep).join('/');
+    await fsp.writeFile(abs('tickets/_meta/repos.md'), `---\nrepos:\n  kt:\n    url: https://example.test/kt.git\n    path: '${kt}'\n---\n`, 'utf8');
+    const text = dkShow('t-2')
+      .replace(/^repos:.*/m, 'repos: kt')
+      .replace('## Log', '## Plan\n\n### Acceptance criteria\n\n- [ ] `echo ok`\n\n## Log');
+    dk(['put', 't-2', '-F', writeTemp(text), '--claim', '--if-version', String(rev('t-2'))]);
+    await fsp.mkdir(abs('tickets/_meta/prompts'), { recursive: true });
+    await fsp.writeFile(abs('tickets/_meta/prompts/build-default.md'), 'Build the ticket.\n', 'utf8');
+    const ben = abs('tickets/_meta/personas/ben'); // T-0002 carries this persona
+    await fsp.mkdir(path.join(ben, 'skills'), { recursive: true });
+    await fsp.writeFile(
+      path.join(ben, 'persona.md'),
+      "---\ntitle: Pia\nrole: builder\nworker: opencode\nmodels:\n  default: m\n  pool: [m]\n  router: off\ncolor: '#a78bfa'\nskills: [own]\n---\n",
+      'utf8',
+    );
+    await fsp.writeFile(path.join(ben, 'skills', 'own.md'), 'Own skill text.\n', 'utf8');
+    const started: RunRequest[] = [];
+    const fleet: FleetPort = {
+      runs: async () => [],
+      start: async (request) => {
+        started.push(request);
+        return { ok: false, error: 'stub: not spawning' };
+      },
+      configureChain: async () => undefined,
+    };
+    const runner = new EngineBoardService(hostOf(), new TicketsGit(() => 'git', async () => ''), 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', {});
+    try {
+      await runner.startRun({ origin: 'spec', ticketId: 'T-0002', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null });
+      expect(started[0]!.instruction).toContain('### own\n\nOwn skill text.');
+    } finally {
+      runner.dispose();
+    }
+  });
+
+  it("a client asking for a run from an owner's column is refused before the runner hears of it (D-29)", async () => {
+    const created = await service.createTicket({ title: 'Stays put', priority: 'normal', repo: null, description: 'Body.' });
+    const id = (created as unknown as { id: string }).id;
+    const started: RunRequest[] = [];
+    const fleet: FleetPort = {
+      runs: async () => [],
+      start: async (request) => {
+        started.push(request);
+        return { ok: false, error: 'stub: not spawning' };
+      },
+      configureChain: async () => undefined,
+    };
+    const runner = new EngineBoardService(hostOf(), new TicketsGit(() => 'git', async () => ''), 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', {});
+    try {
+      const reply = await runner.startRun({ origin: 'spec', ticketId: id, workerChoice: 'opencode', permissionMode: 'accept-edits', handover: 'fresh', interactive: null });
+      expect(reply).toMatchObject({ ok: false, error: expect.stringContaining("the owner's column") });
+      expect(started).toEqual([]);
     } finally {
       runner.dispose();
     }

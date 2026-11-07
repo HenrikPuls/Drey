@@ -170,6 +170,12 @@ export interface RunRequest {
   /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */
   readonly recordWorker?: string;
   /**
+   * Who asked for this run (D-41): `chain`, `accept`, `mcp`, `drey:run-dialog`,
+   * `drey:plan-dialog`, `device <name> (<id>)`, `handoff of <run>`. The runner logs it and
+   * refuses a start without one. Optional on the wire: records from before D-41 have none.
+   */
+  readonly origin?: string;
+  /**
    * How the run's context should reach the worker (T-0049): `'auto'`
    * lets the supervisor resolve it from the ticket's run history, an
    * explicit mode is honoured when structurally legal. Absent — every
@@ -608,6 +614,8 @@ export interface RunInfo {
    * lineage). Null on a fresh run and on a resume that fell back fresh.
    */
   readonly resumedFrom?: string | null;
+  /** Who asked for this run (D-41); absent on records from before it. */
+  readonly origin?: string;
   /** The last gate failure, when the machine gate stopped the run short. */
   readonly gateFailure: string | null;
 }

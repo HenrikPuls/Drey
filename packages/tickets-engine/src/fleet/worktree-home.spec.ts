@@ -123,7 +123,7 @@ describe('parseRepos: the worktrees: key', () => {
 
 describe('composeRunRequest carries the home rule', () => {
   const phase = (id: string): PipelinePhase =>
-    phaseWithoutPoolKeys({ id, title: id, wip: null, claim: false, handover: 'manual' });
+    phaseWithoutPoolKeys({ id, title: id, wip: null, claim: false, handover: 'agent plan-default' });
 
   const card: TicketCard = {
     id: 'T-0001',
@@ -173,10 +173,11 @@ describe('composeRunRequest carries the home rule', () => {
 
   const compose = (over: Partial<RepoRef> = {}) =>
     composeRunRequest({
+      origin: 'spec',
       card,
       ticketText,
       vaultPath: 'V:/tickets',
-      workingPhase: phase('prioritized'),
+      workingPhase: phase('plan'),
       nextPhaseId: 'plan',
       nextPhaseDir: null,
       pushRemote: null,

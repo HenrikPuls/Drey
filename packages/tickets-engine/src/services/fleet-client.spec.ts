@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FleetClient } from './fleet-client';
+import { FleetClient, runnerSpawnArgs } from './fleet-client';
 import { formatStamp } from '../fleet/build-stamp';
 
 /**
@@ -12,6 +12,43 @@ import { formatStamp } from '../fleet/build-stamp';
  * against a fake runner on loopback: the handover is asked for, and a
  * runner that refuses (a run in its gate) keeps serving.
  */
+describe('FleetClient without a runner (D-34)', () => {
+  let root = '';
+
+  beforeEach(async () => {
+    root = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-client-'));
+    await fsp.mkdir(path.join(root, 'runs', 'R-1'), { recursive: true });
+    await fsp.writeFile(
+      path.join(root, 'runs', 'R-1', 'run.json'),
+      JSON.stringify({ info: { id: 'R-1', state: 'detached', pid: 70832, startedAt: '2026-11-04T13:12:51Z', endedAt: '2026-11-06T20:53:20Z', lastActivity: '2026-11-04T13:20:00Z' } }),
+    );
+  });
+
+  afterEach(async () => {
+    await fsp.rm(root, { recursive: true, force: true });
+  });
+
+  const client = (exec: (cmd: string, args: readonly string[]) => Promise<string>): FleetClient =>
+    new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: () => undefined, onFleetChanged: () => undefined, exec });
+
+  it('a detached record whose worker is gone reads as stopped: no client counts it as active', async () => {
+    const runs = await client(async () => 'INFO: No tasks').runs();
+    expect(runs.map((r) => r.state)).toEqual(['stopped']);
+  });
+
+  it('a worker still alive stays detached', async () => {
+    const runs = await client(async (cmd) => (cmd === 'powershell.exe' ? String(Date.parse('2026-11-04T13:12:00Z')) : '"70832"')).runs();
+    expect(runs.map((r) => r.state)).toEqual(['detached']);
+  });
+});
+
+describe('runnerSpawnArgs (D-42)', () => {
+  it('tells a runner on a store board so at its start, before any chain config reaches it', () => {
+    expect(runnerSpawnArgs('r.js', 'F:/root', true)).toEqual(['r.js', '--root', 'F:/root', '--store-backed']);
+    expect(runnerSpawnArgs('r.js', 'F:/root', false)).toEqual(['r.js', '--root', 'F:/root']);
+  });
+});
+
 describe('FleetClient handover', () => {
   let root = '';
   let server: http.Server;

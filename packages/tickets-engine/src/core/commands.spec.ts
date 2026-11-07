@@ -58,7 +58,7 @@ describe('command parsers', () => {
   it('defaults a run start to accept-edits and a fresh handover', () => {
     expect(parseStartRun({ id: 'T-0001', worker: ' ', handover: 'later' })).toEqual({
       ok: true,
-      value: { ticketId: 'T-0001', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null },
+      value: { origin: '', ticketId: 'T-0001', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null },
     });
     expect(parseStartRun({ id: 'T-0001', permissionMode: 'bypass', handover: 'resume' })).toMatchObject({
       value: { permissionMode: 'bypass', handover: 'resume' },

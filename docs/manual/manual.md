@@ -1129,8 +1129,9 @@ is in Settings → Tickets → *Budget and runners*.
 ### Running agents on tickets (the fleet)
 
 A ticket can be worked by an **external agent CLI** — OpenCode or
-Claude Code — while you watch from the Work panel. Open a row's menu
-and choose **Run agent**: the dialog lets you pick the worker (the menu
+Claude Code — while you watch from the Work panel. Open the menu of a row
+in an agent column (Inbox, Shaping and Prioritized are yours: move the ticket
+to Building first) and choose **Run agent**: the dialog lets you pick the worker (the menu
 shows the one your pins resolve to: the ticket's `worker:` field wins,
 then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely

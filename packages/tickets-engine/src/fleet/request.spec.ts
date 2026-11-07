@@ -77,6 +77,7 @@ const REPO = { name: 'drey', url: 'https://example.test/drey.git', branch: 'main
 
 function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Parameters<typeof composeRunRequest>[0] {
   return {
+    origin: 'spec',
     card: card(),
     ticketText: TICKET,
     vaultPath: 'V:/tickets',
@@ -97,6 +98,115 @@ function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Para
     ...over,
   };
 }
+
+describe('composeRunRequest — the owner\'s columns (D-29)', () => {
+  const inbox = phase('inbox', { title: 'Inbox', handover: 'manual', persona: 'you' });
+
+  it('refuses a run from a manual column: the fleet takes nothing from it, whoever asks', () => {
+    for (const asked of [{}, { workerChoice: 'opencode' }, { handover: 'fresh' as const }, { dispatchedBy: 'inbox' }]) {
+      const result = composeRunRequest(base({ workingPhase: inbox, nextPhaseId: 'shaping', ...asked }));
+      expect(result.ok).toBe(false);
+      expect(result.ok ? '' : result.error).toBe("T-0001 sits in Inbox, the owner's column: the fleet takes nothing from it. Move it into an agent column to run it.");
+    }
+  });
+
+  it('refuses a column with no handover at all (Done) the same way', () => {
+    const result = composeRunRequest(base({ workingPhase: phase('done', { title: 'Done', handover: 'none' }), nextPhaseId: null }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('the owner\'s own dialog and Accept\'s commit step stay: neither takes a ticket for the fleet', () => {
+    expect(composeRunRequest(base({ workingPhase: inbox, interactive: 'plan' })).ok).toBe(true);
+    expect(composeRunRequest(base({ workingPhase: phase('ready', { handover: 'manual' }), nextPhaseId: null, commitStep: true })).ok).toBe(true);
+  });
+
+  it('an agent column still runs', () => {
+    expect(composeRunRequest(base({ workingPhase: phase('building', { handover: 'agent build-default' }), nextPhaseId: 'ready' })).ok).toBe(true);
+  });
+});
+
+describe('composeRunRequest — a store ticket has no file (D-30)', () => {
+  const dk = { bin: 'dk', store: 'S:/board', dataDir: '', checkout: '', parkStage: null, retreatStage: null, trailers: false };
+
+  it('the brief names the working copy, never the virtual path that exists on no disk', () => {
+    const result = composeRunRequest(base({ dk }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.instruction).toMatch(/The ticket file: \S*_worktrees[\\/]T-0001\.ticket\.md — your working copy/);
+    expect(result.request.instruction).toContain('the runner takes your changes back');
+    expect(result.request.instruction).not.toMatch(/prioritized[\\/]T-0001\.md/);
+    expect(result.request.ticketRelPath).toBe('tickets/prioritized/T-0001.md'); // the card's virtual path stays its identity
+  });
+
+  it('a file board keeps the real path', () => {
+    const result = composeRunRequest(base());
+    expect(result.ok && result.request.instruction).toMatch(/The ticket file: \S*prioritized[\\/]T-0001\.md — it lives in the tickets repo/);
+  });
+});
+
+describe('composeRunRequest — a refusal says what the gate counts (D-31)', () => {
+  const withCriteria = (lines: string): string => TICKET.replace('- [ ] `npm run verify:unit` — exits 0', lines);
+
+  it('prose criteria are reported as prose, never as none', () => {
+    const result = composeRunRequest(base({ ticketText: withCriteria('- [ ] the image shows\n- [ ] it is blue') }));
+    expect(result.ok ? '' : result.error).toBe(
+      'T-0001 has no runnable acceptance criteria: the machine gate runs only "- [ ] `command`" lines under "### Acceptance criteria" and found none; the 2 criteria there are prose.',
+    );
+  });
+
+  it('one prose criterion, in the singular', () => {
+    const result = composeRunRequest(base({ ticketText: withCriteria('- [ ] the image shows') }));
+    expect(result.ok ? '' : result.error).toContain('found none; the 1 criterion there is prose.');
+  });
+
+  it('an empty section and a missing one each say what was found', () => {
+    const empty = composeRunRequest(base({ ticketText: withCriteria('') }));
+    expect(empty.ok ? '' : empty.error).toContain('found none; the section is empty.');
+    const missing = composeRunRequest(base({ ticketText: TICKET.replace('### Acceptance criteria', '### Notes') }));
+    expect(missing.ok ? '' : missing.error).toContain('found none; the ticket has no such section.');
+  });
+});
+
+describe('composeRunRequest — a persona\'s skills ride along (D-46)', () => {
+  const persona = { id: 'build-default', worker: 'opencode', model: 'm', prompt: 'You build.', memory: '', coaching: '' };
+  const skills = [
+    { name: 'angular-tests', text: 'Run the suite with --include.' },
+    { name: 'commits', text: 'One change per commit.' },
+  ];
+
+  it('in the brief, in the stable part before the plan', () => {
+    const result = composeRunRequest(base({ persona: { ...persona, skills } }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    const text = result.request.instruction;
+    expect(text).toContain('## Skills');
+    expect(text).toContain('### angular-tests\n\nRun the suite with --include.');
+    expect(text).toContain('### commits\n\nOne change per commit.');
+    expect(text.indexOf('You build.')).toBeLessThan(text.indexOf('## Skills'));
+    expect(text.indexOf('## Skills')).toBeLessThan(text.indexOf('## Plan'));
+    expect(result.request.continuationInstruction).not.toContain('## Skills'); // a resumed session holds them
+  });
+
+  it('a changed skill changes the digest, so a resumed session gets the full brief', () => {
+    const one = composeRunRequest(base({ persona: { ...persona, skills } }));
+    const other = composeRunRequest(base({ persona: { ...persona, skills: [{ name: 'commits', text: 'Squash.' }] } }));
+    expect(one.ok && other.ok && one.request.briefDigest !== other.request.briefDigest).toBe(true);
+  });
+
+  it('a persona without skills leaves the brief as it was', () => {
+    const none = composeRunRequest(base({ persona }));
+    const empty = composeRunRequest(base({ persona: { ...persona, skills: [] } }));
+    expect(none.ok && none.request.instruction).not.toContain('## Skills');
+    expect(none.ok && empty.ok && none.request.instruction === empty.request.instruction).toBe(true);
+  });
+
+  it('a scout run carries them too', () => {
+    const result = composeRunRequest(base({ card: card({ meta: { ...card().meta, form: 'scout' } }), persona: { ...persona, skills } }));
+    expect(result.ok && result.request.instruction).toContain('### commits');
+  });
+});
 
 describe('composeRunRequest', () => {
   it('builds a dispatched run: the pull stays in its phase, the move follows the working column', () => {

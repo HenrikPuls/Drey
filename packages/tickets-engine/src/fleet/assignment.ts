@@ -126,6 +126,12 @@ export interface InstructionInput {
    */
   readonly ticketFile?: string;
   /**
+   * The ticket lives in a store (D-30): `ticketFile` is the run's working
+   * copy, whose changes the runner takes back; the brief says so, or a worker
+   * looks for the real file.
+   */
+  readonly ticketFileIsCopy?: boolean;
+  /**
    * The work repo's agent instructions (`CLAUDE.md` preferred,
    * `AGENTS.md` fallback), read by the caller: inlined VERBATIM as the
    * instruction's first section, never capped — the CLI's own auto-load
@@ -165,6 +171,12 @@ export interface InstructionInput {
    * the ticket.
    */
   readonly interactive?: InteractiveMode;
+  /**
+   * The resolved persona's skills as one section (D-46): stable like the
+   * persona's prompt, so it rides right behind it and a changed skill changes
+   * the digest. Null/absent = no section, byte-identical briefs.
+   */
+  readonly skillsSection?: string | null;
   /**
    * The resolved persona's curated memory, already sliced by
    * `context-pack`'s `personaMemorySection` (E3, ADR-0088): carried as the
@@ -296,6 +308,10 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   if (prompt != null && prompt !== '') {
     parts.push(prompt);
   }
+  const skills = input.skillsSection?.trim();
+  if (skills != null && skills !== '') {
+    parts.push(skills);
+  }
   const plan = input.plan?.trim();
   if (plan != null && plan !== '') {
     parts.push(`## Plan\n\n${plan}`);
@@ -328,8 +344,12 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   }
   if (input.ticketFile !== undefined && input.ticketFile !== '') {
     parts.push(
-      `The ticket file: ${input.ticketFile} — it lives in the tickets repo, outside the worktree, and is the one ` +
-        `file besides the worktree you may edit (the plan and the Log go there). Use this path directly; do not search the disk for it.`,
+      input.ticketFileIsCopy === true
+        ? `The ticket file: ${input.ticketFile} — your working copy of the ticket, outside the worktree, and the one ` +
+            `file besides the worktree you may edit (the plan, the handover and the Log go there). The board keeps the ticket in a ` +
+            `store you do not touch: the runner takes your changes back when your turn ends. Use this path directly; do not search the disk for another ticket file.`
+        : `The ticket file: ${input.ticketFile} — it lives in the tickets repo, outside the worktree, and is the one ` +
+            `file besides the worktree you may edit (the plan and the Log go there). Use this path directly; do not search the disk for it.`,
     );
   }
   const description = input.description.trim();
@@ -423,6 +443,7 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
     input.interactive ?? null,
     input.worktreePath,
     input.branch,
+    ...(skills != null && skills !== '' ? [skills] : []),
   ]);
   return { text: parts.join('\n\n'), truncations, continuation, stable };
 }
@@ -488,6 +509,8 @@ export interface ScoutInstructionInput {
   readonly repoInstructions: string | null;
   /** The ticket's further repos: read-only grounds, never write there. */
   readonly extraRepos?: readonly { readonly name: string; readonly path: string }[];
+  /** The resolved persona's `## Skills` section (D-46); absent = no section. */
+  readonly skillsSection?: string | null;
   /** The resolved persona's `## Memory` slice (E3); absent = no section. */
   readonly memorySection?: string | null;
   /** The resolved persona's `## Coaching` slice (U4); absent = no section. */
@@ -520,6 +543,10 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
   const prompt = input.prompt?.trim();
   if (prompt != null && prompt !== '') {
     parts.push(prompt);
+  }
+  const skills = input.skillsSection?.trim();
+  if (skills != null && skills !== '') {
+    parts.push(skills);
   }
   const plan = input.plan?.trim();
   if (plan != null && plan !== '') {
@@ -580,6 +607,7 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
     description,
     'scout',
     input.readGround,
+    ...(skills != null && skills !== '' ? [skills] : []),
   ]);
   return { text: parts.join('\n\n'), truncations, continuation, stable };
 }

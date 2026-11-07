@@ -1327,7 +1327,7 @@ describe('Orchestrator', () => {
 
     async function writePersona(
       id: string,
-      over: { worker?: string; model?: string; prompt?: string | null; memory?: string } = {},
+      over: { worker?: string; model?: string; prompt?: string | null; memory?: string; skills?: readonly string[] } = {},
     ): Promise<void> {
       const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', id);
       await fsp.mkdir(dir, { recursive: true });
@@ -1344,7 +1344,7 @@ describe('Orchestrator', () => {
           `  pool: [${model}]`,
           '  router: off',
           "color: '#a78bfa'",
-          'skills: []',
+          `skills: [${(over.skills ?? []).join(', ')}]`,
           '---',
           '',
         ].join('\n'),
@@ -1391,6 +1391,40 @@ describe('Orchestrator', () => {
       // the resolved id rides the start options — RunInfo.persona stamps from it
       expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
       expect(logs.some((line) => line.startsWith('dispatched T-0100') && line.includes('persona pia'))).toBe(true);
+    });
+
+    it("a persona's skills reach the dispatched run's brief; one with no text is said once (D-46)", async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet', skills: ['own', 'shared', 'gone'] });
+      const own = path.join(vaultDir, 'tickets', '_meta', 'personas', 'pia', 'skills');
+      await fsp.mkdir(own, { recursive: true });
+      await fsp.writeFile(path.join(own, 'own.md'), 'Own skill text.\n', 'utf8');
+      const shared = path.join(vaultDir, 'tickets', '_meta', 'skills');
+      await fsp.mkdir(shared, { recursive: true });
+      await fsp.writeFile(path.join(shared, 'shared.md'), 'Shared skill text.\n', 'utf8');
+      await writeTicket('T-0100', 'plan');
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const instruction = fleet.records[0]!.request.instruction;
+      expect(instruction).toContain('## Skills');
+      expect(instruction).toContain('### own');
+      expect(instruction).toContain('Own skill text.');
+      expect(instruction).toContain('Shared skill text.');
+      expect(instruction).not.toContain('### gone');
+      expect(logs.filter((line) => line.includes('no text for skill gone'))).toHaveLength(1);
+    });
+
+    it('a dispatched run says who started it: the chain (D-41)', async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet' });
+      await writeTicket('T-0100', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      expect(fleet.records[0]!.request.origin).toBe('chain');
     });
 
     it('the ladder: the ticket pin beats the phase persona', async () => {

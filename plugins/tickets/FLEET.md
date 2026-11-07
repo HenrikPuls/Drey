@@ -116,7 +116,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /chain/abort` | stop every live run |
 | `POST /shutdown` | graceful retire: stops live runs (bounded), exits. With `{handover: true}` (what Drey sends for a newer build, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
 | `POST /retire-if-idle` | leave if nothing needs the runner (req-110; what the engine sends once Drey is gone): `{ok, exiting: true}` and the process ends, or `{ok, exiting: false, reason: "live runs" \| "autopilot"}` and it stays — the decision is the runner's, so no run that starts in between dies. No body. A runner from before req-110 answers 404 |
-| `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `packages/tickets-engine/src/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher |
+| `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `packages/tickets-engine/src/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher. A start without an `origin` is refused (D-41) |
 
 Writes change real state (worker processes, the board, the tickets repo).
 Diagnose read-only first; only stop/steer/switch on the owner's ask.
@@ -135,7 +135,12 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
    stored record from `runs/`, so boot-adopted runs land in both lists —
    dedupe by id when summarizing.
 4. `GET /log?tail=50` — what the daemon last decided and why
-   (e.g. `dispatch skips T-0041: ... no acceptance criteria`).
+   (e.g. `dispatch skips T-0041: T-0041 has no runnable acceptance criteria: ...`).
+   Who asked for a run: `run <id> (<ticket>): asked by <origin>` (D-41): `chain`,
+   `accept`, `mcp`, `drey:run-dialog`, `drey:plan-dialog`, `handoff of <run>`,
+   `resume of <run>`, `device <name> (<id>)`; `engine.log` has `run start: <ticket>
+   asked by <origin>` as well, also for a start the runner never heard of. It is on the
+   run's record too (`origin` in `run.json`'s info).
 5. `GET /chain` — master/columns/cooldowns/token budget (daemon builds).
 6. `GET /report` — token cost per ticket/phase/model (T-0048): what the
    columns spend, sorted by total.
@@ -152,7 +157,7 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 | `done` | worker finished its turn (gate ran after; check `gateFailure`). A turn that ended `BLOCKED:` is also done, but no gate ran and nothing moved — the reason sits in `blocked` and the ticket waits for the owner |
 | `stopped` | stopped by request |
 | `failed` | worker died or errored (see stream `error` events) |
-| `detached` | the runner restarted while the worker lived on — unwatchable, treat as busy |
+| `detached` | the runner restarted while the worker lived on — unwatchable, treat as busy. The reaper settles it as `failed` once the worker is provably gone (no recorded pid runs, or the process is younger than the run's last sign of life: a reused number, D-34); with no runner up the board reads such a record as `stopped` |
 
 A live run may carry `waiting` (req-64): `{kind: "question", text, since}`
 when the worker ended its turn with a `QUESTION:` message — the marker
@@ -170,6 +175,27 @@ shows a Windows notification.
 A "red gate" shows as `gateFailure` on the run plus `note` events in the
 stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 `chain.json` for the working column.
+
+### Where a run may start (D-29)
+
+Only out of an agent column (`handover: agent …`): the owner's columns give no run, whoever asks,
+the refusal is `composeRunRequest`'s, the one place every start passes. Two runs work in a manual
+column all the same, and neither takes a ticket for the fleet: the owner's dialog (below) and Accept's
+commit step on Ready to try.
+
+### A worker's ticket on a store (D-30)
+
+A store ticket has no file: a card's path is virtual. So the brief names a working copy,
+`<vault>/_worktrees/<id>.ticket.md`, written after the claim; the text it started from is
+`ticket-given.md` in the run's folder. When the turn ends, before a structural gate, a wait for the owner or
+any release, the runner `put`s what the worker changed back inside its claim: a changed or new chapter
+replaces the ticket's own, new Log lines are appended, frontmatter and `## Verlauf` do not count, a chapter
+the owner edited meanwhile stands unless the worker changed the same one. The copy goes when the run ends.
+A failed `put` is a log line and the next take-back tries again.
+
+The legacy tree of a board on a store is frozen: the engine tells the runner at its start
+(`--store-backed`), and a run record from before the cut-over, which has no `dk`, writes no stamp, Log, move or
+park there (D-42).
 
 ### Interactive dialog runs (req-65)
 
@@ -343,7 +369,9 @@ Every phase's instruction is composed in one stable order — repo agent
 instructions (verbatim: the file `repos.md`'s `instructions:` names,
 req-79 — Drey's is `docs/agents/fleet-worker.md`; unset, missing or
 blank falls back to `CLAUDE.md`, then `AGENTS.md`) → phase
-template → the ticket's `## Plan` verbatim → the variable parts
+template (a persona's prompt, then its `## Skills`, D-46: the names in `persona.skills`,
+nearest first `personas/<id>/skills/<name>.md` or `<name>/SKILL.md`, then `_meta/skills/`; a name with no text is
+a log line) → the ticket's `## Plan` verbatim → the variable parts
 (who/where, description, the worktree's diff stat (commits since the branch left the base — `base...HEAD`, then `git status --short`) head-capped, the earlier step's `## Handover` section,
 and on a retry the previous run's gate failure tail-capped). The prefix
 up to the plan is byte-identical across runs of the same repo and
@@ -435,7 +463,7 @@ device. Its own log lines start with `remote:` in the plugin log.
   master `halted`? column `held`? cooldown active? token budget exhausted
   (`tokensUsed` vs day)? ticket claimed, carries a `run` stamp, has
   validation errors, or — most common — **no backticked acceptance criteria**,
-  which the machine gate refuses to run. Since T-0050 also: the ticket
+  which the machine gate refuses to run (the refusal says what it found: prose, an empty section, none). Since T-0050 also: the ticket
   is **blocked** — `blocked-by:` names ids that have not reached the
   last phase, and the dispatcher skips it by design; the log says
   `dispatch holds <id>: blocked by <ids> — the blockers must reach the

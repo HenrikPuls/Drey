@@ -17,7 +17,7 @@
  * the engine asks (`POST /retire-if-idle`, sent once Drey is gone) and
  * after the idle span without a write. A live run always keeps it.
  *
- * Usage: node runner.js --root <abs-path-to-fleet-root> [--idle-ms <n>]
+ * Usage: node runner.js --root <abs-path-to-fleet-root> [--idle-ms <n>] [--store-backed]
  */
 import * as crypto from 'node:crypto';
 import * as fsSync from 'node:fs';
@@ -57,13 +57,18 @@ const MAX_BODY = 1024 * 1024;
 export interface Args {
   readonly root: string;
   readonly idleMs: number;
+  /** The board lives in a dricket store (D-42): known at the start, before a chain config arrives. */
+  readonly storeBacked?: boolean;
 }
 
 function parseArgs(argv: readonly string[]): Args {
   let root = '';
   let idleMs = 15 * 60_000;
+  let storeBacked = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--root' && argv[i + 1] !== undefined) {
+    if (argv[i] === '--store-backed') {
+      storeBacked = true;
+    } else if (argv[i] === '--root' && argv[i + 1] !== undefined) {
       root = argv[i + 1]!;
       i++;
     } else if (argv[i] === '--idle-ms' && argv[i + 1] !== undefined) {
@@ -75,7 +80,7 @@ function parseArgs(argv: readonly string[]): Args {
     console.error('fleet runner: --root is required');
     process.exit(2);
   }
-  return { root, idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 15 * 60_000 };
+  return { root, idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 15 * 60_000, storeBacked };
 }
 
 /** The process seams the in-process spec replaces; the real entry uses the defaults. */
@@ -165,6 +170,7 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
         adapter,
         git: 'git',
         log,
+        storeBacked: () => args.storeBacked === true || orchestrator?.onStore() === true,
         onRunSettled: (info) => void orchestrator?.onRunSettled(info),
         secondOpinion: (request) => orchestrator?.secondOpinion(request) ?? Promise.resolve(null),
       }),

@@ -63,7 +63,7 @@ default 30), `"dk.path"`, `"dk.dataDir"`. Settings -> Tickets shows checkout and
      same ticket from a terminal in between: the save conflict merge view opens;
    - a ticket's comments (`dk comment t-1 -m "x"`) show in the thread; a Needs-you
      decision resolves via a comment (there is **no answer button yet**);
-   - one fleet run on a throw-away ticket (the profile has **no worker configured**; set
+   - one fleet run on a throw-away ticket, moved to Building first (the profile has **no worker configured**; set
      one in Settings first): claim, extend, release visible in `dk show`; kill the runner
      (Task Manager) and start the script again - the leftover claim is released at start; a
      *foreign* dead claim (t-4) is taken over only after lease end **plus dk's fixed
@@ -342,7 +342,7 @@ Set-TicketsConfig @{ 'backend' = 'dricket' }
 - one move, one priority change;
 - open a ticket document (asks once to add the checkout as a vault), edit, Ctrl+S;
 - one comment, from a terminal (`dk comment <id> -m "..."`): the app has no field to write one;
-- one short fleet run on a throw-away ticket: claim and release show in `dk show`, extend only if the
+- one short fleet run on a throw-away ticket, moved to Building first (an owner's column takes no run since D-29): claim and release show in `dk show`, extend only if the
   run outlasts its lease. **Give that ticket a throw-away repository** (a local bare repo and a clone,
   named in `_meta/repos.md`), never `repos: drey`: its Accept merges into the target repository's
   main and pushes. It also needs an acceptance criterion as a backticked checkbox line,
@@ -388,8 +388,7 @@ When you are satisfied, E14-9b deletes the legacy code (scope in
 
 ## Known gaps (not blockers for A–C)
 
-No answer button for Needs-you in the UI (route and engine method exist); a worker
-cannot edit its own ticket chapters on a store (`## Handover`); no "release leftover
+No answer button for Needs-you in the UI (route and engine method exist); no "release leftover
 claims" button (runs automatically at start); chain on a remote store does not
 `dk sync` by itself (the engine's feed does); no real run with a real worker was
 made on a second instance; the shadow report does not name the store it compared, and

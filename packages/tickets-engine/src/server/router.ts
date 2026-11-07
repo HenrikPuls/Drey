@@ -569,7 +569,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     }
   }
   if (req.path === '/api/runs') {
-    return write('run start', parseStartRun(body), (cmd) => port.startRun(cmd));
+    // D-41: a device's start names the device the token proved, whatever its body says.
+    return write('run start', parseStartRun(body), (cmd) => port.startRun({ ...cmd, origin: `device ${device.name} (${device.id})` }));
   }
   const run = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/(stop|send|answer|permission|handoff)$/.exec(req.path);
   if (run !== null) {

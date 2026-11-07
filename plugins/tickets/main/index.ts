@@ -833,6 +833,7 @@ const plugin: MainPluginModule = {
         }),
         run: (input) =>
           board.startRun({
+            origin: 'mcp',
             ticketId: input.ticketId,
             workerChoice: input.worker,
             permissionMode: input.permissionMode,

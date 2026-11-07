@@ -77,6 +77,7 @@ let vaultDir = '';
 
 function request(overrides: Partial<RunRequest> = {}): RunRequest {
   return {
+    origin: 'spec',
     ticketId: 'T-0001',
     ticketsVaultPath: vaultDir,
     ticketRelPath: 'tickets/build/T-0001.md',
@@ -186,8 +187,47 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     expect(t.store.of('comment')[0]?.text).toContain('moving to commit');
     expect(t.store.of('comment')[0]?.text).toMatch(/^done: handed over on /); // E14-6: the keyed status verb leads
     expect(t.store.calls.map((c) => c.op)).not.toContain('extend');
-    expect(await fsp.readdir(vaultDir)).toEqual([]); // not a single ticket file, folder or commit
+    expect((await fsp.readdir(vaultDir)).filter((name) => name !== '_worktrees')).toEqual([]); // not a single ticket file or commit (D-30)
+    expect(await fsp.readdir(path.join(vaultDir, '_worktrees')).catch(() => [])).toEqual([]); // the working copy went with the run
     expect(t.timers.armed).toBeNull(); // the keep-alive ended with the release
+  });
+
+  it('the worker gets a working copy of the ticket, and what it changed lands in the store before the release (D-30)', async () => {
+    const t = setup();
+    const id = await started(t.sup, request());
+    const copy = path.join(vaultDir, '_worktrees', 'T-0001.ticket.md');
+    expect(await fsp.readFile(copy, 'utf8')).toBe(t.store.text);
+    expect(t.order.indexOf('spawn')).toBeGreaterThan(t.order.indexOf('claim'));
+    await fsp.writeFile(copy, t.store.text.replace('## Log', '## Handover\n\nState: done\n\n## Log').replace('stage: prioritized', 'stage: done'), 'utf8');
+    t.adapter.handles[0]!.result();
+    t.adapter.handles[0]!.fail(0);
+    await settled(t.sup, id, 'done');
+    expect(t.store.text).toContain('## Handover\n\nState: done');
+    expect(t.store.text).not.toContain('stage: done'); // the worker's frontmatter does not count
+    const ops = t.store.calls.map((c) => c.op);
+    expect(ops.indexOf('put')).toBeLessThan(ops.lastIndexOf('release'));
+    await expect(fsp.access(copy)).rejects.toThrow();
+  });
+
+  it('a plan run gates on the criteria the worker wrote into its copy (D-30, E14-5c)', async () => {
+    const t = setup();
+    const id = await started(t.sup, request({ gate: 'structural', acceptance: [] }));
+    const copy = path.join(vaultDir, '_worktrees', 'T-0001.ticket.md');
+    await fsp.writeFile(copy, t.store.text.replace('## Log', '## Plan\n\n### Acceptance criteria\n\n- [ ] \`echo ok\`\n\n## Log'), 'utf8');
+    t.adapter.handles[0]!.result();
+    t.adapter.handles[0]!.fail(0);
+    await settled(t.sup, id, 'done');
+    expect(t.store.of('release').map((c) => c.stage)).toEqual(['commit']);
+  });
+
+  it('a stopped run still hands back what the worker wrote (D-30)', async () => {
+    const t = setup();
+    const id = await started(t.sup, request());
+    const copy = path.join(vaultDir, '_worktrees', 'T-0001.ticket.md');
+    await fsp.writeFile(copy, t.store.text.replace('## Log', '## Handover\n\nState: blocked\n\n## Log'), 'utf8');
+    await t.sup.stop(id, 'owner');
+    await settled(t.sup, id, 'stopped');
+    expect(t.store.text).toContain('State: blocked');
   });
 
   it('a red gate gives the ticket back where it came from (release is the one door)', async () => {
