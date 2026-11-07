@@ -45,6 +45,7 @@ import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, t
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, showsTicketDocument, ticketLogFold, ticketTabTitle } from './ticket-header';
+import { openTicketDocument, type TicketDocumentReply } from './open-ticket';
 import { BOARD_KEY, BOARD_KIND, TEAM_KEY, TEAM_KIND, WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
@@ -263,45 +264,38 @@ function invokeBoard(method: string, payload?: unknown): Promise<unknown> {
   return backend.invoke(method, payload);
 }
 
-/** Opens a ticket file in the editor (the tickets vault, wherever the
- *  active pane lives — a centre tab like any note). */
-function openTicketFile(api: DreyPluginApi, path: string): void {
+/** Opens one of the board's own files, `tickets/_meta/…`, in the editor. Never a ticket: that is {@link openTicket}. */
+function openBoardFile(api: DreyPluginApi, path: string): void {
   if (snapshot?.vaultId != null) {
     void api.documents.open(path, undefined, { vaultId: snapshot.vaultId });
   }
 }
 
-/**
- * E14-4c: with the dricket backend a ticket's document is a file of the store's
- * checkout (a vault of its own), not a card path of the tickets vault. Opens it in
- * the editor and returns true; false = not a dricket ticket, the caller opens the
- * vault file as before. A declined or failed checkout registration is told once.
- */
-async function openDricketDocument(api: DreyPluginApi, id: string): Promise<boolean> {
-  let reply: { ok: boolean; document?: { vaultId: string; path: string } | null; error?: string };
-  try {
-    reply = (await invokeBoard('ticketDocument', { id })) as typeof reply;
-  } catch {
-    return false;
-  }
-  if (!reply.ok) {
-    await api.ui.showMessage(reply.error ?? 'The ticket document could not be opened.', 'Tickets');
-    return true;
-  }
-  if (reply.document == null) {
-    return false;
-  }
-  await api.documents.open(reply.document.path, undefined, { vaultId: reply.document.vaultId });
-  return true;
+/** Every ticket's document opens here: the store says where it is (D-27, `open-ticket.ts`). */
+function openTicket(api: DreyPluginApi, id: string, filePath: string): void {
+  void openTicketDocument(
+    {
+      locate: (ticket) => invokeBoard('ticketDocument', { id: ticket }) as Promise<TicketDocumentReply>,
+      open: (path, vaultId) => api.documents.open(path, undefined, { vaultId }),
+      showMessage: (text) => api.ui.showMessage(text, 'Tickets'),
+      boardVaultId: () => snapshot?.vaultId ?? null,
+    },
+    id,
+    filePath,
+  );
 }
 
-/** Opens the ticket's document: the store checkout's on dricket, else the vault file. */
-function openTicketCard(api: DreyPluginApi, card: TicketCard): void {
-  void openDricketDocument(api, card.id).then((opened) => {
-    if (!opened) {
-      openTicketFile(api, card.path);
-    }
-  });
+/** A new ticket opens like any row of the board once the fresh board lists it. */
+function openCreatedTicket(api: DreyPluginApi, created: CreateResult): void {
+  if (created.id === undefined || created.path === undefined) {
+    return;
+  }
+  const card = boardCard(created.id);
+  if (card === null) {
+    openTicket(api, created.id, created.path);
+  } else {
+    showTicketDocument(api, card);
+  }
 }
 
 /** Outlines the Work row whose ticket file (or thread) is the active tab. */
@@ -458,7 +452,7 @@ function boardIssuesDeps(api: DreyPluginApi, issues: BoardSnapshot['issues']): B
       boardIssuesOpen = !boardIssuesOpen;
       notifyViews();
     },
-    openFile: (path: string) => openTicketFile(api, path),
+    openFile: (path: string) => openBoardFile(api, path),
   };
 }
 
@@ -1033,8 +1027,8 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dicta
       ).then((result) => {
         // The file is pre-filled by the canonical writer — open it so
         // everything else can be filled in right away (T-0001).
-        if (result.ok && (result as CreateResult).path !== undefined) {
-          openTicketFile(api, (result as CreateResult).path as string);
+        if (result.ok) {
+          openCreatedTicket(api, result as CreateResult);
         }
       });
     };
@@ -1786,7 +1780,7 @@ function showTicketDocument(api: DreyPluginApi, card: TicketCard): void {
   for (const listener of threadListeners) {
     listener();
   }
-  openTicketCard(api, card);
+  openTicket(api, card.id, card.path);
   markOpenCard(api);
 }
 
