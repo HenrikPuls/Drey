@@ -1042,6 +1042,15 @@ export function parseNeeds(json: unknown): NeedView[] {
 /** Run states that mean "live on the board" (the rest is history). */
 const LIVE_RUN_STATES: readonly RunStateView[] = ['starting', 'running', 'stopping', 'detached'];
 
+/** Which tickets have a live run, as one comparable text: a change means the Needs-you list is stale (D-33). */
+export function liveTicketsOf(runs: TeamView['runs']): string {
+  return runs
+    .filter((run) => LIVE_RUN_STATES.includes(run.state as RunStateView))
+    .map((run) => run.ticketId ?? '')
+    .sort()
+    .join('|');
+}
+
 const runStateOf = (value: unknown): RunStateView | null =>
   LIVE_RUN_STATES.includes(value as RunStateView) ? (value as RunStateView) : null;
 

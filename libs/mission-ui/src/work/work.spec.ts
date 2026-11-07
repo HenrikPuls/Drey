@@ -10,7 +10,7 @@
  * improvements card's tap and the scout report card's promote (E8) close
  * the file.
  */
-import type { Signal } from '@angular/core';
+import { signal, type Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { Work } from './work';
@@ -620,7 +620,7 @@ describe('the manual-step card (E10-6)', () => {
     manualSendBack(vm: NeedVm): Promise<void>;
     setManualNote(vm: NeedVm, text: string): void;
     manualError(): Readonly<Record<string, string>>;
-    manualDone(): Readonly<Record<string, string>>;
+    manualDoneOf(vm: NeedVm): string | null;
   }
 
   function setupManual(patch: Partial<FakeState> = {}) {
@@ -657,7 +657,7 @@ describe('the manual-step card (E10-6)', () => {
     expect(vm.canFinishManual()).toBe(true);
     await vm.manualAccept(card);
     expect(accepted).toEqual(['T-0007']);
-    expect(vm.manualDone()[card.key]).toBe('Accepted.');
+    expect(vm.manualDoneOf(card)).toBe('Accepted.');
   });
 
   it('Send back needs a note; with one it goes to the desk', async () => {
@@ -668,7 +668,52 @@ describe('the manual-step card (E10-6)', () => {
     vm.setManualNote(card, '  The spacing is off  ');
     await vm.manualSendBack(card);
     expect(sentBack).toEqual([{ id: 'T-0007', note: 'The spacing is off' }]);
-    expect(vm.manualDone()[card.key]).toBe('Sent back.');
+    expect(vm.manualDoneOf(card)).toBe('Sent back.');
+  });
+
+  it('Accept is offered again when the next list still says the ticket waits (D-33)', async () => {
+    const accepted: string[] = [];
+    const waiting = [need('checkpoint', 'Ready to try', { ticketId: 'T-0007' })];
+    const needs = signal<McNeed[]>(waiting);
+    const { state } = makeFake();
+    Object.defineProperty(state, 'needs', { get: () => needs() });
+    state.finishManual = (id: string) => {
+      accepted.push(id);
+      return Promise.resolve({ ok: true });
+    };
+    state.sendBackManual = () => Promise.resolve({ ok: true });
+    const vm = setup(state) as unknown as ManualSurface;
+    const cardOf = (): NeedVm => {
+      const group = vm.groups()[0];
+      if (group?.kind !== 'needs') {
+        throw new Error('expected the needs group');
+      }
+      return group.needs[0]!;
+    };
+    await vm.manualAccept(cardOf());
+    expect(vm.manualDoneOf(cardOf())).toBe('Accepted.');
+
+    // The commit step runs: the card leaves the list. It ended red: the ticket waits again.
+    needs.set([]);
+    needs.set([{ ...waiting[0]! }]);
+    expect(vm.manualDoneOf(cardOf())).toBeNull();
+    await vm.manualAccept(cardOf());
+    expect(accepted).toEqual(['T-0007', 'T-0007']);
+    expect(vm.manualDoneOf(cardOf())).toBe('Accepted.');
+  });
+
+  it('a refused Accept stays offered, with the refusal', async () => {
+    const { state } = makeFake({ needs: [need('checkpoint', 'Ready to try', { ticketId: 'T-0007' })] });
+    state.finishManual = () => Promise.resolve({ ok: false, error: 'T-0007 has a live run' });
+    state.sendBackManual = () => Promise.resolve({ ok: true });
+    const vm = setup(state) as unknown as ManualSurface;
+    const group = vm.groups()[0];
+    if (group?.kind !== 'needs') {
+      throw new Error('expected the needs group');
+    }
+    await vm.manualAccept(group.needs[0]!);
+    expect(vm.manualDoneOf(group.needs[0]!)).toBeNull();
+    expect(vm.manualError()[group.needs[0]!.key]).toBe('T-0007 has a live run');
   });
 
   it('a read-only device sees the card but cannot act', async () => {
