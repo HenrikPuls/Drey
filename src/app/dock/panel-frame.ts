@@ -8,31 +8,35 @@ import {
   effect,
   inject,
   input,
+  signal,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { DockService, PanelId } from './dock.service';
+import { I18nPipe } from '../i18n';
+import { Icon } from '../icons/icon';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
+import { DockService, DockSide, PanelId } from './dock.service';
 import { PanelHeaderActionsStore } from './panel-header-actions';
 import { WidgetRegistryService } from './widget-registry.service';
 
 /**
- * The chrome every open dock panel shares (DESIGN.md principle 3): a 32px
- * low-profile header (the title + an optional status value + the panel's
- * controls + a drag grip), then the panel body (`<ng-content>`).
+ * The chrome every open dock panel shares (board 9a): a header (a fold
+ * chevron + the title + an optional status value + the panel's controls,
+ * which show on hover or focus), then the panel body (`<ng-content>`).
  *
  * The body scrolls, except for the assistant panel, which fills the frame
  * and scrolls internally (its own header + composer stay put). A closed
  * panel keeps its frame mounted but undisplayed (`Dock` sets `.closed`), so
  * its state survives; it is reopened from the dock's icon strip.
  *
- * `mousedown` on the header opens a press gesture in `DockService`: a click
- * (no movement) closes the panel, a drag past the threshold moves it
- * between docks. Enter / Space on the focused header also closes.
+ * The chevron folds the panel to its header (its strip icon stays on). A
+ * drag on the header moves the panel between docks, a right-click opens the
+ * menu that moves or closes it; the strip icon opens and closes it.
  */
 @Component({
   selector: 'app-panel-frame',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [I18nPipe, Icon, NgTemplateOutlet, OverlayGuardDirective],
   templateUrl: './panel-frame.html',
   styleUrl: './panel-frame.css',
   host: {
@@ -47,6 +51,14 @@ export class PanelFrame implements OnInit {
 
   readonly panelId = input.required<PanelId>();
   readonly status = input<string | null>(null);
+
+  /** The header's right-click menu, while open. */
+  protected readonly menu = signal<{ readonly x: number; readonly y: number } | null>(null);
+  protected readonly collapsed = computed(() => this.dock.collapsed(this.panelId()));
+  /** The docks this panel can move to. */
+  protected readonly moveTargets = computed<DockSide[]>(() =>
+    (['left', 'right', 'bottom'] as const).filter((side) => side !== this.dock.sideOf(this.panelId())),
+  );
 
   protected readonly title = computed(
     () => this.registry.descriptor(this.panelId())?.title ?? this.panelId(),
@@ -118,8 +130,7 @@ export class PanelFrame implements OnInit {
   }
 
   /**
-   * A press inside the header controls must not start the hide / drag
-   * gesture. A title-replacing row spans the whole header, so there the
+   * A press inside the header controls must not start the drag gesture. A title-replacing row spans the whole header, so there the
    * controls stop their own presses and the gaps between them still reach
    * the header.
    */
@@ -129,10 +140,29 @@ export class PanelFrame implements OnInit {
     }
   }
 
-  protected onHeaderKey(event: KeyboardEvent): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      this.dock.toggle(this.panelId());
-    }
+  protected toggleCollapsed(): void {
+    this.dock.toggleCollapsed(this.panelId());
+  }
+
+  protected openMenu(event: MouseEvent): void {
+    event.preventDefault();
+    this.menu.set({
+      x: Math.min(event.clientX, window.innerWidth - 176),
+      y: Math.min(event.clientY, window.innerHeight - 150),
+    });
+  }
+
+  protected closeMenu(): void {
+    this.menu.set(null);
+  }
+
+  protected moveTo(side: DockSide): void {
+    this.closeMenu();
+    this.dock.moveToDock(this.panelId(), side);
+  }
+
+  protected closePanel(): void {
+    this.closeMenu();
+    this.dock.toggle(this.panelId());
   }
 }

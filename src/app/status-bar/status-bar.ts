@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { I18nPipe } from '../i18n';
 import { Icon } from '../icons/icon';
 import { DocKindRegistry, StatusItemsService } from '../plugin-host';
 import { KeybindingService } from '../keybindings';
@@ -15,7 +16,7 @@ import { UpdateService } from '../services/update.service';
 @Component({
   selector: 'app-status-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [I18nPipe, Icon],
   templateUrl: './status-bar.html',
   styleUrl: './status-bar.css',
 })

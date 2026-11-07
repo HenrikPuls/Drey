@@ -107,6 +107,12 @@ interface DreyFixtures {
    */
   launchFiles: Array<{ dir: 'vault' | 'external'; name: string; content: string }>;
   /**
+   * Extra Chromium switches for the launch: the fidelity shots pass
+   * `--force-device-scale-factor=1`, so a screenshot is 1:1 with its board
+   * on a scaled display too (docs/design/work-panel/fidelity-checklist.md).
+   */
+  launchArgs: string[];
+  /**
    * Content-Security-Policy violations the main window reported during the
    * test (console text). The `page` fixture fails a test that leaves any
    * behind; a test that provokes one on purpose empties the array.
@@ -150,6 +156,8 @@ export const test = base.extend<DreyFixtures>({
 
   launchFiles: [[], { option: true }],
 
+  launchArgs: [[], { option: true }],
+
   externalDir: async ({}, use, testInfo) => {
     const dir = path.join(testInfo.outputDir, 'external');
     fs.mkdirSync(dir, { recursive: true });
@@ -157,7 +165,7 @@ export const test = base.extend<DreyFixtures>({
   },
 
   electronApp: async (
-    { vaultDir, appConfig, seedVault, extraVaults, extraPluginDir, userDataPlugins, externalDir, launchFiles, userDataDir },
+    { vaultDir, appConfig, seedVault, extraVaults, extraPluginDir, userDataPlugins, externalDir, launchFiles, launchArgs, userDataDir },
     use,
     testInfo,
   ) => {
@@ -260,7 +268,7 @@ export const test = base.extend<DreyFixtures>({
     });
 
     const app = await electron.launch({
-      args: [repoRoot, `--user-data-dir=${userDataDir}`, ...launchPaths],
+      args: [repoRoot, `--user-data-dir=${userDataDir}`, ...launchArgs, ...launchPaths],
       env,
     });
 
@@ -342,3 +350,9 @@ export const test = base.extend<DreyFixtures>({
 });
 
 export const expect = test.expect;
+
+/** Re-reads the vaults from disk: the vault row's context menu (the Files header has no Refresh since board 9a). */
+export async function refreshFiles(page: Page): Promise<void> {
+  await page.locator('app-files-panel .vault-row').first().click({ button: 'right' });
+  await page.locator('app-files-panel .ctx-menu button', { hasText: /^Refresh$/ }).click();
+}

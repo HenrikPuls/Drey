@@ -1,43 +1,24 @@
-/* One row of panel toggles, exactly as tall as a panel header and the
-   tab bar. The arithmetic must land on --panel-head-h with the border:
-   24px icon button + 2 x 3px padding + 1px border-bottom = 31px, and the
-   min-height raises that to 32px -- with 4px padding the content alone
-   would need 32px and the box would render 33px, one pixel taller than
-   the headers and the tab bar next to it. Ten icons stay on one row at any
-   dock width: the buttons shrink (E12-18) instead of wrapping the last one
-   onto a second row. */
+/* One row of panel toggles (board 9a): 40px of buttons plus its line. Ten
+   icons stay on one row at any dock width: the buttons shrink (E12-18)
+   instead of wrapping the last one onto a second row. */
 :host {
   display: flex;
   flex: none;
   flex-wrap: nowrap;
   align-items: center;
   gap: 2px;
-  min-height: var(--panel-head-h);
-  padding: 3px 8px;
-  box-sizing: border-box;
+  height: var(--dock-strip-h);
+  padding: 0 8px;
   border-bottom: 1px solid var(--border);
   user-select: none;
 }
 
-/* Shrinks before it wraps: 24px at most, 18px at least (icon 15px). */
+/* Shrinks before it wraps: 30px at most, 18px at least. Open or closed is
+   the global grey of a pressed icon button (styles.css). */
 .icon-btn {
-  flex: 0 1 var(--icon-btn);
+  flex: 0 1 var(--chrome-btn);
+  height: var(--chrome-btn);
   min-width: 18px;
-}
-
-/* Open panels: a quiet neutral fill instead of the accent -- several are
-   open at once, so the accent would light up the whole row. Closed ones
-   sit a step dimmer than an ordinary icon button. */
-.icon-btn[aria-pressed='true'] {
-  background: var(--accent-surface);
-  /* The theme's own line colour as an edge: on themes whose text steps
-     sit close together (Anthrazit) the fill alone reads too faintly. */
-  box-shadow: inset 0 0 0 1px var(--accent-edge);
-  color: var(--accent-fg);
-}
-
-.icon-btn[aria-pressed='false']:not(:hover) {
-  color: var(--text-5);
 }
 
 .icon-btn.dragging {

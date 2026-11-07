@@ -27,6 +27,7 @@ import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
+import { I18nPipe } from '../i18n';
 import { Icon } from '../icons/icon';
 import { resolveVaultLinkPath } from '@markdown-surface/link-open';
 import { EditorPrefsService } from './editor-prefs.service';
@@ -70,7 +71,7 @@ import { caretLineText } from '@markdown-surface/toolbar-dispatch';
   selector: 'app-editor',
   templateUrl: './editor.html',
   styleUrl: './editor.css',
-  imports: [Icon, MarkdownSurface, MarkdownToolbar, OverlayGuardDirective],
+  imports: [I18nPipe, Icon, MarkdownSurface, MarkdownToolbar, OverlayGuardDirective],
   host: {
     '(wheel)': 'onWheel($event)',
     // Editor content zoom (Ctrl +/-/0, ADR-0015). The keydown is bound on
@@ -385,6 +386,11 @@ export class Editor implements AfterViewInit, OnDestroy {
   /** Runs a plugin-contributed menu row; rows carrying a commandId instead of a closure are not expected here. */
   protected runContributedRow(row: MenuContribution): void {
     row.run?.();
+  }
+
+  /** The meta bar's `</>`: to the Markdown source and back to Live Preview. */
+  protected toggleSource(): void {
+    this.chooseMode((this.shownDoc()?.viewMode ?? 'live') === 'source' ? 'live' : 'source');
   }
 
   protected chooseMode(mode: EditorViewMode): void {

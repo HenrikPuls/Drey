@@ -26,6 +26,56 @@ cuts off at the timeout, a worker crash. The engine knows no parent and has no i
   was not run by hand. Done when, after that run, no `engine-main.js` process with a `test-results` vault is alive and
   the temp dir holds no leftover home; the run's output shows the `e2e engine sweep:` line.
 
+### Milestone 192 — req-104: the desktop frame matches board 9a
+
+**Not yet manually verified by the owner.** Wave 4.0 (`9a-frame`). Owner decisions of 2026-11-07, all four as recommended: 9a wins for the whole
+frame over row 7, the real app icon stays, the header menu has no "detach" yet, the Assistant body goes to wave row 4.8.
+
+- **Bars** (`src/styles.css`; the board is content-box, the app border-box, so each token is the whole bar with its line): title bar and dock strips
+  41 (`--bar-h`, new `--dock-strip-h`), tab bar 37 (new `--tab-bar-h`), meta bar 37, panel header 28, status bar 29. **The tab bar and the strips no
+  longer end on one line** (y 77 and y 81, as on the board). New `--chrome-btn` 30 for the frame's icon buttons; meta, tab and path type up to 13 / 14 / 13.
+- **Title bar.** App icon 22 px, 30 px toggles and arrows, menu 14 px at 28 px height, window controls with 14 px icons, one view-switcher group holding the
+  views and Layout, the changed dot in peach.
+- **Panel header** (`PanelFrame`, `DockService`). Fold chevron, title, the count right after it, controls on hover or focus only, no grip. **New state
+  `collapsed`:** the chevron folds a panel to its header, its strip icon stays on; it is per view, kept with the layout, and a layout stored before it
+  reads as nothing folded. **A click on the header no longer closes the panel**: the strip icon does. A right-click offers *Move to left / right / bottom
+  dock* and *Close*. Lines run above every panel but the first. An active icon is grey everywhere (`.icon-btn`), plugins included.
+- **Tab bar.** Full-height tabs divided by a line, 14 px, no icon for a note, the X on the active tab and on hover; short of room the others give way, not the
+  active one. The `+` at its end is gone (`Ctrl+N`, the File menu and the Files header remain).
+- **Meta bar.** Path 13 px, `</>` *Show Markdown source* (back to Live Preview on the second press), `⋯`. **Save is a pill and shows only while there is
+  something to save; line numbers moved into the `⋯` menu** (`Ctrl+G` is unchanged). The strip can still be pinned here.
+- **Status bar.** 13 px, gap 16, one *141 words · 1128 chars* text, a plugin item that does something is a full-height button, Settings is plain text.
+- **Calendar and Files in the frame.** Month as the panel's title with picker chevron, Today and arrows on hover; 22 px rows at 13 px. Rows 32 px with gap 1, indents
+  4 / 16 / 28 and a file 4 further in, no bullets, no vault band, accent edge or dot (the active vault is in the tooltip and its menu). The header holds **New file**
+  and *Collapse all folders*; **Add vault** stays in the vault menu and the empty state, **Refresh** moved into the vault row's menu (and the palette).
+- **Bug found on the way, fixed:** the stored layout was read before the plugins registered, so **every plugin panel lost its dock, weight and open state on each
+  start**, and a saved view could come up as "changed". `DockService` now keeps the stored layout and gives each panel its place when it registers.
+- **SDK:** no API change (the doc comments follow). **Specs:** `dock.service.spec` (folding, its persistence, plugin panels' stored place, the header press), `editor.spec`,
+  `menu-and-dock`, `editor-chrome`; `refreshFiles` in the e2e fixture replaces the header button. **Opt-in harness:** `e2e/fidelity-deskclean.spec.ts`
+  (`DREY_FIDELITY_SHOTS=1`) puts the app in 9a's state and captures the comparison. The manual's screenshots are not reshot here (wave 4.5 fixtures).
+- **Roadmap:** req-104 left; req-111 (detach a panel) entered. ADR-0019 and ADR-0057 carry the later change, the frame rule for every panel is in ADR-0019.
+
+**Fidelity:** board `DeskClean` (9a), screenshot `test-results/fidelity/DeskClean.png`, hover state `DeskClean.files-hover.png`, compare captures
+`DeskClean.{overlay,swipe,diff}.png`; built app, 1440×900, scale factor 1, theme Anthrazit. Measured: title bar 0–41, strip 41–82, first header 82–110, tab bar
+41–78, meta 78–115, status 871–900, docks 300 + 1 and 420 + 1. Fixed in the build: every bar height, title bar spacing, switcher group, strip, header, tabs, meta, status,
+calendar, Files rows. Open: none. Justified:
+
+| Region | Board | Build | Justification |
+|---|---|---|---|
+| Title bar, logo | "D" tile | the real app icon, 22 px, radius 4 | owner decision 2026-11-07 |
+| Title bar | no "Capture by voice" | the plugin's action | belongs to 4.2 (tickets plugin contribution) |
+| View switcher | Notes · Work · Crew | Notes · Work; Layout sits one tab further left | belongs to 4.2 (the preset) |
+| Left strip | a ticket glyph; a three-node Source control glyph | a layers glyph; a branch glyph | plugin-named icons: Tickets belongs to 4.2, Source control has no wave owner, handed to the integrator |
+| Right strip | Search, Tasks, Assistant | Search, Assistant | sample content: a panel lives in one dock, the board draws Tasks in both |
+| Bottom dock | none | the Work preset's Capacity strip under the editor, disabled for the shot | belongs to 4.2 (the preset's layout) |
+| Files header | `+` and collapse shown, no fill | shown on hover, with the header's hover fill | the board forces its hover state on; captured for real in `DeskClean.files-hover.png` |
+| Tabs | Crew, Review · T-0012, "T-0017 · A8 large modules" | file names; four tabs | data; the ticket tab's title belongs to 4.3 |
+| Ticket page | card, document type, no second `</>` | Ticket/Thread/Review switch, pills, Change flow, own title | belongs to 4.3 |
+| Assistant body | no rail, target group, composer | today's panel | belongs to 4.8 (`desk-assistant`, owner decision 2026-11-07) |
+| Outline, Tasks body | 26 px rows | the panels' own content | owner decision: 9b is not a target, the panels' content stays (`decisions.md`) |
+| Counts, calendar's today, tree, status text | sample | the seeded English vault, today's date | data; "1 running" appears with a live run |
+| Text | the canvas export's text rendering | Electron's on Windows: same font and size, heavier strokes, a 600-weight line up to 1 px wider | owner decision 2026-11-07: a rasterizer difference (headless Edge's export against Electron on Windows), not a design one — no CSS difference found (font, size, weight, line height all as on the board); now a permitted justification in the fidelity checklist |
+
 ### Milestone 191 — req-110: the fleet runner exits when it is deactivated or when Drey quits idle
 
 **Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): after closing Drey the runner

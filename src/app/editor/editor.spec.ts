@@ -192,31 +192,41 @@ describe('Editor', () => {
     expect(cmText()).toContain('type: notiz');
   });
 
-  it('shows a dirty marker once the buffer diverges from disk', () => {
-    editor.updateBuffer('note.md', '# Title\n\nedited');
-    fixture.detectChanges();
-    expect(compiled().querySelector('.dirty')).toBeTruthy();
-  });
-
-  describe('meta-bar icon buttons (req: Lines/Save as icons)', () => {
-    it('renders the Lines button icon-only with its toggle label', () => {
-      const lines = compiled().querySelector('.lines') as HTMLButtonElement;
-      expect(lines.querySelector('svg')).toBeTruthy();
-      expect(lines.textContent?.trim()).toBe('');
-      expect(lines.getAttribute('aria-label')).toBe('Toggle line numbers');
-    });
-
-    it('renders the Save button icon-only, state carried by aria-label/title', () => {
-      const save = compiled().querySelector('.save') as HTMLButtonElement;
-      expect(save.querySelector('svg')).toBeTruthy();
-      expect(save.textContent?.trim()).toBe('');
-      expect(save.getAttribute('aria-label')).toBe('Saved');
-      expect(save.getAttribute('title')).toBe('Saved');
+  describe('the meta bar (board 9a)', () => {
+    it('shows a Save pill only while the buffer differs from disk', () => {
+      expect(compiled().querySelector('.save')).toBeNull();
 
       editor.updateBuffer('note.md', '# Title\n\nedited');
       fixture.detectChanges();
-      expect(save.getAttribute('aria-label')).toBe('Save');
-      expect(save.getAttribute('title')).toBe('Save');
+      expect(compiled().querySelector('.save')?.textContent?.trim()).toBe('Save');
+    });
+
+    it('the source button goes to the Markdown source and back', () => {
+      const source = compiled().querySelector('.source') as HTMLButtonElement;
+      expect(source.getAttribute('aria-label')).toBe('Show Markdown source');
+      expect(source.getAttribute('aria-pressed')).toBe('false');
+
+      source.click();
+      fixture.detectChanges();
+      expect(source.getAttribute('aria-pressed')).toBe('true');
+
+      source.click();
+      fixture.detectChanges();
+      expect(source.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('line numbers live in the More menu', () => {
+      expect(compiled().querySelector('.lines')).toBeNull();
+      (compiled().querySelector('.more') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const row = compiled().querySelector('.line-numbers') as HTMLButtonElement;
+      expect(row.textContent).toContain('Line numbers');
+
+      const before = editor.lineNumbers();
+      row.click();
+      fixture.detectChanges();
+      expect(editor.lineNumbers()).toBe(!before);
+      expect(compiled().querySelector('.line-numbers')).toBeNull();
     });
   });
 
@@ -870,15 +880,14 @@ describe('Editor chrome (meta bar)', () => {
 
   const compiled = () => fixture.nativeElement as HTMLElement;
 
-  it('dirty state lives in the save button alone -- no spelled-out "Unsaved"', () => {
-    const save = compiled().querySelector('.actions .save') as HTMLButtonElement;
-    expect(save.classList.contains('dirty')).toBe(false);
+  it('dirty state lives in the Save pill alone -- no spelled-out "Unsaved"', () => {
+    expect(compiled().querySelector('.actions .save')).toBeNull();
     expect(compiled().querySelector('.unsaved')).toBeNull();
 
     editor.updateBuffer('note.md', '# Title\n\nsome **bold** text edited');
     fixture.detectChanges();
 
-    expect(save.classList.contains('dirty')).toBe(true);
+    expect(compiled().querySelector('.actions .save')).not.toBeNull();
     expect(compiled().querySelector('.unsaved')).toBeNull();
   });
 

@@ -2,30 +2,34 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
 
+/* Board 9a's panel header. The controls show on hover or focus only; they
+   read the same switch through --head-actions, so a title-replacing row
+   (the calendar) can hide its parts from its own stylesheet. */
 .head {
+  --head-actions: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   flex: none;
   /* Wraps instead of clipping (T-0086): a panel with many header
-     controls grows a second row at narrow widths — the controls stay
+     controls grows a second row at narrow widths -- the controls stay
      reachable, the drag surface grows with them. */
   min-height: var(--panel-head-h);
-  padding: 0 8px 0 16px;
-  color: var(--text-4);
+  padding: 0 6px 0 4px;
   cursor: grab;
   user-select: none;
-  outline: none;
 }
 
-/* Low-profile: a faint text lift on hover / keyboard focus, no fill. */
 .head:hover,
-.head:focus-visible {
-  color: var(--text-2);
+.head:focus-within {
+  --head-actions: 1;
+}
+
+.head:hover {
+  background: var(--active-bg);
 }
 
 :host(.dragging) {
@@ -36,30 +40,56 @@
   cursor: grabbing;
 }
 
+.chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+.chevron:hover {
+  color: var(--text-primary);
+}
+
+.chevron:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
 .title {
   flex: none;
   white-space: nowrap;
   font-family: var(--font-sans);
   font-size: var(--fs-mono-title);
   font-weight: 600;
+  line-height: 20px;
+  color: var(--text-primary);
 }
 
 .status {
   flex: none;
+  margin-left: 4px;
   white-space: nowrap;
   font-family: var(--font-sans);
   font-size: var(--fs-mono-meta);
-  color: var(--text-6);
+  line-height: 20px;
+  color: var(--text-4);
 }
 
 /* A panel's own controls, moved into this header (req-7). Pinned to the
-   right, immediately left of the grip: the `auto` margin here eats all the
-   free space so the controls + grip sit together against the edge. The
-   controls themselves are styled by the panel that contributes them (its
-   emulated-encapsulation styles reach the projected template); this only
-   lays them out inside the head. May shrink and wrap (T-0086): under
-   space pressure the controls flow onto a second row instead of out of
-   view. */
+   right: the `auto` margin eats all the free space. The controls themselves
+   are styled by the panel that contributes them (its emulated-encapsulation
+   styles reach the projected template); this only lays them out inside the
+   head. May shrink and wrap (T-0086): under space pressure the controls flow
+   onto a second row instead of out of view. */
 .head-actions {
   margin-left: auto;
   flex: 0 1 auto;
@@ -69,17 +99,21 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  opacity: var(--head-actions);
+  transition: opacity 0.15s;
   /* Undo the header's grab cursor for the interactive strip. */
   cursor: default;
 }
 
-/* A title-replacing row (the calendar's month dropdown + nav) takes the
-   whole header; its gaps keep the header's grab cursor and gestures. */
+/* A title-replacing row (the calendar's month + nav) takes the whole header;
+   its gaps keep the header's grab cursor and gestures, and it stays visible:
+   the row hides its own controls with --head-actions. */
 .head-actions.fill {
   flex: 1;
   min-width: 0;
   margin-left: 0;
   align-self: stretch;
+  opacity: 1;
   cursor: inherit;
 }
 
@@ -89,35 +123,16 @@
   min-width: 0;
 }
 
-.grip {
-  margin-left: auto;
-  flex: none;
-  display: grid;
-  grid-template-columns: repeat(2, 2px);
-  gap: 2px;
-  opacity: 0.3;
-}
-
-/* When the panel contributes header controls, only `.head-actions` claims
-   the free space -- otherwise flexbox splits it between the two `auto`
-   margins and the controls drift toward the centre. The grip then just
-   trails the controls by the header `gap`. */
-.head-actions + .grip {
-  margin-left: 0;
-}
-
-.grip i {
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
 .body-wrap {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-rows: 1fr;
+}
+
+/* Folded to the header: stays mounted, so it keeps its state. */
+.body-wrap.folded {
+  display: none;
 }
 
 .body {
@@ -130,4 +145,45 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+}
+
+.ctx-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ctx-menu button:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
 }

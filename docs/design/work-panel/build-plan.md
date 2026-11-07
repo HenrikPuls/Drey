@@ -134,6 +134,7 @@ The goal the owner set at the start — **the whole UI is rendered as the boards
 6. **Tokens, not hexes; catalog, not literals** — unchanged (README rules, ADR-0057, ADR-0091).
 7. **The working form is [fidelity-checklist.md](fidelity-checklist.md)** (2026-11-07): twelve steps every UI session's brief carries verbatim — read the board HTML and PNG first and hand in a *measure sheet* before the first edit, shoot the built app at the board's size, compare in [boards/compare.html](boards/compare.html) (side by side, overlay, swipe, pixel diff), write the deviation list into the changelog's `Fidelity:` block. The integrator checks the sheet, the screenshots and the list before a merge.
 8. **Cheapest sensible model** (owner, 2026-11-07): the scoped board-to-screen sessions run on Sonnet, the frame and the review on Opus; Fable only orchestrates.
+9. **The frame is given** (4.0 shipped as milestone 192): every panel inherits the 28 px header, the fold chevron, hover-only controls and the dock strips from `PanelFrame` / `DockService`; what a panel may draw inside and what it must not redraw is **the frame rule in ADR-0019** ("The frame rule for every panel"). A 4.2–4.8 session that needs more frame than that stops and asks (point 6 of the checklist), it does not draw its own header.
 
 ### Wave 4 — the fidelity wave (replaces the feature list under "Wave 4" above, which moves to wave 5)
 

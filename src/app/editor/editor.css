@@ -9,7 +9,7 @@
 .chrome {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
   flex: none;
   min-width: 0;
   height: var(--meta-h);
@@ -28,7 +28,20 @@
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--fs-mono-path);
+  line-height: 20px;
   color: var(--text-4);
+}
+
+/* A notice after the path keeps its distance; the row's own gap is the
+   board's tight one between the icons. */
+.draft,
+.external-note,
+.edit-lock,
+.disk-changed,
+.suggesting,
+.format,
+.actions {
+  margin-left: 8px;
 }
 
 .draft {
@@ -124,14 +137,29 @@
   border-color: var(--border-strong);
 }
 
-/* Save reads as "nothing to do" until the buffer is dirty. */
-.save:disabled {
-  opacity: 1;
-  color: var(--text-7);
+.actions .icon-btn {
+  width: var(--chrome-btn);
+  height: var(--chrome-btn);
 }
 
-.save.dirty {
-  color: var(--accent-fg);
+/* Only while there is something to save. */
+.save {
+  flex: none;
+  height: 28px;
+  margin-right: 4px;
+  padding: 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: var(--active-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.save:hover:not(:disabled) {
+  background: var(--hover-bg-strong);
 }
 
 .ctx-backdrop {

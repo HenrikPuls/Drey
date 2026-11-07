@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures/drey';
+import { test, expect, refreshFiles } from './fixtures/drey';
 
 declare global {
   interface Window {
@@ -67,7 +67,7 @@ test.describe('content security policy (ADR-0001, later change)', () => {
 
   test('a PDF tab still loads its frame', async ({ page, vaultDir, cspViolations }) => {
     fs.writeFileSync(path.join(vaultDir, 'paper.pdf'), MINIMAL_PDF, 'latin1');
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'paper.pdf' }).click();
 
     const frame = page.locator('app-pdf-tab iframe.frame');
@@ -83,7 +83,7 @@ test.describe('content security policy (ADR-0001, later change)', () => {
     fs.mkdirSync(path.join(vaultDir, 'attachments'), { recursive: true });
     fs.writeFileSync(path.join(vaultDir, 'attachments', 'paper.pdf'), MINIMAL_PDF, 'latin1');
     fs.writeFileSync(path.join(vaultDir, 'embed.md'), '# embed\n\n![paper](attachments/paper.pdf)\n\ntext\n');
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'embed.md' }).click();
 
     await expect(page.locator('app-editor .cm-content .lp-pdf iframe.lp-pdf-frame')).toHaveAttribute(
@@ -108,7 +108,7 @@ test.describe('content security policy (ADR-0001, later change)', () => {
         '',
       ].join('\n'),
     );
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'hostile.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toContainText('hostile');
     await page.waitForTimeout(500);

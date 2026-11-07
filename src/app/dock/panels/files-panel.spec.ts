@@ -290,11 +290,10 @@ describe('FilesPanel keyboard navigation (bug-7)', () => {
     await settle(); // let select()'s focus timer fire inside the test
   });
 
-  it('the active vault row carries the marker; click folds the section', async () => {
+  it('the active vault says so in its tooltip; click folds the section', async () => {
     await renderTree();
     const vaultRow = fixture.nativeElement.querySelector('.node.vault-row');
-    expect(vaultRow.classList.contains('active-vault')).toBe(true);
-    expect(vaultRow.querySelector('.active-dot')).not.toBeNull();
+    expect(vaultRow.getAttribute('title')).toContain('Active vault');
 
     vaultRow.click();
     fixture.detectChanges();

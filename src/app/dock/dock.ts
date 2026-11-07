@@ -45,7 +45,7 @@ async function loadPaneLeaf(): Promise<Type<unknown> | null> {
  * splitter between a panel and its next open neighbour and a 2px accent
  * drop-line at the live drop position during a panel drag.
  * Between the strip and the widget list sits the dock's editor band, when `PaneService` has
- * a pane docked here (ADR-0038): a 32px header (title = the pane's active
+ * a pane docked here (ADR-0038): a panel-sized header (title = the pane's active
  * tab name) over that pane's own `PaneLeaf`, with a splitter against the
  * first widget below. Widths come from `DockService`; the outer-edge
  * resizer is owned by `App`.
@@ -151,13 +151,13 @@ export class Dock implements OnInit {
   }
 
   protected flexStyle(id: PanelId): string {
-    return this.dock.closed(id) || this.dock.contentHeight(id)
+    return this.dock.closed(id) || this.dock.collapsed(id) || this.dock.contentHeight(id)
       ? '0 0 auto'
       : `${this.dock.flexOf(id)} 1 0%`;
   }
 
   protected splitTarget(id: PanelId): PanelId | null {
-    if (this.dock.closed(id) || this.dock.contentHeight(id)) {
+    if (this.dock.closed(id) || this.dock.collapsed(id) || this.dock.contentHeight(id)) {
       return null;
     }
     const next = this.dock.nextOpenId(id);
@@ -174,12 +174,12 @@ export class Dock implements OnInit {
     return this.isDropTarget() && this.dock.dropIndex() === len && i === len - 1;
   }
 
-  /** The value shown in the panel header, right before the grip. */
+  /** The value shown in the panel header, right after the title. */
   protected statusFor(id: PanelId): string | null {
     // Reading the tick here tracks it for this view: a bump (any document /
     // vault event the host fanned out) re-renders the headers, so plugin
     // statuses go stale only until the next event they could react to.
     this.registry.statusVersion();
-    return this.registry.descriptor(id)?.status?.({ collapsed: this.dock.closed(id) }) ?? null;
+    return this.registry.descriptor(id)?.status?.({ collapsed: this.dock.closed(id) || this.dock.collapsed(id) }) ?? null;
   }
 }

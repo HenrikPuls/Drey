@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Page } from './fixtures/drey';
+import { test, expect, type Page, refreshFiles } from './fixtures/drey';
 
 /**
  * Regression guard for the line-number gutter alignment (milestone 19a):
@@ -28,7 +28,7 @@ async function openWithLineNumbers(page: Page, vaultDir: string): Promise<void> 
   fs.writeFileSync(path.join(vaultDir, 'gutter.md'), NOTE);
   // The vault refresh lives in the Files panel's shared header row (req-7,
   // commit 1259eef renamed these controls to `hdr-btn`).
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'gutter.md' }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
   // Ctrl+G toggles the line-number gutter (KeybindingService 'editor.toggleLineNumbers').
@@ -159,7 +159,7 @@ test.describe('line-number gutter alignment', () => {
 
   test('the fold column is live when line numbers are off', async ({ page, vaultDir }) => {
     fs.writeFileSync(path.join(vaultDir, 'gutter.md'), NOTE);
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'gutter.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toBeVisible();
     // Wait for the DOCUMENT, not just the surface: `toBeHidden` below is

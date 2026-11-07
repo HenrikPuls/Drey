@@ -22,7 +22,7 @@ interface StripItem {
   readonly open: boolean;
   /** "Show Tasks" / "Hide Tasks". */
   readonly label: string;
-  /** The label plus the panel's status value, when it has one. */
+  /** The panel's name plus its status value, when it has one. */
   readonly tip: string;
 }
 
@@ -63,7 +63,7 @@ export class DockStrip {
         letter: title.charAt(0).toUpperCase(),
         open,
         label,
-        tip: status === null ? label : `${label} · ${status}`,
+        tip: status === null ? title : `${title} · ${status}`,
       };
     });
   });

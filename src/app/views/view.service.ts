@@ -436,8 +436,11 @@ export class ViewService {
  */
 function fingerprint(layout: SavedLayout): string {
   const { root, panes, dock } = layout.panes;
+  // A baseline saved before panels could fold has no `collapsed`: same as none folded.
+  const { collapsed, ...dockRest } = layout.dock;
   return JSON.stringify({
-    dock: layout.dock,
+    dock: dockRest,
+    collapsed: Object.keys(collapsed ?? {}).sort(),
     root,
     tabs: Object.fromEntries(Object.entries(panes).map(([id, pane]) => [id, pane.tabs])),
     docked: dock ?? null,

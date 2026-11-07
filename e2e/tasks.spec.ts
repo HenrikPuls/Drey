@@ -39,7 +39,7 @@ async function openTasksPanel(page: Page): Promise<void> {
   // under its scroll clip at short windows (a ~48px body scrolls, but the
   // row's click point still sits past the clip edge) -- close it first so
   // the panel gets room at any window height.
-  await page.locator('app-panel-frame .head[aria-label="Hide Calendar"]').click();
+  await page.locator('app-dock-strip button[aria-label="Hide Calendar"]').click();
   // The plugin's panel: closed by default, its strip icon opens it.
   await page.locator('app-dock-strip button[aria-label="Show Tasks"]').click();
   await expect(page.locator('app-panel-frame .tasks-panel')).toBeVisible();

@@ -1,15 +1,11 @@
-/* Same height as the dock icon strip and the panel headers
-   (--panel-head-h): the tab bar and the docks' icon strips sit side by
-   side under the titlebar, so their bottom borders read as one line. */
+/* Board 9a: full-height tabs divided by a line, no radius. */
 :host {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 1px;
+  align-items: stretch;
   flex: none;
   min-width: 0;
-  height: var(--panel-head-h);
-  padding: 0 8px;
+  height: var(--tab-bar-h);
   background: var(--bg-dock);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
@@ -27,17 +23,17 @@
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   flex: 0 1 auto;
   min-width: 44px;
-  max-width: 210px;
-  height: 28px;
-  padding: 0 8px 0 11px;
-  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  max-width: 240px;
+  padding: 0 14px;
+  border-right: 1px solid var(--border);
   cursor: pointer;
-  color: #847f79;
+  color: var(--text-4);
   background: transparent;
   white-space: nowrap;
 }
@@ -46,9 +42,12 @@
   background: var(--hover-bg);
 }
 
+/* Short of room, the others give way: the active tab keeps its whole name. */
 .tab.active {
+  flex-shrink: 0;
+  padding: 0 10px 0 14px;
   background: var(--bg-editor);
-  color: var(--text-heading);
+  color: var(--text-primary);
 }
 
 .tab.dragging {
@@ -74,6 +73,7 @@
   min-width: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-mono-tab);
+  line-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,49 +87,41 @@
   background: var(--accent);
 }
 
+/* The active tab's X takes its place in the row (12px, the hit area hangs
+   over); an inactive tab shows one on hover over its right edge, so the tab
+   keeps its width and nothing beside it moves. */
 .close {
   width: 16px;
   height: 16px;
+  margin: 0 -2px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 0;
   background: transparent;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-chip);
   flex: none;
-  opacity: 0.45;
   cursor: pointer;
-  color: inherit;
+  color: var(--field-border);
 }
 
 .close:hover {
   background: var(--hover-bg-loud);
-  opacity: 1;
-}
-
-.add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin: 0 0 1px 4px;
-  border: 0;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--text-6);
-  flex: none;
-}
-
-.add:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.add:not(:disabled):hover {
-  background: var(--hover-bg);
   color: var(--text-primary);
+}
+
+.tab:not(.active) .close {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  margin: -8px 0 0;
+  background: var(--hover-bg);
+  opacity: 0;
+}
+
+.tab:not(.active):hover .close,
+.tab:not(.active) .close:focus-visible {
+  opacity: 1;
 }
 
 /* Right-click menu -- mirrors the shared ctx-menu pattern. */

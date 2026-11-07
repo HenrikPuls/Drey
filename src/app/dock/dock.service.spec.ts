@@ -3,6 +3,7 @@ import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
 import { DockService } from './dock.service';
 import { CORE_WIDGETS } from './widget-registry';
+import { WidgetRegistryService } from './widget-registry.service';
 
 describe('DockService', () => {
   beforeEach(() => {
@@ -182,16 +183,151 @@ describe('DockService', () => {
     });
   });
 
-  it('treats a header press with no movement as a toggle', () => {
+  it('treats a strip press with no movement as a toggle', () => {
     const dock = make();
     expect(dock.closed('calendar')).toBe(false);
-    dock.beginHeaderPress('calendar', 'Calendar', new MouseEvent('mousedown', { button: 0 }));
+    dock.beginStripPress('calendar', 'Calendar', new MouseEvent('mousedown', { button: 0 }));
     window.dispatchEvent(new MouseEvent('mouseup'));
     expect(dock.closed('calendar')).toBe(true);
     expect(dock.dragActive()).toBe(false);
   });
 
-  describe('toggle (strip icon / header click / View menu)', () => {
+  it('a header press with no movement changes nothing (board 9a: the header only drags)', () => {
+    const dock = make();
+    dock.beginHeaderPress('calendar', 'Calendar', new MouseEvent('mousedown', { button: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+    expect(dock.closed('calendar')).toBe(false);
+    expect(dock.collapsed('calendar')).toBe(false);
+    expect(dock.dragActive()).toBe(false);
+  });
+
+  describe('folding a panel to its header (the chevron)', () => {
+    it('folds and unfolds; the panel stays open', () => {
+      const dock = make();
+      dock.toggleCollapsed('files');
+      expect(dock.collapsed('files')).toBe(true);
+      expect(dock.closed('files')).toBe(false);
+      dock.toggleCollapsed('files');
+      expect(dock.collapsed('files')).toBe(false);
+    });
+
+    it('revealing a panel shows its body', () => {
+      const dock = make();
+      dock.toggleCollapsed('files');
+      dock.openAndExpand('files');
+      expect(dock.collapsed('files')).toBe(false);
+
+      dock.toggleCollapsed('files');
+      dock.toggle('files');
+      dock.toggle('files');
+      expect(dock.closed('files')).toBe(false);
+      expect(dock.collapsed('files')).toBe(false);
+    });
+
+    it('a splitter skips a folded panel', () => {
+      const dock = make();
+      expect(dock.nextOpenId('calendar')).toBe('files');
+      dock.toggleCollapsed('files');
+      expect(dock.nextOpenId('calendar')).toBe('windows');
+    });
+
+    it('round-trips through persistence and belongs to the view', () => {
+      const first = make();
+      first.toggleCollapsed('files');
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({});
+      const second = TestBed.inject(DockService);
+      expect(second.collapsed('files')).toBe(true);
+
+      second.switchView('other');
+      expect(second.collapsed('files')).toBe(false);
+      second.switchView('notes');
+      expect(second.collapsed('files')).toBe(true);
+    });
+
+    it('a layout stored before folding reads as nothing folded', () => {
+      const dock = make();
+      const { collapsed: _none, ...old } = dock.layout();
+      dock.applyLayout(old as ReturnType<DockService['layout']>);
+      expect(dock.layout().collapsed).toEqual({});
+    });
+  });
+
+  it('the header menu moves a panel to the end of another dock', () => {
+    const dock = make();
+    dock.moveToDock('calendar', 'right');
+    expect(dock.sideOf('calendar')).toBe('right');
+    expect(dock.leftIds()).not.toContain('calendar');
+    dock.moveToDock('files', 'right');
+    expect(dock.rightIds().slice(-2)).toEqual(['calendar', 'files']);
+  });
+
+  describe('a plugin panel, which registers after the layout is read', () => {
+    function plugin(registry: WidgetRegistryService, id: string): void {
+      registry.registerPluginWidget({
+        id,
+        title: id,
+        defaultDock: 'left',
+        defaultOpen: false,
+        defaultFlex: 100,
+        mount: () => () => undefined,
+      });
+    }
+
+    it('takes its stored dock, slot, weight, open and folded state', () => {
+      localStorage.setItem(
+        'drey.dock',
+        JSON.stringify({
+          active: 'notes',
+          views: {
+            notes: {
+              dock: { left: ['calendar', 'files'], right: ['spec', 'windows'], bottom: [] },
+              open: { calendar: true, files: true, windows: true, spec: true },
+              flexes: { spec: 77 },
+              collapsed: { spec: true },
+            },
+          },
+        }),
+      );
+      const dock = make();
+      plugin(TestBed.inject(WidgetRegistryService), 'spec');
+      TestBed.tick();
+      expect(dock.rightIds()).toEqual(['spec', 'windows']);
+      expect(dock.closed('spec')).toBe(false);
+      expect(dock.collapsed('spec')).toBe(true);
+      expect(dock.flexOf('spec')).toBe(77);
+    });
+
+    it('goes to its default dock when the stored layout never had it', () => {
+      const dock = make();
+      plugin(TestBed.inject(WidgetRegistryService), 'spec');
+      TestBed.tick();
+      expect(dock.sideOf('spec')).toBe('left');
+      expect(dock.closed('spec')).toBe(true);
+    });
+
+    it('a parked view keeps its plugin panels until it is switched to', () => {
+      localStorage.setItem(
+        'drey.dock',
+        JSON.stringify({
+          active: 'notes',
+          views: {
+            notes: {},
+            work: { dock: { left: ['calendar'], right: ['spec'], bottom: [] }, open: { spec: true } },
+          },
+        }),
+      );
+      const dock = make();
+      plugin(TestBed.inject(WidgetRegistryService), 'spec');
+      TestBed.tick();
+      dock.switchView('work');
+      expect(dock.rightIds()).toEqual(['spec']);
+      expect(dock.closed('spec')).toBe(false);
+    });
+  });
+
+  describe('toggle (strip icon / header menu / View menu)', () => {
     it('closes and reopens a panel, which keeps its dock slot', () => {
       const dock = make();
       dock.toggle('files');

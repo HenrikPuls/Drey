@@ -1,21 +1,23 @@
 :host {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
   flex: none;
   min-width: 0;
   height: var(--status-h);
   padding: 0 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-dock);
+  font-size: var(--fs-mono-meta);
+  line-height: 20px;
+  color: var(--text-4);
 }
 
 .count {
   flex: none;
   white-space: nowrap;
   font-family: var(--font-sans);
-  font-size: var(--fs-mono-meta);
-  color: var(--text-3);
+  color: var(--text-4);
 }
 
 .count.url {
@@ -23,13 +25,6 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.dot {
-  flex: none;
-  font-family: var(--font-sans);
-  font-size: var(--fs-mono-meta);
-  color: var(--text-faint);
 }
 
 /* The transient positive answer of a manual update check (req-45):
@@ -40,7 +35,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-sans);
-  font-size: 11.5px;
   color: var(--status-added);
 }
 
@@ -49,7 +43,7 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 16px;
   min-width: 0;
 }
 
@@ -57,15 +51,13 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 20px;
-  padding: 0 7px;
+  gap: 6px;
   border: 0;
-  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-4);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-mono-meta);
+  line-height: 20px;
   white-space: nowrap;
 }
 
@@ -84,7 +76,11 @@
   background: var(--status-added);
 }
 
+/* An item that does something: the bar's full height, square. */
 .slot-btn {
+  height: calc(var(--status-h) - 1px);
+  padding: 0 10px;
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -93,32 +89,24 @@
   color: var(--text-primary);
 }
 
-/* Its popup is open (SDK 1.49): the bar's full height, square, lit. Same width as closed, so nothing moves. */
+/* Its popup is open (SDK 1.49): lit. Same box as closed, so nothing moves. */
 .slot-open,
 .slot-open:hover {
-  height: calc(var(--status-h) - 1px);
-  border-radius: 0;
   background: var(--active-bg);
   color: var(--text-primary);
 }
 
 .settings {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 20px;
-  padding: 0 7px;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-5);
-  font-size: 11.5px;
+  color: var(--text-4);
+  font: inherit;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .settings:hover {
-  background: var(--hover-bg);
   color: var(--text-primary);
 }

@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Page } from './fixtures/drey';
+import { test, expect, type Page, refreshFiles } from './fixtures/drey';
 
 async function openNote(page: Page, vaultDir: string, name: string, body: string): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, name), body);
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }

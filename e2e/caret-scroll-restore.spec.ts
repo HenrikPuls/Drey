@@ -59,7 +59,7 @@ test.describe('caret + scroll restore (milestone 50)', () => {
     await scrollTo(page, 2_400);
     await page.locator('.cm-line', { hasText: 'Line 100 of the long note' }).click();
     await page.keyboard.type('x'); // dirty, so the next file opens alongside
-    await expect(page.locator('app-editor .dirty')).toBeVisible();
+    await expect(page.locator('app-editor .actions .save')).toBeVisible();
     const setTo = 600;
     await scrollTo(page, setTo);
 
@@ -138,9 +138,9 @@ test.describe('caret + scroll restore (milestone 50)', () => {
     // resulting full replace must not cost the user their viewport.
     await page.locator('.cm-line', { hasText: 'Line 30 of the save note.' }).click();
     await page.keyboard.type('x');
-    await expect(page.locator('app-editor .dirty')).toBeVisible();
+    await expect(page.locator('app-editor .actions .save')).toBeVisible();
     await page.keyboard.press('Control+S');
-    await expect(page.locator('app-editor .dirty')).toBeHidden({ timeout: 5_000 });
+    await expect(page.locator('app-editor .actions .save')).toBeHidden({ timeout: 5_000 });
     await page.waitForTimeout(400); // the adoption effect + the restore frames
 
     const restored = await scrollTop(page);

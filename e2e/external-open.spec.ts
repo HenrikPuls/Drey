@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures/drey';
+import { test, expect, refreshFiles } from './fixtures/drey';
 
 /**
  * Files the OS hands to Drey (Explorer "Open with" / default program,
@@ -44,7 +44,7 @@ test.describe('a file passed on the command line, outside every vault', () => {
 
   test('is never replaced when another file opens', async ({ page, vaultDir }) => {
     fs.writeFileSync(path.join(vaultDir, 'a.md'), '# a\n');
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'a.md' }).click();
 
     await expect(page.locator('app-tab-bar .tab', { hasText: 'a.md' })).toHaveCount(1);

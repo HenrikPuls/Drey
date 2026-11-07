@@ -1,5 +1,6 @@
 <!-- i18n: catalog -->
 @if (views.views().length > 1) {
+  <div class="vs-group">
   @if (folded()) {
     <button
       type="button"
@@ -13,7 +14,7 @@
       @if (views.modified()) {
         <span class="vs-dot" aria-hidden="true"></span>
       }
-      <app-icon name="chevron-down" [size]="10" />
+      <app-icon name="chevron-down" [size]="14" />
     </button>
   } @else {
     <div class="vs" role="tablist" [attr.aria-label]="'views.list' | t">
@@ -36,6 +37,7 @@
       }
     </div>
   }
+  <span class="vs-sep" aria-hidden="true"></span>
   <button
     type="button"
     class="vs-layout"
@@ -45,8 +47,9 @@
     (click)="openLayout($event)"
   >
     <span>{{ 'views.layout' | t }}</span>
-    <app-icon name="chevron-down" [size]="10" />
+    <app-icon name="chevron-down" [size]="14" />
   </button>
+  </div>
 }
 
 @if (menu(); as m) {

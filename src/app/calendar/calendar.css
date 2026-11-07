@@ -26,8 +26,17 @@
   height: 100%;
 }
 
+/* Board 9a: the month reads as the panel's title; everything else about the
+   row shows with the header's other controls. */
 .head.in-frame .month {
   color: var(--text-primary);
+  line-height: 20px;
+}
+
+.head.in-frame .month-chev,
+.head.in-frame .nav {
+  opacity: var(--head-actions, 1);
+  transition: opacity 0.15s;
 }
 
 .month {
@@ -72,13 +81,15 @@
 }
 
 .weekday {
-  height: 16px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-sans);
-  font-size: 9.5px;
-  color: var(--text-7);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--text-4);
 }
 
 .day {
@@ -86,17 +97,18 @@
   /* Fixed, compact row height -- never taller as the dock widens. Six
      rows are always rendered, so the whole grid is one constant height in
      every month and at every width. */
-  height: 20px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 0;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-chip);
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 11px;
-  color: var(--text-3);
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--text-primary);
   padding: 0;
 }
 
@@ -105,26 +117,27 @@
 }
 
 .day.out {
-  color: var(--calendar-muted);
+  color: var(--field-border);
 }
 
 .day.today {
   color: var(--accent-contrast);
+  font-weight: 600;
 }
 
 .day.today::before {
   content: '';
   position: absolute;
-  inset: 1px;
-  border-radius: var(--radius-sm);
+  inset: 0;
+  border-radius: var(--radius-chip);
   background: var(--accent);
 }
 
 .day.selected::before {
   content: '';
   position: absolute;
-  inset: 1px;
-  border-radius: var(--radius-sm);
+  inset: 0;
+  border-radius: var(--radius-chip);
   border: 1px solid var(--accent-edge);
 }
 
@@ -147,9 +160,9 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
-  /* The weekday row (16px) + six 20px day rows it replaces, so the panel
+  /* The weekday row + six day rows it replaces, 22px each, so the panel
      keeps one height whether the day grid or the picker is showing. */
-  min-height: 136px;
+  min-height: 154px;
   align-content: center;
 }
 

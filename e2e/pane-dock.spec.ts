@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Locator, type Page } from './fixtures/drey';
+import { test, expect, type Locator, type Page, refreshFiles } from './fixtures/drey';
 
 /**
  * Editor panes in the docks (milestone 20, ADR-0038): the tab context menu
@@ -18,7 +18,7 @@ import { test, expect, type Locator, type Page } from './fixtures/drey';
 
 async function open(page: Page, vaultDir: string, name: string): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, name), `# ${name}\n\nbody of ${name}\n`);
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
 }
 
@@ -31,7 +31,7 @@ async function open(page: Page, vaultDir: string, name: string): Promise<void> {
 async function openTwo(page: Page, vaultDir: string, first: string, second: string): Promise<void> {
   await open(page, vaultDir, first); // replaces the startup daily tab
   fs.writeFileSync(path.join(vaultDir, second), `# ${second}\n\nbody of ${second}\n`);
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page
     .locator('app-dock[side="left"] .node.file', { hasText: second })
     .click({ modifiers: ['ControlOrMeta'] });

@@ -12,7 +12,7 @@ import {
 /**
  * Holds the header-control templates dock panels contribute to their
  * `PanelFrame` header (req-7): a panel's own control row (scope toggle,
- * refresh button, auto-summary switch, …) is rendered in the shared 32px
+ * refresh button, auto-summary switch, …) is rendered in the shared
  * header instead of as a band under it.
  *
  * A deliberately leaf service -- it imports nothing from `dock/` (not

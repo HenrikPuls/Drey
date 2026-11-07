@@ -12,11 +12,11 @@
     [attr.aria-pressed]="item.open"
     [attr.aria-label]="item.label"
     [title]="item.tip"
-    (mousedown)="dock.beginHeaderPress(item.id, item.title, $event)"
+    (mousedown)="dock.beginStripPress(item.id, item.title, $event)"
     (click)="onClick(item.id, $event)"
   >
     @if (item.icon; as name) {
-      <app-icon [name]="name" [size]="15" />
+      <app-icon [name]="name" [size]="17" />
     } @else {
       {{ item.letter }}
     }

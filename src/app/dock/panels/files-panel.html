@@ -1,14 +1,14 @@
 <ng-template appPanelHeaderActions="files">
-  <button
-    type="button"
-    class="icon-btn hdr-btn"
-    (click)="onAddVault()"
-    title="Add vault folder"
-    aria-label="Add vault"
-  >
-    <app-icon name="plus" [size]="14" [strokeWidth]="1.5" />
-  </button>
   @if (vault.vaults().length > 0) {
+    <button
+      type="button"
+      class="icon-btn hdr-btn"
+      (click)="onNewFile()"
+      title="New file"
+      aria-label="New file"
+    >
+      <app-icon name="plus" [size]="14" />
+    </button>
     <button
       type="button"
       class="icon-btn hdr-btn"
@@ -16,17 +16,7 @@
       [title]="allFoldersExpanded() ? 'Collapse all folders' : 'Expand all folders'"
       [attr.aria-label]="allFoldersExpanded() ? 'Collapse all folders' : 'Expand all folders'"
     >
-      <app-icon name="chevrons-down-up" [size]="14" [strokeWidth]="1.5" />
-    </button>
-    <button
-      type="button"
-      class="icon-btn hdr-btn"
-      (click)="onRefresh()"
-      [disabled]="vault.isLoading()"
-      title="Re-read the vaults from disk"
-      aria-label="Refresh files"
-    >
-      <app-icon name="refresh-cw" [size]="14" [strokeWidth]="1.5" />
+      <app-icon name="chevrons-down-up" [size]="14" />
     </button>
   }
 </ng-template>
@@ -108,6 +98,7 @@
     <button type="button" (click)="startVaultRename()">Rename…</button>
     <button type="button" (click)="onAddVault()">Add vault…</button>
     <button type="button" (click)="onRevealVault(vm.vault.id)">Open in File Explorer</button>
+    <button type="button" (click)="onRefreshFromMenu()">Refresh</button>
     <div class="ctx-sep"></div>
     <button type="button" class="danger" (click)="onRemoveVault(vm.vault)">Remove…</button>
     @if (vm.pluginItems.length > 0) {
@@ -141,7 +132,6 @@
       <button
         type="button"
         class="node vault-row"
-        [class.active-vault]="node.vault.active"
         [class.missing]="!node.vault.exists"
         [class.selected]="selected() === node.vault.id"
         [class.drop-target]="dropHover() === node.vault.id"
@@ -151,23 +141,19 @@
         (dragover)="onVaultRowDragOver($event, node.vault)"
         (dragleave)="onVaultRowDragLeave($event, node.vault)"
         (drop)="onVaultRowDrop($event, node.vault)"
-        [title]="node.vault.path"
+        [title]="vaultTitle(node.vault)"
       >
         <app-icon
           class="twist"
           name="chevron-right"
           [size]="14"
-          [strokeWidth]="1.5"
           [style.transform]="collapsedVaults().has(node.vault.id) ? 'none' : 'rotate(90deg)'"
         />
         <span class="node-name">{{ node.vault.name }}</span>
-        @if (node.vault.active) {
-          <span class="active-dot" aria-label="Active vault"></span>
-        }
       </button>
     } @if (node.kind === 'entry') {
       @if (isRenaming(node.vaultId, node.entry)) {
-        <div class="node editing" [style.padding-left.px]="8 + node.depth * 16">
+        <div class="node editing" [style.padding-left.px]="16 + node.depth * 12">
           <input
             #renameInput
             class="create-input"
@@ -187,7 +173,7 @@
           [class.selected]="selection().has(keyOf(node))"
           [class.drop-target]="dropHover() === keyOf(node)"
           [attr.tabindex]="selected() === keyOf(node) ? 0 : -1"
-          [style.padding-left.px]="8 + node.depth * 16"
+          [style.padding-left.px]="16 + node.depth * 12"
           (click)="onFolderClick(node.vaultId, node.entry, $event)"
           (contextmenu)="openTreeMenu($event, node.vaultId, node.entry)"
           (dragstart)="onFolderDragStart($event, node.vaultId, node.entry)"
@@ -202,7 +188,6 @@
             class="twist"
             name="chevron-right"
             [size]="14"
-            [strokeWidth]="1.5"
             [style.transform]="isCollapsed(keyOf(node)) ? 'none' : 'rotate(90deg)'"
           />
           <span class="node-name">{{ node.entry.name }}</span>
@@ -217,7 +202,7 @@
           [class.selected]="selection().has(keyOf(node))"
           [class.drop-target]="dropHover() === keyOf(node)"
           [attr.tabindex]="selected() === keyOf(node) ? 0 : -1"
-          [style.padding-left.px]="8 + node.depth * 16"
+          [style.padding-left.px]="20 + node.depth * 12"
           (click)="onFileClick(node.vaultId, node.entry, $event)"
           (contextmenu)="openTreeMenu($event, node.vaultId, node.entry)"
           (dragstart)="onFileDragStart($event, node.vaultId, node.entry)"
@@ -228,7 +213,7 @@
           [attr.data-status]="decorationOf(node.vaultId, node.entry.relativePath)?.tone ?? null"
           [title]="titleOf(node.vaultId, node.entry.relativePath)"
         >
-          <span class="bullet" aria-hidden="true"></span>
+          <span class="twist-slot" aria-hidden="true"></span>
           <span class="node-name">{{ node.entry.name }}</span>
           @if (decorationOf(node.vaultId, node.entry.relativePath)?.badge; as badge) {
             <span class="status-badge" aria-hidden="true">{{ badge }}</span>
@@ -238,7 +223,7 @@
     }
     @if (createDepth(node); as depth) {
       @let pending = creating()!;
-      <div class="node editing" [style.padding-left.px]="8 + (depth - 1) * 16">
+      <div class="node editing" [style.padding-left.px]="16 + (depth - 1) * 12">
         <input
           #createInput
           class="create-input"

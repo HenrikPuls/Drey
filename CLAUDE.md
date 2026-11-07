@@ -600,7 +600,7 @@ introduced silently.
   arrows, window controls; each toggle folds its whole side dock away,
   `Ctrl+B` / `Ctrl+Alt+B`), then a row of **[left dock | centre column |
   right dock]** — the centre column being the editor area above a
-  **bottom dock** band — then a 28px **status bar** (word/char count ·
+  **bottom dock** band — then a 29px **status bar** (word/char count ·
   context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
     the ten panels — **Calendar, Files, Templates, Search, Tasks, Open
@@ -609,38 +609,40 @@ introduced silently.
     Outline/Backlinks/Source control are provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and **opened or closed from the dock's icon
-    strip** — a 32px row at the top of each dock with one icon toggle
+    strip** — a 41px row at the top of each dock with one icon toggle
     per panel living there (milestone 69, ADR-0019 later change). A
     closed panel shows only as its icon (no header row; status value in
-    the tooltip); clicking an open panel's header closes it; the icon is
-    draggable like the header. Closing a side dock's last open panel
-    folds the dock. Every panel header is built the same way
-    (sentence-case title + optional status value + the panel's icon
-    controls + drag grip). Default:
+    the tooltip); the icon is draggable like the header. Closing a side
+    dock's last open panel folds the dock. Every panel header is built
+    the same way (board 9a, 28px: fold chevron + sentence-case title +
+    status value right after it + the panel's icon controls, on hover or
+    focus only). The chevron folds a panel to its header, its strip icon
+    stays on; a click on a header does nothing, a drag moves, a
+    right-click offers Move to left / right / bottom dock and Close. What
+    a panel inherits and may draw: the frame rule in ADR-0019. Default:
     Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks/
     Source control left, Assistant right, nothing in the bottom band,
     Templates + Search + Tasks + Outline + Backlinks + Source control
     closed. Calendar takes its content height, not a
-    flex share; its header is the **month/year dropdown**
+    flex share; its title is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily
-    note) and the month arrows.
+    note) and the month arrows on hover.
     Each dock can additionally host one **editor band** above its panels
-    (milestone 20, ADR-0038): a docked editor pane, its 32px header
+    (milestone 20, ADR-0038): a docked editor pane, its 28px header
     carrying the active tab's name, movable by header drag or the tab
     context menu, resizable by its own splitter; docked editors persist
     with the session.
     `View → Reset layout` restores it (and undocks the editor bands).
     Layout state persists (`localStorage['drey.dock']`).
   - **Files panel**: one section per registered vault — a vault header
-    row (name, active-vault dot, fold chevron, path tooltip) above the
+    row (name, fold chevron, path + active-vault tooltip) above the
     tree; in-place create/rename/delete in the tree; the vault row's
     context menu (Set active / Rename / Add vault / Open in File
-    Explorer / Remove); drag & drop of files/folders within and across
+    Explorer / Refresh / Remove); drag & drop of files/folders within and across
     vaults (req-23).
-  - **Centre column**: a 32px tab bar for open documents — the dock icon
-    strips' height (`--panel-head-h`), so their bottom borders form one
-    line under the titlebar — a 40px meta bar
-    (path · the formatting strip while pinned · Lines toggle · Save · `⋯`),
+  - **Centre column**: a 37px tab bar for open documents (`--tab-bar-h`,
+    full-height tabs, the X on the active one and on hover), a 37px meta bar
+    (path · the formatting strip while pinned · Save while dirty · `</>` · `⋯`),
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; ADR-0008/0009), then the bottom dock band. Capture is the
     `/` menu's **Entry** block.
