@@ -7,7 +7,7 @@ import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
 import { GO_TO_DECISION_CARD } from '../ticket-document/dom';
 import { ticketIdOfKey } from './register';
-import { REVIEW_COMMENTS, requestReviewSendBack, type ReviewCommentsDetail } from './events';
+import { REVIEW_COMMENTS, requestReviewAccept, requestReviewSendBack, type ReviewCommentsDetail } from './events';
 import { mountReview, type ReviewDeps } from './view';
 
 const flush = async (): Promise<void> => {
@@ -133,9 +133,8 @@ describe('Review tab', () => {
     input.dispatchEvent(new Event('input'));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
     expect(host.querySelector('.tickets-review-comment-text')?.textContent).toBe('Name this after what it returns.');
-    const send = byText(host, '.tickets-review-sendback', 'Send back')!;
-    expect(send.textContent).toBe('Send back with 1 comment');
-    click(send);
+    // The decision card in the Assistant (board 7d) asks the tab to send back.
+    expect(requestReviewSendBack('T-0121')).toBe(true);
     await flush();
     const sent = calls.find((c) => c.method === 'sendBack')!;
     expect(sent.payload).toEqual({
@@ -158,17 +157,29 @@ describe('Review tab', () => {
     input.value = 'Whole block.';
     input.dispatchEvent(new Event('input'));
     click(byText(host, '.tickets-review-btn', 'Add comment'));
-    click(byText(host, '.tickets-review-sendback', 'Send back'));
+    expect(requestReviewSendBack('T-0121')).toBe(true);
     await flush();
     expect((calls.find((c) => c.method === 'sendBack')!.payload as { comments: unknown[] }).comments).toEqual([
       { file: 'src/a.ts', line: 1, endLine: 3, text: 'Whole block.' },
     ]);
   });
 
-  it('offers no Send back without comments (that decision is on the card)', async () => {
+  it('accepts through the same acceptTicket as the Ready card when the decision card asks, and drops the comments', async () => {
     const { host, calls } = setup();
     await flush();
-    expect(byText(host, '.tickets-review-sendback', 'Send back')).toBeUndefined();
+    expect(requestReviewAccept('T-0999')).toBe(false);
+    expect(requestReviewAccept('T-0121')).toBe(true);
+    await flush();
+    expect(calls.find((c) => c.method === 'acceptTicket')?.payload).toEqual({ id: 'T-0121' });
+    expect(host.querySelector('.tickets-review-comment')).toBeNull();
+  });
+
+  it('sends nothing back without comments, whoever asks (the decision card)', async () => {
+    const { host, calls } = setup();
+    await flush();
+    expect(host.querySelector('.tickets-review-sendback')).toBeNull();
+    requestReviewSendBack('T-0121');
+    await flush();
     expect(calls.some((c) => c.method === 'sendBack')).toBe(false);
   });
 

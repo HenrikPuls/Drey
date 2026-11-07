@@ -47,15 +47,15 @@ export function mountPanel(
   const chatLabel = el('span', 'chat-label');
   const chatSwitchButton = el('button', 'chat-switch') as HTMLButtonElement;
   chatSwitchButton.type = 'button';
-  chatSwitchButton.title = 'Chats';
-  chatSwitchButton.setAttribute('aria-label', 'Chats');
-  chatSwitchButton.appendChild(icon('list', 13));
+  chatSwitchButton.title = api.i18n.t('assistant.head.history');
+  chatSwitchButton.setAttribute('aria-label', api.i18n.t('assistant.head.history'));
+  chatSwitchButton.appendChild(icon('history', 16));
   chatSwitchButton.addEventListener('click', () => chatList.toggle());
   const chatNewButton = el('button', 'chat-new') as HTMLButtonElement;
   chatNewButton.type = 'button';
-  chatNewButton.title = 'Start a new chat';
-  chatNewButton.setAttribute('aria-label', 'Start a new chat');
-  chatNewButton.appendChild(icon('plus', 13));
+  chatNewButton.title = api.i18n.t('assistant.head.new_chat');
+  chatNewButton.setAttribute('aria-label', api.i18n.t('assistant.head.new_chat'));
+  chatNewButton.appendChild(icon('plus', 16));
   chatNewButton.addEventListener('click', () =>
     targets.activeId() === MODEL_TARGET ? state.newChat() : void targets.newThread(),
   );
@@ -106,6 +106,7 @@ export function mountPanel(
     chatSwitchButton.classList.toggle('on', chatList.isOpen());
 
     switcher.render();
+    body.classList.toggle('on-target', onTarget);
     thread.node.hidden = onTarget;
     chatSwitchButton.hidden = onTarget && targets.active()?.history === undefined;
     composer.render();

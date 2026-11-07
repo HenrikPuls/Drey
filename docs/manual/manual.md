@@ -489,9 +489,10 @@ repository and rewrites **only the `## Plan` chapter** of the open file.
   with your next message* shows that your changes since Paul's last turn
   will be sent with the next message (as a short summary and a diff); his
   own changes are never sent back to him.
-- When Paul has a question, the answer card sits above the composer with
-  2–4 choices and the recommended one marked; a choice is sent as your
-  next message, or write your own answer.
+- When Paul has a question, the decision card sits above the composer: the
+  question, 2–4 choices as radio rows with the recommended one marked and
+  selected, and one **Send “<choice>”** button. Picking a row only selects it;
+  Send sends it as your next message. Or write your own answer in the composer.
 - When he is ready, the thread shows **Split** / **Keep as one**. *Keep as
   one* moves the ticket into the build queue; *Split* records the choice and
   leads to the plan to accept.
@@ -1002,8 +1003,9 @@ copy. Click a **line number** to comment on that line, Shift-click a second
 number for a range, then add the comment (Ctrl+Enter). Click a comment's text to
 change it, the bin removes it. **Send back with 2 comments** moves the ticket
 back to the agent with each comment (file, line, text) in its Handover, so the
-next run reads them; while it has no place on the decision card yet, it shows
-when the pointer is on the head of the file list. The Review tab has no Accept
+next run reads them; as soon as the tab has a comment, the Assistant offers it as
+the first option of its decision card, **Your review of <ticket>: what next?** (pick it
+and press **Send “Send back with 2 comments”**), next to **Accept**. The Review tab has no Accept
 either: while the ticket waits at one of your checkpoints its head has the link
 **Decision waiting · go to the card**.
 

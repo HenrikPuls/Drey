@@ -222,7 +222,10 @@ test.describe('Shape in Drey (E13-9)', () => {
     await expect(page.locator('app-editor .tickets-doc-shape-mark.is-paul').first()).toContainText('Paul edited this', { timeout: 30_000 });
     const tray = panel.locator('.target-tray');
     await expect(tray).toContainText('How many parts does this need?');
-    await expect(tray.locator('.target-card-btn')).toHaveText(['3 parts', '2 parts', 'Keep it as one']);
+    await expect(tray.locator('.decision-option .decision-label')).toHaveText(['3 parts', '2 parts', 'Keep it as one']);
+    // Board 7a: the recommended option is selected, one Send names it.
+    await expect(tray.locator('.decision-option.on .decision-label')).toHaveText('3 parts');
+    await expect(tray.locator('.decision-send')).toHaveText('Send “3 parts”');
     await page.locator('app-editor .tickets-doc-shape-marks').first().evaluate((node) => node.scrollIntoView({ block: 'start' }));
     await page.screenshot({ path: testInfo.outputPath('shape-paul-edited.png') });
 
@@ -236,7 +239,7 @@ test.describe('Shape in Drey (E13-9)', () => {
     await page.screenshot({ path: testInfo.outputPath('shape-owner-edited.png') });
 
     // The answer card is the next message; the owner's edit goes with it.
-    await tray.locator('.target-card-btn', { hasText: '3 parts' }).click();
+    await tray.locator('.decision-send').click();
     await expect(thread).toContainText(SECOND_SAY, { timeout: 60_000 });
     expect(requests).toHaveLength(2);
     expect(requests[1]!.text).toContain('The owner edited the plan');

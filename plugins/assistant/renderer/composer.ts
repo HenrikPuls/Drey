@@ -13,10 +13,9 @@ import type { Completion, CompletionContext, CompletionResult } from '@codemirro
 import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { STAGE_IMAGE_EXTENSIONS } from '../shared/stage.js';
-import { COMPOSER_PLACEHOLDER } from '../../../shared/composer-placeholder';
 import { createStager } from './composer-staging.js';
 import { createDictation, recognitionCtorOf, type Dictation } from './dictate.js';
-import { baseName, dirName, el, icon } from './dom.js';
+import { baseName, dirName, el, icon, type IconName } from './dom.js';
 import { openFilePicker } from './picker-file.js';
 import { createModelSetting, openModelPicker } from './picker-model.js';
 import { openPromptPicker } from './picker-prompt.js';
@@ -64,13 +63,13 @@ export function mountComposer(
   const sendButton = el('button', 'send') as HTMLButtonElement;
   sendButton.type = 'button';
   sendButton.setAttribute('aria-label', 'Send question');
-  sendButton.appendChild(icon('arrow-up', 13));
+  sendButton.appendChild(icon('send', 15, 2.25));
   // The composer's tools are icon-only (milestone 43): the words live in
   // each button's `title` + `aria-label`.
-  const toolButton = (className: string, iconName: string): HTMLButtonElement => {
+  const toolButton = (className: string, iconName: IconName): HTMLButtonElement => {
     const node = el('button', `icon-btn ${className}`) as HTMLButtonElement;
     node.type = 'button';
-    node.appendChild(api.ui.icon(iconName, 14));
+    node.appendChild(icon(iconName, 16));
     return node;
   };
   const plusButton = toolButton('plus', 'paperclip');
@@ -106,15 +105,20 @@ export function mountComposer(
   dictationLine.hidden = true;
   const row = el('div', 'composer-row');
   row.append(composerHost, micButton, sendButton);
-  const modelButton = el('button', 'model-btn', '…') as HTMLButtonElement;
+  const modelButton = el('button', 'model-btn') as HTMLButtonElement;
+  const modelName = el('span', 'model-name', '…');
+  modelButton.append(modelName, icon('chevron-down', 13));
   modelButton.type = 'button';
   modelButton.title = 'Pick the model';
   modelButton.setAttribute('aria-label', 'Pick the model');
   const promptsButton = toolButton('prompt-btn', 'book-open');
   promptsButton.title = 'Prompts: pick one from the prompts folder';
   promptsButton.setAttribute('aria-label', 'Pick a prompt');
+  // On a conversation target the right end names the target instead of the model (boards 7a/7c/7d).
+  const targetName = el('span', 'target-name');
+  targetName.hidden = true;
   const meta = el('div', 'composer-meta');
-  meta.append(plusButton, liveButton, vaultButton, webButton, promptsButton, modelButton);
+  meta.append(plusButton, liveButton, vaultButton, webButton, promptsButton, modelButton, targetName);
   const box = el('div', 'composer-box');
   box.append(chipsRow, row, dictationLine);
   composer.append(box, meta);
@@ -134,8 +138,9 @@ export function mountComposer(
         : path;
     // What the tab calls it: every ticket document's file is `ticket.md` (D-15).
     chip.appendChild(el('span', 'chip-name', api.documents.get(path)?.name ?? baseName(path)));
-    const remove = el('button', 'chip-x', '×') as HTMLButtonElement;
+    const remove = el('button', 'chip-x') as HTMLButtonElement;
     remove.type = 'button';
+    remove.appendChild(icon('x', 12, 2));
     remove.title =
       kind === 'note' ? 'Exclude this note from the context' : 'Remove from the context';
     remove.setAttribute('aria-label', remove.title);
@@ -232,7 +237,7 @@ export function mountComposer(
   // -- the model row -----------------------------------------------------------
   const model = createModelSetting(api, () => {
     const current = model.current();
-    modelButton.textContent = current === undefined ? '…' : (current ?? 'No model set');
+    modelName.textContent = current === undefined ? '…' : (current ?? api.i18n.t('assistant.composer.no_model'));
   });
 
   modelButton.addEventListener('click', () => openModelPicker(api, model));
@@ -257,6 +262,8 @@ export function mountComposer(
   // open completion and only sends when none is active. The composer is
   // always editable — a standalone chat needs no open note.
   const cm = api.editor.cm;
+  // The ghost text names who is asked: the model, or the active target (boards 9a and 7a).
+  const placeholder = el('span', 'composer-placeholder', api.i18n.t('assistant.composer.placeholder'));
 
   // The @-completion opens on a bare `@`: in a one-line composer the popup
   // IS the affordance, there is no room for a "press Mod-Space" hint.
@@ -374,7 +381,7 @@ export function mountComposer(
           // white ("&dark") -- otherwise the caret is invisible.
           EditorView.theme({}, { dark: true }),
           EditorView.lineWrapping,
-          cm.view.placeholder(COMPOSER_PLACEHOLDER),
+          cm.view.placeholder(placeholder),
           cm.view.keymap.of(cm.autocomplete.completionKeymap),
           cm.autocomplete.autocompletion({ override: [atFileSource] }),
           EditorView.domEventHandlers({
@@ -421,6 +428,12 @@ export function mountComposer(
       for (const tool of [liveButton, modelButton]) {
         tool.hidden = onTarget;
       }
+      const targetLabel = targets.active()?.label ?? '';
+      targetName.hidden = !onTarget;
+      targetName.textContent = targetLabel;
+      placeholder.textContent = onTarget
+        ? api.i18n.t('assistant.composer.placeholder_target', { target: targetLabel })
+        : api.i18n.t('assistant.composer.placeholder');
       for (const tool of [chipsRow, plusButton, vaultButton, promptsButton]) {
         tool.hidden = false;
       }

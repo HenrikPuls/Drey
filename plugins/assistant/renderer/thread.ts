@@ -38,6 +38,11 @@ export function createThread(
   onRestarted: (question: string) => void,
 ): ThreadView {
   const thread = el('div', 'assistant-thread');
+  /** `20 s`, `3 min`: the board's short form of how long an answer took. */
+  const took = (durationMs: number): string =>
+    durationMs < 60_000
+      ? api.i18n.t('assistant.turn.seconds', { n: Math.max(1, Math.round(durationMs / 1000)) })
+      : api.i18n.t('assistant.turn.minutes', { n: Math.round(durationMs / 60_000) });
 
   let confirmingRestart: number | null = null;
   let copiedTurnIndex: number | null = null;
@@ -148,7 +153,6 @@ export function createThread(
     const chip = el('div', 'tool-chip context-chip' + (expanded ? ' open' : ''));
     const summary = el('button', 'tool-chip-summary') as HTMLButtonElement;
     summary.type = 'button';
-    summary.appendChild(icon('search', 10));
     const status = turn.contextStatus;
     if (status === null) {
       summary.appendChild(
@@ -292,16 +296,24 @@ export function createThread(
     const article = el('article', 'card');
     article.classList.add(turn.role === 'user' ? 'q' : 'a');
 
-    const label = el('div', 'card-label');
-    label.appendChild(document.createTextNode(turn.role === 'user' ? 'YOU' : 'ASSISTANT'));
-    if (turn.at !== null && turn.at.length >= 16) {
-      label.appendChild(el('span', 'at', ` · ${turn.at.slice(11, 16)}`));
+    // The user's words are a bubble without a label; an answer opens with its model line
+    // ("glm-5.3-flash · 22:11 · 20 s") and the vault-context chip at its right end (board 9a).
+    let label: HTMLElement | null = null;
+    if (turn.role === 'assistant') {
+      const parts: string[] = [];
+      if (turn.meta.model !== undefined) {
+        parts.push(turn.meta.model);
+      }
+      if (turn.at !== null && turn.at.length >= 16) {
+        parts.push(turn.at.slice(11, 16));
+      }
+      if (turn.meta.durationMs !== undefined) {
+        parts.push(took(turn.meta.durationMs));
+      }
+      label = el('div', 'card-label');
+      label.appendChild(el('span', 'model-line', parts.join(' · ')));
+      article.appendChild(label);
     }
-    const took = state.took(turn.meta.durationMs);
-    if (took !== null) {
-      label.appendChild(el('span', 'took', ` · ${took}`));
-    }
-    article.appendChild(label);
 
     for (let i = 0; i < turn.tool.length; i++) {
       const block = taskBlockFor(turn, i);
@@ -316,7 +328,16 @@ export function createThread(
     }
 
     if (turn.context.length > 0 || turn.contextStatus !== null) {
-      article.appendChild(contextChipNode(turn, index));
+      const chip = contextChipNode(turn, index);
+      if (label === null) {
+        article.appendChild(chip);
+      } else {
+        label.appendChild(chip);
+        const list = chip.querySelector('.tool-chip-body');
+        if (list !== null) {
+          article.insertBefore(list, label.nextSibling);
+        }
+      }
     }
 
     if (turn.text !== '') {
@@ -331,8 +352,7 @@ export function createThread(
       for (const attachment of turn.attachments) {
         const link = el('button', 'attachment') as HTMLButtonElement;
         link.type = 'button';
-        link.textContent =
-          attachment.kind === 'note' ? `[[${baseName(attachment.path)}]]` : `![${attachment.path}]`;
+        link.textContent = baseName(attachment.path);
         link.title = attachment.path;
         link.addEventListener('click', () => {
           void api.documents.open(attachment.path);
@@ -384,7 +404,6 @@ export function createThread(
         // first): an error card stands in, the console names the cause.
         console.warn(`[assistant] turn ${index} failed to render:`, error);
         const card = el('article', 'card a');
-        card.appendChild(el('div', 'card-label', 'ASSISTANT'));
         card.appendChild(el('p', 'notice', 'This turn could not be rendered.'));
         thread.appendChild(card);
       }
@@ -396,7 +415,6 @@ export function createThread(
     const streaming = state.streaming();
     if (streaming !== null) {
       const partial = el('article', 'card a streaming');
-      partial.appendChild(el('div', 'card-label', 'ASSISTANT'));
       // The tool calls made so far, as they happen (ADR-0071): the same
       // chips the finished turn shows, not yet expandable.
       for (const tool of streaming.tools) {

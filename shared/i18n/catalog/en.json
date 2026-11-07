@@ -630,5 +630,18 @@
   "settings.pad.engine_desc": "Keeping videos in git and the largest video kept.",
   "settings.pad.autopilot_desc": "Whether workers pick up and run tickets by themselves.",
   "settings.pad.resume_desc": "Starts autopilot again at this time.",
-  "settings.pad.no_match": "No settings match."
+  "settings.pad.no_match": "No settings match.",
+  "assistant.head.history": "Chat history",
+  "assistant.head.new_chat": "New chat",
+  "assistant.composer.placeholder": "Ask anything…",
+  "assistant.composer.placeholder_target": "Message {target}…",
+  "assistant.composer.no_model": "No model set",
+  "assistant.turn.seconds": "{n} s",
+  "assistant.turn.minutes": "{n} min",
+  "assistant.decision.recommended": "recommended",
+  "assistant.decision.own_answer": "Or write your own answer below",
+  "assistant.decision.send": "Send “{label}”",
+  "assistant.review.question": "Your review of {id}: **what next?**",
+  "assistant.review.send_back_hint": "The worker gets your line comments with the next run",
+  "assistant.review.accept_hint": "Accepts {id}, comments are dropped"
 }

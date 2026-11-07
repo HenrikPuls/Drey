@@ -6,7 +6,8 @@
  * target is (ADR-0044 rule 2).
  */
 import type { ConversationCard, ConversationMessage, DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { el } from './dom.js';
+import { createDecisionCard } from './decision-card.js';
+import { el, icon, isIconName } from './dom.js';
 import { renderRichBody } from './rich-text.js';
 import type { TargetController } from './targets.js';
 import { MODEL_TARGET, type TargetSegment } from './targets-model.js';
@@ -73,7 +74,12 @@ export function createTargetSwitcher(api: DreyPluginApi, targets: TargetControll
         const button = el('button', 'assistant-target' + (on ? ' on' : '')) as HTMLButtonElement;
         button.type = 'button';
         button.setAttribute('aria-label', label);
-        button.appendChild(api.ui.icon(segment.key === MODEL_TARGET ? 'message-circle' : (segment.targets[0]?.icon ?? 'sparkles'), 15));
+        const glyph = segment.key === MODEL_TARGET ? 'bubble' : (segment.targets[0]?.icon ?? 'sparkles');
+        button.appendChild(isIconName(glyph) ? icon(glyph, 15) : api.ui.icon(glyph, 15));
+        // The active segment names itself (boards 9a, 7a): the others stay icons.
+        if (on) {
+          button.appendChild(document.createTextNode(grouped && member !== undefined ? member.label : segment.label));
+        }
         button.setAttribute('role', 'tab');
         button.setAttribute('aria-selected', String(on));
         button.title = grouped && member !== undefined ? label : segment.description;
@@ -117,7 +123,12 @@ function proposalNode(targets: TargetController, card: ConversationCard): HTMLEl
   return box;
 }
 
-function messageNode(api: DreyPluginApi, targets: TargetController, message: ConversationMessage): HTMLElement {
+function messageNode(api: DreyPluginApi, targets: TargetController, message: ConversationMessage): HTMLElement | null {
+  // An open question lives in the decision card above the composer, not twice (board 7a).
+  const open = message.cards?.find((card) => card.kind === 'choices');
+  if (open !== undefined && open.text === message.text && !targets.busy() && (open.choices ?? []).length > 0) {
+    return null;
+  }
   const article = el('article', `card ${message.role === 'user' ? 'q' : 'a'} target-message`);
   if (message.error !== undefined) {
     article.classList.add('target-error');
@@ -128,11 +139,17 @@ function messageNode(api: DreyPluginApi, targets: TargetController, message: Con
     }
     return article;
   }
-  const label = el('div', 'card-label', message.role === 'user' ? 'YOU' : (message.author ?? 'ASSISTANT').toUpperCase());
-  if (message.via !== undefined) {
-    label.appendChild(el('span', 'relay-chip', message.via));
+  if (message.role === 'agent') {
+    // "Paul via Mission Control": plain words above the answer, no pill (board 7a).
+    const label = el('div', 'card-label', message.author ?? '');
+    if (message.via !== undefined) {
+      label.appendChild(document.createTextNode(message.author === undefined ? '' : ' '));
+      label.appendChild(el('span', 'relay-chip', message.via));
+    }
+    if (label.textContent !== '') {
+      article.appendChild(label);
+    }
   }
-  article.appendChild(label);
   if (message.thought !== undefined) {
     const thought = el('details', 'target-thought');
     thought.appendChild(el('summary', undefined, 'Thinking'));
@@ -153,15 +170,17 @@ function messageNode(api: DreyPluginApi, targets: TargetController, message: Con
 
 export function createTargetThread(api: DreyPluginApi, targets: TargetController): TargetThreadView {
   const node = el('div', 'assistant-thread target-thread');
-  const tray = el('div', 'target-tray');
+  const decision = createDecisionCard(api, targets);
+  const tray = decision.node;
   return {
     node,
     tray,
     render: () => {
       const shown = targets.activeId() !== MODEL_TARGET;
       node.hidden = !shown;
-      tray.hidden = true;
       if (!shown) {
+        // The Review tab's decision is offered on the Model's chat too.
+        decision.render();
         return;
       }
       const wasAtEnd = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
@@ -174,7 +193,10 @@ export function createTargetThread(api: DreyPluginApi, targets: TargetController
           node.appendChild(el('p', 'empty', thread.notice ?? 'No messages yet.'));
         }
         for (const message of thread.messages) {
-          node.appendChild(messageNode(api, targets, message));
+          const shownMessage = messageNode(api, targets, message);
+          if (shownMessage !== null) {
+            node.appendChild(shownMessage);
+          }
         }
         if (thread.messages.length > 0 && thread.notice !== undefined) {
           node.appendChild(el('p', 'empty target-notice', thread.notice));
@@ -186,21 +208,7 @@ export function createTargetThread(api: DreyPluginApi, targets: TargetController
       if (wasAtEnd) {
         node.scrollTop = node.scrollHeight;
       }
-      tray.textContent = '';
-      const choices = targets.choices();
-      if (choices !== null && choices.choices !== undefined && choices.choices.length > 0 && !targets.busy()) {
-        tray.hidden = false;
-        tray.appendChild(el('p', 'target-tray-question', choices.text));
-        const row = el('div', 'target-tray-choices');
-        for (const choice of choices.choices) {
-          const button = el('button', 'target-card-btn' + (choice.recommended === true ? ' primary' : ''), choice.label) as HTMLButtonElement;
-          button.type = 'button';
-          button.title = `Send "${choice.label}"`;
-          button.addEventListener('click', () => void targets.send(choice.label));
-          row.appendChild(button);
-        }
-        tray.appendChild(row);
-      }
+      decision.render();
     },
   };
 }

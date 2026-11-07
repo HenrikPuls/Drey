@@ -341,21 +341,6 @@
   overflow-y: auto;
 }
 
-.tickets-review-sendback {
-  display: none;
-  margin-left: auto;
-  white-space: nowrap;
-}
-
-.tickets-review-subhead:hover .tickets-review-sendback,
-.tickets-review-sendback:focus-visible {
-  display: inline-flex;
-}
-
-.tickets-review-subhead:hover .tickets-review-summary {
-  display: none;
-}
-
 .tickets-review-file {
   display: flex;
   align-items: center;
