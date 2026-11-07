@@ -121,6 +121,13 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   `claude/w3-e14-7-cutover-cee921` the same finding is D-36 (`968078bf`); that merge renames it to this id, because D-36 here is the
   Autopilot popover.
 
+- **D-44 — `tickets-remote.spec.ts` "keeps the ticket detail scroll across live redraws" (iPad) is flaky** (S; owner request,
+  outside the list, 2026-11-07; found by the e2e run after the 9a merge). Fails 20–50 % of runs on every commit from 7156413b
+  to 877d835c (fresh builds, 10+ runs each), so no merge broke it: after `padMove` the old detail node is gone (asserted) but
+  `.detail` scrollTop reads 0 instead of ≥ 280 — the redraw restores the scroll later than the poll, or not at all. Done when
+  12 of 12 runs pass; the fix is either the client restoring scroll synchronously on the redraw or the spec waiting for the
+  restore signal, decided by what the client actually does (docs/testing-flakes.md gets the row).
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
@@ -745,6 +752,11 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 
 ### Later
 
+- **req-113 — A per-ticket cost allowance** (owner request, outside the list, 2026-11-07; found by wave 4.2 against board 7a). The
+  Work panel's Running row draws its cost in orange once a run has used most of the ticket's allowance (the board: $2.05 of
+  $2.50, 82 %). No such figure exists: budgets today are per day (`todayBudget`) and per persona, not per ticket. Needs the
+  frontmatter field (ticket-schema), the engine reporting spent-of-allowance per run, and the row's orange at a threshold;
+  until then the row shows the cost plain (deviation "feature not yet built — req-113").
 - **req-112 — A model budget for the Crew, controlled by the engine** (owner request, outside the list, 2026-11-07; details
   still to be thought through by the owner — do not build before they are). The way the owner now runs the agent sessions of
   this redesign — a fixed pool of slots per model (today Fable 3, Opus 2, Sonnet 1), every task ranked by importance and
