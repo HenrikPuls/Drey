@@ -108,17 +108,11 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
-    // The state this test reads is pushed: an engine round would overwrite a single
-    // push (the real fleet has no runs), so it is held until the test ends.
     await electronApp.evaluate(
       ({ BrowserWindow }, data) => {
-        const push = (): void => {
-          for (const win of BrowserWindow.getAllWindows()) {
-            win.webContents.send('plugin:event', data);
-          }
-        };
-        push();
-        setInterval(push, 100);
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('plugin:event', data);
+        }
       },
       {
         pluginId: 'tickets',

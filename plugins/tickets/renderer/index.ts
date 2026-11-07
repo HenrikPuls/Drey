@@ -47,6 +47,7 @@ import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-g
 import { createTicketHeader, showsTicketDocument, ticketLogFold, ticketTabTitle } from './ticket-header';
 import { openTicketDocument, type TicketDocumentReply } from './open-ticket';
 import { createBoardRefresh, createChangeGate } from './board-refresh';
+import { createSnapshotOrder } from './snapshot-order';
 import { BOARD_KEY, BOARD_KIND, TEAM_KEY, TEAM_KIND, WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
@@ -443,6 +444,17 @@ const applyFleetSnapshot = (payload: { runs?: RunInfo[]; chain?: ChainStatus | n
     listener();
   }
 };
+
+type FleetPayload = { runs?: RunInfo[]; chain?: ChainStatus | null };
+
+/** Pushes and pulled replies in the order they stand for: an older reply never replaces a newer push (D-49). */
+const fleetOrder = createSnapshotOrder();
+
+const pullFleetStatus = (): Promise<void> =>
+  fleetOrder.pull(
+    () => invokeBoard('fleetStatus') as Promise<FleetPayload | null>,
+    (status) => applyFleetSnapshot(status ?? {}),
+  );
 
 /** Whether the board issues are unfolded under the toolbar (req-73; view state, per session). */
 let boardIssuesOpen = false;
@@ -1575,9 +1587,7 @@ async function startInteractive(
   }
   const runId = (result as { runId?: string }).runId ?? null;
   // The thread follows the fleet snapshot; pull one so it shows the run now.
-  await invokeBoard('fleetStatus')
-    .then((status) => applyFleetSnapshot((status ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }))
-    .catch(() => undefined);
+  await pullFleetStatus().catch(() => undefined);
   if (open) {
     openTicketThread(api, card);
   }
@@ -1930,8 +1940,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
         }
         // The thread follows the ticket's newest run — pull the fleet so
         // the resumed run shows now (the takeover tab used to open it).
-        void invokeBoard('fleetStatus')
-          .then((status) => applyFleetSnapshot((status ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }))
+        void pullFleetStatus()
           .catch(() => undefined);
       });
     },
@@ -3333,10 +3342,10 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     });
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
-    api.backend.on('fleet-changed', (payload) =>
-      applyFleetSnapshot((payload ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
-    void invokeBoard('fleetStatus').then((result) =>
-      applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
+    api.backend.on('fleet-changed', (payload) => {
+      fleetOrder.push(() => applyFleetSnapshot((payload ?? {}) as FleetPayload));
+    });
+    void pullFleetStatus().catch(() => undefined);
 
     // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
     // chord raises Drey, reveals the board and opens the create modal.

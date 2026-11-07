@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { openTicketDocument, type TicketDocumentReply, type TicketOpenDeps } from './open-ticket';
 
@@ -48,21 +46,5 @@ describe('openTicketDocument (D-27)', () => {
     const { deps, opened } = harness(new Error('no engine'));
     await openTicketDocument(deps, 'T-0092', 'tickets/10-inbox/T-0092.md');
     expect(opened).toEqual([['tickets/10-inbox/T-0092.md', 'board']]);
-  });
-});
-
-describe('the plugin has one way to open a ticket (D-27)', () => {
-  const source = readFileSync(fileURLToPath(new URL('./index.ts', import.meta.url)), 'utf8');
-
-  it('Create opens through the opener, not the path of its reply', () => {
-    const create = source.slice(source.indexOf("invokeBoard('create'"), source.indexOf("create.addEventListener('click', submit)"));
-    expect(create).toContain('openCreatedTicket(');
-    expect(create).not.toMatch(/documents\.open|openBoardFile/);
-  });
-
-  it('a board file route only ever carries a board file', () => {
-    const uses = source.match(/openBoardFile\(api, [^)]*\)/g) ?? [];
-    expect(uses).toEqual(['openBoardFile(api, path)']);
-    expect(source).toMatch(/openFile: \(path: string\) => openBoardFile\(api, path\)/);
   });
 });

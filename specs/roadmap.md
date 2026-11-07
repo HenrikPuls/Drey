@@ -121,7 +121,6 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 - **D-47 — An empty band stays under a tab whose Capacity panel is hidden** (S; owner request, outside the list, 2026-11-07; found by wave 4.9 on the Persona and Crew tabs). The Capacity panel shows only with the Board tab (milestone 194); on every other tab it hides its body, but the bottom dock keeps its height, so an empty band sits under the editor. Done when a bottom dock whose only panel draws nothing takes no height (the frame: `Dock` / `DockService`, the one-panel rule of milestone 199), proved by a spec and the 7k / 7f screenshots.
 
-- **D-49 — `e2e/work-panel.spec.ts:104` failed 4 of 4 on the integration checkout at d24d09b5, not reproduced anywhere else** (S; owner request, outside the list, 2026-11-07). After one pushed `fleet-changed`, `toHaveCount(3)` passed and a line later the question row (T-0104) was gone or behind the review row — something replaced the pushed runs. req-146 ran the same test 16 of 16 green on a fresh build of the same commit and found no second `fleet-changed` in a main-process trace; the test now re-pushes its state every 100 ms, so it no longer shows the cause. Open: what replaced the runs on that checkout (a `fleetStatus` reply or `fleet` signal from a live engine adopted from the owner's home? the checkout is the owner's integration folder, not a temp home). Done when the overwrite is explained or ruled out with the one-push test on that checkout.
 
 - **D-46 — `persona.skills` never reaches a run** (M; owner request, outside the list, 2026-11-07; found by wave 4.9 reading the engine). The persona record carries `skills`, the boards (7k, 5d, 10i) say the skills ride along, and the runner never loads them into a run's prompt or workspace. Done when a run of a persona with skills has them in its prompt/workspace, proved by an engine spec; the 7k Skills sentence stays a "feature not yet built — D-46" row until then.
 
@@ -138,7 +137,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
 
-_Shipped defects:_ D-25, D-27, D-28, D-33 and D-40, the desktop and client store defects, as milestone 205; D-11 to D-22, the sweep on a dricket store, shipped as milestone 181; D-1, Mission Control chat reaching no model, shipped as
+_Shipped defects:_ D-25, D-27, D-28, D-33, D-40 and D-49, the desktop and client store defects, as milestone 205; D-11 to D-22, the sweep on a dricket store, shipped as milestone 181; D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
