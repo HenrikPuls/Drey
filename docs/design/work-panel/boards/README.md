@@ -22,6 +22,11 @@ other 33 boards are static and ignore it), one
 titles, order, notes) and `notes.md` (the sticky notes, decisions 1–31 under
 `decisions1104`).
 
+`compare.html` is the comparison viewer: open it in a browser, load a board
+PNG and the screenshot taken at the board's size, and switch between side by
+side, overlay, swipe and a pixel diff; the step-by-step is
+[../fidelity-checklist.md](../fidelity-checklist.md).
+
 Re-export when the canvas changes: read the artifact's `project/*.dc.html` and
 `project/canvas.json`, copy them here, re-render the PNGs (the script used:
 headless Edge over every `boards` entry of `canvas.json`), update the version

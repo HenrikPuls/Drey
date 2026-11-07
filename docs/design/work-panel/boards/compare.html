@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board vs build — fidelity compare</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f4f5; --fg: #18181b; --line: #d4d4d8; --accent: #2563eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #18181b; --fg: #e4e4e7; --line: #3f3f46; } }
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 2; }
+  header label { display: inline-flex; gap: 6px; align-items: center; }
+  header input[type=file] { max-width: 220px; }
+  header .seg button { padding: 4px 10px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+  header .seg button[aria-pressed=true] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  header .seg button + button { margin-left: -1px; }
+  main { padding: 12px; overflow: auto; }
+  #stage { position: relative; display: inline-block; border: 1px solid var(--line); background: #fff; }
+  #stage img { display: block; image-rendering: pixelated; }
+  #stage.side { display: flex; gap: 12px; border: 0; background: transparent; }
+  #stage.side img { border: 1px solid var(--line); }
+  #stage.overlay #shot { position: absolute; inset: 0; opacity: var(--alpha, .5); }
+  #stage.swipe #shot { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--swipe, 50%)) 0 0); }
+  #stage.swipe::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--swipe, 50%); width: 1px; background: var(--accent); pointer-events: none; }
+  #stage.diff { background: #000; }
+  #stage.diff canvas { display: block; }
+  #info { margin-left: auto; opacity: .75; }
+  .warn { color: #b91c1c; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <label>Board PNG <input id="boardFile" type="file" accept="image/png"></label>
+  <label>Screenshot <input id="shotFile" type="file" accept="image/png,image/jpeg"></label>
+  <span class="seg" role="group" aria-label="Mode">
+    <button data-mode="side" aria-pressed="true">Side by side</button>
+    <button data-mode="overlay" aria-pressed="false">Overlay</button>
+    <button data-mode="swipe" aria-pressed="false">Swipe</button>
+    <button data-mode="diff" aria-pressed="false">Diff</button>
+  </span>
+  <label id="alphaWrap">Opacity <input id="alpha" type="range" min="0" max="100" value="50"></label>
+  <label id="swipeWrap" hidden>Swipe <input id="swipe" type="range" min="0" max="100" value="50"></label>
+  <label>Zoom <select id="zoom"><option>50</option><option selected>100</option><option>200</option></select>%</label>
+  <span id="info">Load the board's PNG from boards/ and the screenshot taken at the board's size. Query: ?board=DeskBoard.png loads a sibling file.</span>
+</header>
+<main>
+  <div id="stage" class="side">
+    <img id="board" alt="board">
+    <img id="shot" alt="screenshot">
+    <canvas id="diffCanvas" hidden></canvas>
+  </div>
+</main>
+<script>
+(function () {
+  const stage = document.getElementById('stage');
+  const board = document.getElementById('board');
+  const shot = document.getElementById('shot');
+  const canvas = document.getElementById('diffCanvas');
+  const info = document.getElementById('info');
+  const alpha = document.getElementById('alpha');
+  const swipe = document.getElementById('swipe');
+  const zoom = document.getElementById('zoom');
+  let mode = 'side';
+
+  function load(input, img) {
+    input.addEventListener('change', () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      img.onload = () => { URL.revokeObjectURL(url); report(); };
+      img.src = url;
+    });
+  }
+  load(document.getElementById('boardFile'), board);
+  load(document.getElementById('shotFile'), shot);
+
+  const q = new URLSearchParams(location.search);
+  if (q.get('board')) { board.src = q.get('board'); board.onload = report; }
+  if (q.get('shot')) { shot.src = q.get('shot'); shot.onload = report; }
+
+  function report() {
+    const parts = [];
+    if (board.naturalWidth) parts.push(`board ${board.naturalWidth}×${board.naturalHeight}`);
+    if (shot.naturalWidth) parts.push(`screenshot ${shot.naturalWidth}×${shot.naturalHeight}`);
+    info.textContent = parts.join(' · ');
+    if (board.naturalWidth && shot.naturalWidth && (board.naturalWidth !== shot.naturalWidth || board.naturalHeight !== shot.naturalHeight)) {
+      info.innerHTML += ' <span class="warn">— sizes differ: shoot at the board\'s size with device scale factor 1</span>';
+    }
+    applyZoom();
+    if (mode === 'diff') drawDiff();
+  }
+
+  function applyZoom() {
+    const z = Number(zoom.value) / 100;
+    for (const img of [board, shot]) {
+      if (!img.naturalWidth) continue;
+      img.style.width = (img.naturalWidth * z) + 'px';
+      img.style.height = (img.naturalHeight * z) + 'px';
+    }
+    canvas.style.width = (canvas.width * z) + 'px';
+    canvas.style.height = (canvas.height * z) + 'px';
+  }
+  zoom.addEventListener('change', applyZoom);
+
+  function drawDiff() {
+    if (!board.naturalWidth || !shot.naturalWidth) return;
+    const w = Math.max(board.naturalWidth, shot.naturalWidth);
+    const h = Math.max(board.naturalHeight, shot.naturalHeight);
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const a = document.createElement('canvas'); a.width = w; a.height = h;
+    const b = document.createElement('canvas'); b.width = w; b.height = h;
+    a.getContext('2d').drawImage(board, 0, 0);
+    b.getContext('2d').drawImage(shot, 0, 0);
+    const pa = a.getContext('2d').getImageData(0, 0, w, h);
+    const pb = b.getContext('2d').getImageData(0, 0, w, h);
+    const out = ctx.createImageData(w, h);
+    let differing = 0;
+    for (let i = 0; i < pa.data.length; i += 4) {
+      const d = Math.abs(pa.data[i] - pb.data[i]) + Math.abs(pa.data[i + 1] - pb.data[i + 1]) + Math.abs(pa.data[i + 2] - pb.data[i + 2]);
+      const g = Math.round((pa.data[i] + pa.data[i + 1] + pa.data[i + 2]) / 3 * 0.25);
+      if (d > 48) { differing++; out.data[i] = 255; out.data[i + 1] = 40; out.data[i + 2] = 40; }
+      else { out.data[i] = g; out.data[i + 1] = g; out.data[i + 2] = g; }
+      out.data[i + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0);
+    info.textContent += ` · ${(differing / (w * h) * 100).toFixed(1)} % of pixels differ (red)`;
+    applyZoom();
+  }
+
+  for (const btn of document.querySelectorAll('[data-mode]')) {
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode;
+      for (const b of document.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b === btn));
+      stage.className = mode;
+      document.getElementById('alphaWrap').hidden = mode !== 'overlay';
+      document.getElementById('swipeWrap').hidden = mode !== 'swipe';
+      const imgs = mode !== 'diff';
+      board.hidden = !imgs; shot.hidden = !imgs; canvas.hidden = imgs;
+      report();
+    });
+  }
+  alpha.addEventListener('input', () => stage.style.setProperty('--alpha', alpha.value / 100));
+  swipe.addEventListener('input', () => stage.style.setProperty('--swipe', alpha && swipe.value + '%'));
+})();
+</script>
+</body>
+</html>

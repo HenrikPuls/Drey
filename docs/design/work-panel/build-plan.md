@@ -132,6 +132,8 @@ The goal the owner set at the start — **the whole UI is rendered as the boards
 4. **Review against the board before the merge.** The integrating session (Fable) opens the board and the screenshot side by side and refuses the merge on a visible difference; the owner's round follows on the integrated build with the canvas open, board by board.
 5. **SDK changes are allowed, but discussed first.** Where a board needs something the plugin SDK or the base cannot do today (a panel header drawn by the plugin, a status bar layout, a dock behaviour), the session stops, names the gap with the board and a recommendation, and the owner decides (the decision lands in the canvas notes and here); the change ships with its SDK version bump and the sample plugin updated.
 6. **Tokens, not hexes; catalog, not literals** — unchanged (README rules, ADR-0057, ADR-0091).
+7. **The working form is [fidelity-checklist.md](fidelity-checklist.md)** (2026-11-07): twelve steps every UI session's brief carries verbatim — read the board HTML and PNG first and hand in a *measure sheet* before the first edit, shoot the built app at the board's size, compare in [boards/compare.html](boards/compare.html) (side by side, overlay, swipe, pixel diff), write the deviation list into the changelog's `Fidelity:` block. The integrator checks the sheet, the screenshots and the list before a merge.
+8. **Cheapest sensible model** (owner, 2026-11-07): the scoped board-to-screen sessions run on Sonnet, the frame and the review on Opus; Fable only orchestrates.
 
 ### Wave 4 — the fidelity wave (replaces the feature list under "Wave 4" above, which moves to wave 5)
 
@@ -139,14 +141,14 @@ Order: 4.0 first, alone; then 4.1–4.6 in parallel within the pool; 4.7 last.
 
 | # | Session | Model | Boards | Owns | Done when |
 |---|---|---|---|---|---|
-| 4.0 | `9a-frame` | **Fable** | 9a (req-104): title bar, dock headers 28 px + icon strips, tab bar, meta bar, status bar, panel chrome, ticket card, Assistant without rail; tokens | `src/styles.css`, `src/app/dock/**`, `src/app/titlebar/**`, `src/app/status-bar/**`, `src/app/panes/` tab bar, the SDK's panel header contract if a plugin panel needs one | 9a screenshot = board; the frame rule for every panel written down |
+| 4.0 | `9a-frame` | **Opus** | 9a (req-104): title bar, dock headers 28 px + icon strips, tab bar, meta bar, status bar, panel chrome, ticket card, Assistant without rail; tokens | `src/styles.css`, `src/app/dock/**`, `src/app/titlebar/**`, `src/app/status-bar/**`, `src/app/panes/` tab bar, the SDK's panel header contract if a plugin panel needs one | 9a screenshot = board; the frame rule for every panel written down |
 | ~~4.1~~ | ~~`9b-panels`~~ | — | **9b is not a target design** (owner, 2026-11-06 evening; `specs/decisions.md`). The panels keep their content; only the frame of 4.0 (headers, chrome) reaches them. | — | — |
 | 4.2 | `desk-work-board-crew` | Sonnet | 7a, 7e, 7f, 7k, 7h, 7i | `plugins/tickets/renderer/{work-panel,board,team}/**`, `src/app/titlebar/view-switcher.*`, `windows/` | each board = screenshot |
 | 4.3 | `desk-ticket-pages` | Sonnet | 7b, 7c, 7d, 7j (incl. E13-10 Parts block, E12-19 splitter) | `plugins/tickets/renderer/{ticket-document,review,ticket-header,ready-view}.*` | each board = screenshot |
 | 4.4 | `desk-settings-autopilot` | Sonnet | 7g, 10t desktop part | `plugins/tickets/renderer/settings/**`, `src/app/settings/**`, `status-slot.ts`, `autopilot/` | boards = screenshots; Autopilot item seen running with a scratch runner |
 | 4.5 | `mc-phone` | Sonnet | 10a–10d, 10g–10m, 10o, 10p, 10t phone part | `libs/mission-ui/src/**` phone templates/CSS, `apps/mission-control/src/app/app.*` phone rules | each board at 390×844 = screenshot |
 | 4.6 | `mc-ipad` | Sonnet | 5b–5i, 10e, 10f, 10n, 10q, 10r, 10s, 10t iPad part | `libs/mission-ui/src/**` wide templates/CSS, `shell/` | each board at 1194×834 / 834×1194 = screenshot |
-| 4.7 | `fidelity-review` | **Fable** | all | — (reads; small fixes only) | one deviation table over all 40 boards, every row fixed or owner-accepted |
+| 4.7 | `fidelity-review` | **Opus** | all | — (reads; small fixes only) | one deviation table over all 40 boards, every row fixed or owner-accepted |
 
 Engine-side items still open (req-99c phases in Building, E12-3b, E14-9b, the persisted ids) run as before in Opus sessions when the pool allows; they change no appearance.
 
