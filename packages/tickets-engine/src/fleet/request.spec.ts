@@ -124,6 +124,26 @@ describe('composeRunRequest — the owner\'s columns (D-29)', () => {
   });
 });
 
+describe('composeRunRequest — a store ticket has no file (D-30)', () => {
+  const dk = { bin: 'dk', store: 'S:/board', dataDir: '', checkout: '', parkStage: null, retreatStage: null, trailers: false };
+
+  it('the brief names the working copy, never the virtual path that exists on no disk', () => {
+    const result = composeRunRequest(base({ dk }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.instruction).toMatch(/The ticket file: \S*_worktrees[\\/]T-0001\.ticket\.md — your working copy/);
+    expect(result.request.instruction).toContain('the runner takes your changes back');
+    expect(result.request.instruction).not.toMatch(/prioritized[\\/]T-0001\.md/);
+    expect(result.request.ticketRelPath).toBe('tickets/prioritized/T-0001.md'); // the card's virtual path stays its identity
+  });
+
+  it('a file board keeps the real path', () => {
+    const result = composeRunRequest(base());
+    expect(result.ok && result.request.instruction).toMatch(/The ticket file: \S*prioritized[\\/]T-0001\.md — it lives in the tickets repo/);
+  });
+});
+
 describe('composeRunRequest', () => {
   it('builds a dispatched run: the pull stays in its phase, the move follows the working column', () => {
     const result = composeRunRequest(

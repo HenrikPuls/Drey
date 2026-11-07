@@ -21,6 +21,7 @@ import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../core/ticket-files';
+import { mergeWorkerChapters } from '../core/ticket-chapters';
 import { hasScoutReport } from '../core/scout';
 import { TicketsGit } from '../core/tickets-git';
 import { PERSONAS_DIR } from '../core/persona';
@@ -28,7 +29,7 @@ import { costOf } from '../core/model-prices';
 import { appendVerlaufEntry, renderVerlaufLine, verlaufEntryOf } from '../core/verlauf';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { COMPACT_CAPABILITY, contextCap, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
-import { killTreeGuarded, listenerPid, processAlive, processStartMs, type ExecFn } from './procs';
+import { killTreeGuarded, listenerPid, processAlive, processStartMs, recordedWorkerPids, workerGone, type ExecFn } from './procs';
 import {
   DEFAULT_FLEET_HANDOVER,
   type FleetHandoverConfig,
@@ -46,6 +47,7 @@ import {
   type LinkReport,
   type PreparedWorktree,
 } from './worktrees';
+import { ticketCopyPathFor } from './worktree-home';
 import { capTail, SANITY_CAP } from './capping';
 import { TelemetryFold, type RunTelemetry } from './telemetry';
 import { dricketTrailers, RunLease, runOwnerId, trailerInstruction } from './run-lease';
@@ -188,6 +190,11 @@ export interface RunSupervisorDeps {
   readonly now?: () => Date;
   /** Test seam over the machine gate's shell exec. */
   readonly exec?: ExecFn;
+  /**
+   * The board lives in a dricket store (D-42): the legacy tree is frozen history. A run record from
+   * before the cut-over has no `dk`, and its stamp, Log and move would otherwise land in that tree.
+   */
+  readonly storeBacked?: () => boolean;
   /** Test seam over the gate's shell commands (cwd = the worktree). */
   readonly execShell?: (command: string, cwd: string) => Promise<void>;
   /** Test seam over worktree preparation. */
@@ -932,6 +939,9 @@ export class RunSupervisor {
     let prepared: PreparedWorktree | null = null;
     try {
       await fsp.mkdir(dir, { recursive: true });
+      if (lease !== null) {
+        await this.writeTicketCopy(request, dir);
+      }
       // A scout run (E8, concept §5.6) prepares no worktree and links
       // nothing: it reads the named checkouts in place — no branch, no
       // tree, nothing to heal or move aside.
@@ -1642,6 +1652,25 @@ export class RunSupervisor {
     return this.list().some((r) => !TERMINAL.includes(r.state) && r.state !== 'detached');
   }
 
+  /**
+   * D-34: `detached` means the worker may still live, so it blocks the ticket and counts as active.
+   * A worker provably gone ends that: the run fails, the claim (if any) goes, the ticket is free.
+   */
+  private async settleIfWorkerGone(run: LiveRun): Promise<void> {
+    const pids = await recordedWorkerPids(run.dir, run.info.pid);
+    if (!(await workerGone(pids, Date.parse(run.info.lastActivity), this.exec))) {
+      return;
+    }
+    run.stopNote = `the worker of run ${run.info.id} is gone - the run is over`;
+    run.info = { ...run.info, gateFailure: 'the worker is gone: it ended while no runner watched it' };
+    await this.finish(run, 'failed');
+  }
+
+  /** The legacy tree of a board that moved to a store takes no write from a run record older than the move (D-42). */
+  private legacyTreeClosed(run: LiveRun): boolean {
+    return run.request.dk === undefined && this.deps.storeBacked?.() === true;
+  }
+
   /** Whether a live run (starting/running/stopping, or a detached one —
    *  unwatchable, treat as busy) is working in this worktree: the
    *  prepare-time branch-conflict healing (T-0044) never removes a tree
@@ -1873,7 +1902,11 @@ export class RunSupervisor {
   async reap(): Promise<void> {
     for (const run of [...this.runs.values()]) {
       const state = run.info.state;
-      if (TERMINAL.includes(state) || state === 'detached' || state === 'stopping' || run.gating || run.handover !== undefined) {
+      if (state === 'detached') {
+        await this.settleIfWorkerGone(run);
+        continue;
+      }
+      if (TERMINAL.includes(state) || state === 'stopping' || run.gating || run.handover !== undefined) {
         continue;
       }
       if (run.info.held !== true && run.request.interactive === undefined && !run.agentDone) {
@@ -2022,6 +2055,7 @@ export class RunSupervisor {
    */
   private async runGate(run: LiveRun): Promise<string | null> {
     if (run.request.gate === 'structural') {
+      await this.syncTicketCopy(run);
       const text =
         run.request.dk !== undefined
           ? await this.storeOf(run.request.dk)
@@ -2151,6 +2185,7 @@ export class RunSupervisor {
     // last word is only whether the file carries one, so the owner
     // knows what waits (and a report-less end is visible, never silent).
     if (run.request.form === 'scout') {
+      await this.syncTicketCopy(run);
       const text =
         run.request.dk !== undefined
           ? await this.storeOf(run.request.dk)
@@ -2246,6 +2281,10 @@ export class RunSupervisor {
         }) ?? personaId,
       );
     }
+    if (this.legacyTreeClosed(run)) {
+      this.deps.log(`run ${run.info.id}: ${request.ticketId} predates the store - nothing is parked`);
+      return { ok: true };
+    }
     const here = await fsp
       .access(path.join(request.ticketsVaultPath, run.currentRelPath))
       .then(() => true)
@@ -2287,6 +2326,10 @@ export class RunSupervisor {
     const request = run.request;
     if (request.dk !== undefined) {
       return this.moveDk(run, nextPhase);
+    }
+    if (this.legacyTreeClosed(run)) {
+      this.deps.log(`run ${run.info.id}: ${request.ticketId} predates the store - nothing is moved`);
+      return { ok: true };
     }
     const here = await fsp
       .access(path.join(request.ticketsVaultPath, run.currentRelPath))
@@ -2396,6 +2439,9 @@ export class RunSupervisor {
     this.deps.log(`run ${run.info.id} → ${state}`);
     await this.persist(run);
     await this.clearRunStamp(run, run.stopNote === undefined ? null : `${run.stopNote}${usageSummary(run.info)}`, this.verlaufLineFor(run, state));
+    if (run.request.dk !== undefined && TERMINAL.includes(state)) {
+      await fsp.rm(ticketCopyPathFor(run.request.ticketsVaultPath, run.request.ticketId), { force: true }).catch(() => undefined);
+    }
     // E3: the run's one-line lesson lands in its persona's memory — the
     // next dispatch of this persona reads it back as the instruction's
     // `## Memory` slice. Best-effort: a memory write never fails the settle.
@@ -2521,7 +2567,7 @@ export class RunSupervisor {
    * earlier one with a stale text (the cleared run stamp came back).
    */
   private patchTicket(run: LiveRun, patch: (text: string) => string): Promise<void> {
-    if (run.request.dk !== undefined) {
+    if (run.request.dk !== undefined || this.legacyTreeClosed(run)) {
       return Promise.resolve(); // E14-5: a dricket ticket is never written by a file patch
     }
     const result = (run.ticketQueue ?? Promise.resolve()).then(() => this.patchTicketNow(run, patch));
@@ -2716,6 +2762,7 @@ export class RunSupervisor {
     if (run.waitReleased === true || lease.released || lease.fenced || run.claimLost !== undefined) {
       return;
     }
+    await this.syncTicketCopy(run);
     const key = slugStatusKey(`run ${run.info.id} waits`) ?? undefined;
     const note = renderStatusComment({
       verb: 'needs-decision',
@@ -2831,6 +2878,7 @@ export class RunSupervisor {
    * Once per run: a second call (park after a failed move) finds the line written.
    */
   private async verlaufInClaim(run: LiveRun, lease: RunLease, state: RunState): Promise<void> {
+    await this.syncTicketCopy(run);
     if (run.verlaufWritten === true) {
       return;
     }
@@ -2840,6 +2888,40 @@ export class RunSupervisor {
       return;
     }
     await lease.patchInClaim((text) => appendVerlaufEntry(text, line));
+  }
+
+  /**
+   * The worker's ticket on a store (D-30, E14-5c): the virtual path of a store card is on no disk, and
+   * a worker told to edit it went looking and wrote a legacy file into the meta vault. So it gets a
+   * copy of the ticket; the text it was given stays in the run's folder, so a later take-back knows
+   * what the worker changed. A failed read is a log line: the worker then has no copy to edit, nothing more.
+   */
+  private async writeTicketCopy(request: RunRequest, dir: string): Promise<void> {
+    try {
+      const { text } = await this.storeOf(request.dk!).show(request.ticketId);
+      const copy = ticketCopyPathFor(request.ticketsVaultPath, request.ticketId);
+      await fsp.mkdir(path.dirname(copy), { recursive: true });
+      await fsp.writeFile(copy, text, 'utf8');
+      await fsp.writeFile(path.join(dir, TICKET_GIVEN_FILE), text, 'utf8');
+    } catch (error) {
+      this.deps.log(`${request.ticketId}: the worker's copy of the ticket could not be written - ${messageOf(error)}`);
+    }
+  }
+
+  /** What the worker changed in its copy goes into the store, inside the claim; calling it again changes nothing. */
+  private async syncTicketCopy(run: LiveRun): Promise<void> {
+    if (run.request.dk === undefined || run.lease === undefined) {
+      return;
+    }
+    const givenPath = path.join(run.dir, TICKET_GIVEN_FILE);
+    const given = await fsp.readFile(givenPath, 'utf8').catch(() => null);
+    const worker = await fsp.readFile(ticketCopyPathFor(run.request.ticketsVaultPath, run.request.ticketId), 'utf8').catch(() => null);
+    if (given === null || worker === null || given === worker) {
+      return;
+    }
+    if (await run.lease.patchInClaim((current) => mergeWorkerChapters(given, worker, current))) {
+      await fsp.writeFile(givenPath, worker, 'utf8').catch(() => undefined);
+    }
   }
 
   /** Where a ticket goes when the run does not move it: back to where it sat, else the stage before. */
@@ -2921,6 +3003,9 @@ export class RunSupervisor {
     return this.now().toISOString();
   }
 }
+
+/** The ticket text the worker's copy started from, in the run's folder (D-30). */
+const TICKET_GIVEN_FILE = 'ticket-given.md';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

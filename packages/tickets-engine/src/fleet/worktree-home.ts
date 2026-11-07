@@ -45,6 +45,15 @@ export function worktreePathFor(vaultPath: string, repo: RepoRef, ticketId: stri
 }
 
 /**
+ * A store ticket's working copy for the run that holds it (D-30): beside the
+ * worktrees, gitignored, skipped by the vault's tree and by the worktree
+ * sweeps (a file, not a folder). One per ticket, as one run holds a ticket.
+ */
+export function ticketCopyPathFor(vaultPath: string, ticketId: string): string {
+  return path.join(vaultPath, WORKTREES_DIR, `${ticketId}.ticket.md`);
+}
+
+/**
  * The pre-T-0044 base (`<fleetRoot>/worktrees`) with its
  * `<repo>-<ticket>` folder names. Never written again; the boot
  * migration and the Clean up button empty it (live runs keep theirs

@@ -8,7 +8,9 @@
  * logic without touching real processes.
  */
 import { spawn as nodeSpawn } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
 import * as net from 'node:net';
+import * as path from 'node:path';
 
 const isWindows = process.platform === 'win32';
 
@@ -205,6 +207,45 @@ export async function processAlive(pid: number, exec: ExecFn): Promise<boolean> 
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether a detached run's worker is provably gone (D-34): none of its recorded
+ * pids runs a process that could be the worker. A process born after the run's
+ * last sign of life is a reused number, not the worker. No pid proves nothing,
+ * and a start time that cannot be read counts as alive.
+ */
+export async function workerGone(
+  pids: readonly (number | null | undefined)[],
+  lastActivityMs: number,
+  exec: ExecFn,
+): Promise<boolean> {
+  const known = pids.filter((pid): pid is number => typeof pid === 'number');
+  if (known.length === 0) {
+    return false;
+  }
+  for (const pid of known) {
+    if (!(await processAlive(pid, exec))) {
+      continue;
+    }
+    const started = await processStartMs(pid, exec);
+    if (started === null || !Number.isFinite(lastActivityMs) || started <= lastActivityMs) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** The worker pids a run's folder and record name: the record's, and the server's in `attach.json`. */
+export async function recordedWorkerPids(runDir: string, pid: number | null): Promise<readonly number[]> {
+  const raw = await fsp.readFile(path.join(runDir, 'attach.json'), 'utf8').catch(() => null);
+  let attached: unknown = null;
+  try {
+    attached = raw === null ? null : (JSON.parse(raw) as { pid?: unknown }).pid;
+  } catch {
+    // an unreadable record names nothing
+  }
+  return [...(pid === null ? [] : [pid]), ...(typeof attached === 'number' ? [attached] : [])];
 }
 
 /**

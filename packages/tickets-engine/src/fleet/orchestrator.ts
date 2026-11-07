@@ -866,6 +866,11 @@ export class Orchestrator {
     }
   }
 
+  /** Whether the board this chain drives lives in a dricket store (D-42). */
+  onStore(): boolean {
+    return this.config?.store !== undefined;
+  }
+
   /** The supervisors' lease-reaper round (the runner's timer calls this). */
   async reapAll(): Promise<void> {
     for (const provider of WORKER_PROVIDERS) {

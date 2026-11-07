@@ -126,6 +126,12 @@ export interface InstructionInput {
    */
   readonly ticketFile?: string;
   /**
+   * The ticket lives in a store (D-30): `ticketFile` is the run's working
+   * copy, whose changes the runner takes back; the brief says so, or a worker
+   * looks for the real file.
+   */
+  readonly ticketFileIsCopy?: boolean;
+  /**
    * The work repo's agent instructions (`CLAUDE.md` preferred,
    * `AGENTS.md` fallback), read by the caller: inlined VERBATIM as the
    * instruction's first section, never capped — the CLI's own auto-load
@@ -328,8 +334,12 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   }
   if (input.ticketFile !== undefined && input.ticketFile !== '') {
     parts.push(
-      `The ticket file: ${input.ticketFile} — it lives in the tickets repo, outside the worktree, and is the one ` +
-        `file besides the worktree you may edit (the plan and the Log go there). Use this path directly; do not search the disk for it.`,
+      input.ticketFileIsCopy === true
+        ? `The ticket file: ${input.ticketFile} — your working copy of the ticket, outside the worktree, and the one ` +
+            `file besides the worktree you may edit (the plan, the handover and the Log go there). The board keeps the ticket in a ` +
+            `store you do not touch: the runner takes your changes back when your turn ends. Use this path directly; do not search the disk for another ticket file.`
+        : `The ticket file: ${input.ticketFile} — it lives in the tickets repo, outside the worktree, and is the one ` +
+            `file besides the worktree you may edit (the plan and the Log go there). Use this path directly; do not search the disk for it.`,
     );
   }
   const description = input.description.trim();

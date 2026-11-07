@@ -10,9 +10,11 @@
  * `GET /status` (polled onto the board while anything is live) and the
  * stream files via `GET /stream/:id` for the watch view.
  */
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
+import { promisify } from 'node:util';
+import { recordedWorkerPids, workerGone, type ExecFn } from '../fleet/procs';
 import type {
   AutopilotRecord,
   AutopilotRefusal,
@@ -28,6 +30,9 @@ import type {
 } from '../fleet/protocol';
 import { fleetBuildStamp, isStaleDaemon } from '../fleet/build-stamp';
 
+/** The process probes' exec: no shell, no window. */
+const plainExec: ExecFn = async (cmd, args) => (await promisify(execFile)(cmd, [...args], { windowsHide: true })).stdout;
+
 export interface FleetClientOpts {
   /** The fleet root — `<userRoot>/fleet` (descriptor, runs, worktrees). */
   readonly root: string;
@@ -36,6 +41,15 @@ export interface FleetClientOpts {
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Pushed whenever the polled run list or chain state differs — the board re-renders. */
   readonly onFleetChanged: (fleet: FleetSnapshot) => void;
+  /** Whether the board lives in a dricket store; the runner hears it at its start (D-42). */
+  readonly storeBacked?: () => Promise<boolean>;
+  /** Test seam over the process probes of a detached record (D-34). */
+  readonly exec?: ExecFn;
+}
+
+/** The runner's command line. */
+export function runnerSpawnArgs(runnerScript: string, root: string, storeBacked: boolean): string[] {
+  return [runnerScript, '--root', root, ...(storeBacked ? ['--store-backed'] : [])];
 }
 
 /** What the plugin pushes to the renderer: the runs plus the chain's control state. */
@@ -61,6 +75,7 @@ export class FleetClient {
   private deferNote: string | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnapshotJson = '';
+  private readonly detachedProbes = new Map<string, { at: number; gone: boolean }>();
 
   constructor(private readonly opts: FleetClientOpts) {}
 
@@ -103,12 +118,26 @@ export class FleetClient {
           continue;
         }
         const settled = ['done', 'stopped', 'failed', 'detached'].includes(stored.info.state);
-        found.push(settled ? stored.info : { ...stored.info, state: 'stopped' });
+        const dead = stored.info.state === 'detached' && (await this.detachedWorkerGone(id, stored.info));
+        found.push(settled && !dead ? stored.info : { ...stored.info, state: 'stopped' });
       } catch {
         // an unreadable record is skipped
       }
     }
     return found.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  /** D-34: with no runner to settle it, a detached record whose worker is gone only reads as over. Asked at most every 30 s per run: the board polls. */
+  private async detachedWorkerGone(id: string, info: RunInfo): Promise<boolean> {
+    const cached = this.detachedProbes.get(id);
+    const now = Date.now();
+    if (cached !== undefined && (cached.gone || now - cached.at < 30_000)) {
+      return cached.gone;
+    }
+    const pids = await recordedWorkerPids(path.join(this.opts.root, 'runs', id), info.pid);
+    const gone = await workerGone(pids, Date.parse(info.lastActivity), this.opts.exec ?? plainExec);
+    this.detachedProbes.set(id, { at: now, gone });
+    return gone;
   }
 
   private push(fleet: FleetSnapshot): void {
@@ -514,7 +543,8 @@ export class FleetClient {
     this.spawning = (async (): Promise<boolean> => {
       try {
         await fsp.mkdir(this.opts.root, { recursive: true });
-        const child = spawn(process.execPath, [this.opts.runnerScript, '--root', this.opts.root], {
+        const storeBacked = (await this.opts.storeBacked?.().catch(() => false)) ?? false;
+        const child = spawn(process.execPath, runnerSpawnArgs(this.opts.runnerScript, this.opts.root, storeBacked), {
           // ELECTRON_RUN_AS_NODE: the Electron binary runs the plain
           // Node entry; detached so the runner outlives Drey.
           env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },

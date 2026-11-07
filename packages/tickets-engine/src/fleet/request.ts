@@ -21,7 +21,7 @@ import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveA
 import { isAutoPhase } from './chain';
 import { personaCoachingSection, personaMemorySection } from './context-pack';
 import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunDkTarget, type RunRequest, type WorkerProviderId } from './protocol';
-import { worktreePathFor } from './worktree-home';
+import { ticketCopyPathFor, worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
   readonly card: TicketCard;
@@ -244,7 +244,8 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
   const promptText = personaPrompt ?? input.promptText;
   const branch = input.card.meta.branch ?? branchForTicket(input.card.id);
   const sections = ticketSections(input.ticketText);
-  const ticketFile = path.join(input.vaultPath, input.card.path);
+  // D-30: a store card's path is virtual, no such file exists: the worker gets a copy the runner takes back.
+  const ticketFile = input.dk !== undefined ? ticketCopyPathFor(input.vaultPath, input.card.id) : path.join(input.vaultPath, input.card.path);
   // The scout run's directory is its read ground — the named repo's
   // checkout, else the tickets vault — computed here and carried on the
   // request like the worktree home (ADR-0080): the runner never derives
@@ -283,6 +284,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         prompt: promptText,
         acceptance,
         ticketFile,
+        ...(input.dk !== undefined ? { ticketFileIsCopy: true } : {}),
         ...(repo!.link !== undefined && repo!.link.length > 0 ? { links: repo!.link } : {}),
         ...(extraRepos.length > 0
           ? { extraRepos: extraRepos.map((r) => ({ name: r.name, worktreePath: r.worktreePath, base: r.baseRef })) }

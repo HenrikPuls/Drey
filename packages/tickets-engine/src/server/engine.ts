@@ -128,6 +128,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     runnerScript: RUNNER_SCRIPT_PATH,
     log,
     onFleetChanged: () => hub.emit('fleet'),
+    storeBacked: async () => (await config.get<string>('backend')) === 'dricket',
   });
   // req-110: when the last Drey instance's event stream has been closed for
   // the grace span, the runner is asked to retire if idle — the runner keeps
