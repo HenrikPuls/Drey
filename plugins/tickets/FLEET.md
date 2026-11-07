@@ -47,8 +47,10 @@ id is `drey`).
                     the base
 ```
 
-`runner.json` missing means the runner is **down** (it exits cleanly after
-~15 min idle with no live runs; Drey respawns it on demand). A present
+`runner.json` missing means the runner is **down** (it exits cleanly when
+the Autopilot is switched Off with nothing live, when Drey quits with
+nothing live and no On/Paused Autopilot, and after ~15 min without a write
+— req-110, "Lifecycle gotchas"; the engine respawns it on demand). A present
 descriptor with an unreachable port means it died hard — the stale
 descriptor gets taken over by the next spawn.
 
@@ -113,6 +115,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
 | `POST /shutdown` | graceful retire: stops live runs (bounded), exits. With `{handover: true}` (what Drey sends for a newer build, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
+| `POST /retire-if-idle` | leave if nothing needs the runner (req-110; what the engine sends once Drey is gone): `{ok, exiting: true}` and the process ends, or `{ok, exiting: false, reason: "live runs" \| "autopilot"}` and it stays — the decision is the runner's, so no run that starts in between dies. No body. A runner from before req-110 answers 404 |
 | `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `packages/tickets-engine/src/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher |
 
 Writes change real state (worker processes, the board, the tickets repo).
@@ -401,8 +404,23 @@ device. Its own log lines start with `remote:` in the plugin log.
   runner (`handover` in a `run.json` marks a run in transit).
 - **Single instance**: a second runner finding a healthy peer exits quietly;
   a stale descriptor (dead peer) is taken over.
-- **Idle shutdown**: no live runs and ~15 min without requests → the runner
-  exits itself. Not a malfunction.
+- **Exit when deactivated or when Drey quits (req-110)**: the Autopilot
+  switched **Off** (the popover, Settings → Tickets, the Notaus) ends the
+  runner at once when nothing is live — a live run keeps it, and the idle
+  span takes over once the run ends. When **Drey quits** the engine, which
+  outlives Drey, notices its last Drey event stream closing (5 s grace, so
+  a reconnect is not a quit; a second `DREY_MULTI_INSTANCE` Drey still
+  subscribed holds it) and sends `POST /retire-if-idle`; the plugin's
+  deactivate asks the same, best-effort. The runner leaves only with no
+  live run and no On/Paused Autopilot — a running chain keeps draining
+  the board with Drey closed (ADR-0075/0077), and the phone's runs are
+  untouched. The engine respawns the runner on the next start.
+- **Idle shutdown**: no live runs, no On/Paused Autopilot and ~15 min
+  without a **write** (a POST) → the runner exits itself. Not a
+  malfunction. Reads (`/health`, `/status`, `/chain`, …) do not count:
+  before req-110 they did, and the engine's 2.5 s poll kept the runner
+  alive for as long as the engine lived — the leftover processes the
+  owner found.
 - **No global Node**: the runner is Electron-as-Node. To start one by hand
   (rarely needed), use the spawning checkout's electron binary with
   `ELECTRON_RUN_AS_NODE=1`, or the repo's vendored Node (`. .\env.ps1`, then
@@ -466,9 +484,11 @@ device. Its own log lines start with `remote:` in the plugin log.
 
 ## Pointers
 
-- Code: `packages/tickets-engine/src/fleet/` (`runner.ts`, `runs.ts`, `chain.ts`,
+- Code: `packages/tickets-engine/src/fleet/` (`runner.ts`, `runner-lifecycle.ts`
+  — when the runner may leave, req-110; `runs.ts`, `chain.ts`,
   `orchestrator.ts`, `providers.ts`, `protocol.ts`), client side
-  `plugins/tickets/main/fleet-client.ts`
+  `packages/tickets-engine/src/services/fleet-client.ts`; the Drey-gone
+  signal `packages/tickets-engine/src/server/drey-presence.ts`
 - Specs: `specs/ticket-schema.md` (tickets, gates, agent lane rules),
   ADR-0075/0076 (+0077 for the chain), `specs/changelog.md` M84+,
   manual §13 "Running agents on tickets"

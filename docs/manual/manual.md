@@ -1395,6 +1395,12 @@ it. You
 can reach it from a terminal, too: its address and token live in
 `<user data>/plugins/fleet/runner.json`.
 
+The runner does not stand around, either: switching the Autopilot **Off**
+ends it as soon as nothing is running, and closing Drey ends it when no run
+is live and the Autopilot is Off. A live run keeps it, and so does an On or
+Paused Autopilot — the chain keeps working with Drey closed. It comes back by
+itself the next time a run starts.
+
 ### The chain runs itself (milestone 85)
 
 A column with a **worker** runs itself. Settings → *Tickets* shows the

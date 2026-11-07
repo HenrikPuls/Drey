@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { hostname, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -235,6 +237,88 @@ async function gitInitVault(): Promise<void> {
   await git(['config', 'user.name', 'spec']);
   await git(['config', 'user.email', 'spec@example.com']);
 }
+
+/**
+ * Drey quit (req-110): the engine outlives Drey, so the plugin's event
+ * stream closing is its signal — once the last one has been gone for the
+ * grace span it asks the runner to retire if idle, over the runner's own
+ * loopback route. A fake runner stands in; the real verdict is runner.spec's.
+ */
+describe('Drey gone → the runner is asked to retire (req-110)', () => {
+  let runner: http.Server;
+  const asked: string[] = [];
+
+  beforeEach(async () => {
+    asked.length = 0;
+    runner = http.createServer((req, res) => {
+      const send = (status: number, body: unknown): void => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(body));
+      };
+      if (req.url === '/health') {
+        send(200, { ok: true, live: 0 });
+      } else if (req.url === '/retire-if-idle' && req.method === 'POST') {
+        asked.push(req.headers.authorization ?? '');
+        send(200, { ok: true, exiting: true });
+      } else {
+        send(404, { ok: false });
+      }
+    });
+    await new Promise<void>((resolve) => runner.listen(0, '127.0.0.1', resolve));
+    const port = (runner.address() as AddressInfo).port;
+    await fsp.mkdir(path.join(home, 'fleet'), { recursive: true });
+    await fsp.writeFile(path.join(home, 'fleet', 'runner.json'), JSON.stringify({ port, token: 'rt', pid: 1, startedAt: '', version: 1 }));
+    await engine.close();
+    engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined, dreyGoneGraceMs: 150 });
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => runner.close(() => resolve()));
+  });
+
+  const openStream = async (): Promise<AbortController> => {
+    const controller = new AbortController();
+    const response = await fetch(`${engine.invokeUrl}/api/events`, {
+      headers: { authorization: `Bearer ${engine.token}` },
+      signal: controller.signal,
+    });
+    expect(response.ok).toBe(true);
+    // The first frame (`: connected`) — the server has attached the stream.
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    await reader.read();
+    void reader.read().catch(() => undefined);
+    return controller;
+  };
+
+  const askedWithin = async (ms: number): Promise<boolean> => {
+    const deadline = Date.now() + ms;
+    while (asked.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return asked.length > 0;
+  };
+
+  it('asks once the last event stream has been closed for the grace span — with the runner\'s token', async () => {
+    const stream = await openStream();
+    stream.abort();
+    expect(await askedWithin(3_000)).toBe(true);
+    expect(asked).toEqual(['Bearer rt']);
+  });
+
+  it('a second Drey instance still on its stream keeps the runner', async () => {
+    const first = await openStream();
+    const second = await openStream();
+    first.abort();
+    expect(await askedWithin(600)).toBe(false);
+    second.abort();
+    expect(await askedWithin(3_000)).toBe(true);
+  });
+
+  it('serves retireIfIdle on the invoke channel for the plugin\'s own ask at deactivate', async () => {
+    expect(await engine.invoke('retireIfIdle')).toEqual({ ok: true, exiting: true });
+    expect(asked).toHaveLength(1);
+  });
+});
 
 describe('personas (ADR-0088, E3)', () => {
   it('listPersonas parses the personas directory and starts empty', async () => {
