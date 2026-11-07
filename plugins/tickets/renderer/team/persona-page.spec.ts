@@ -22,6 +22,7 @@ let retitled: string[];
 let backs: number;
 let host: HTMLElement;
 let dispose: (() => void) | null;
+let failLoads: number;
 
 function depsOf(): DeskDeps {
   return {
@@ -48,6 +49,10 @@ function depsOf(): DeskDeps {
     invoke: async (method, payload) => {
       invoked.push([method, payload]);
       if (method === 'personaImprovements') {
+        if (failLoads > 0) {
+          failLoads -= 1;
+          throw new TypeError('fetch failed');
+        }
         return { ok: true, persona: { skills: ['tdd'] }, proposals, openCount: proposals.length, frictionCount: 0 };
       }
       return replies[method] ?? { ok: true };
@@ -116,6 +121,7 @@ beforeEach(() => {
   host = document.createElement('div');
   document.body.append(host);
   dispose = null;
+  failLoads = 0;
 });
 
 afterEach(() => {
@@ -141,6 +147,34 @@ describe('the Persona page (board 7k)', () => {
     expect(stateText()).toBe('Saved');
     expect(retitled).toEqual(['Ben']);
     expect(personaWordCountOf('ben')).toBe(3);
+  });
+
+  it('a load that fails shows why and tries again by itself: the engine may be restarting', async () => {
+    failLoads = 1;
+    const real = globalThis.setTimeout;
+    const delays: number[] = [];
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, delay?: number) => {
+      delays.push(delay ?? 0);
+      return real(run, (delay ?? 0) > 0 ? 1 : 0);
+    }) as typeof setTimeout);
+    await mount();
+    await settle();
+    spy.mockRestore();
+    expect(delays).toContain(2_000);
+    expect(q<HTMLTextAreaElement>('.persona-text').value).toBe('You are Ben.');
+  });
+
+  it('keeps the error on screen while the engine stays away, and stops trying once closed', async () => {
+    failLoads = 1000;
+    await mount();
+    expect(q('.persona-note').textContent).toBe('fetch failed');
+    expect(host.querySelector('.persona-text')).toBeNull();
+    const calls = invoked.length;
+    dispose?.();
+    dispose = null;
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    expect(invoked.length).toBe(calls);
+    failLoads = 0;
   });
 
   it('shows the daily budget read-only: the patch cannot write it', async () => {

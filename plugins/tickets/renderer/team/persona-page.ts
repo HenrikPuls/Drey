@@ -27,6 +27,9 @@ import {
 import { initialsOf, roleLabel, usd } from './team-model';
 import type { TeamStore } from './team-store';
 
+/** How soon a failed load tries again: the engine may be restarting, and the board may stay quiet meanwhile. */
+const LOAD_RETRY_MS = 2_000;
+
 /** How often a clean page looks at the prompt file again after a board change. */
 const PROMPT_REREAD_MS = 4_000;
 
@@ -92,6 +95,7 @@ export function mountPersonaPage(deps: DeskDeps, store: TeamStore, mountHost: HT
   let lastPromptRead = 0;
   let viewKey = '';
   let disposed = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   let saveStateNode: HTMLElement | null = null;
   let saveButton: HTMLButtonElement | null = null;
@@ -370,6 +374,21 @@ export function mountPersonaPage(deps: DeskDeps, store: TeamStore, mountHost: HT
 
   const improvementsOf = async (): Promise<PersonaImprovementsReply> => (await deps.invoke('personaImprovements', { persona: id })) as PersonaImprovementsReply;
 
+  const failLoad = (text: string): void => {
+    if (disposed) {
+      return;
+    }
+    loadError = text;
+    render();
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer);
+    }
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      onChange();
+    }, LOAD_RETRY_MS);
+  };
+
   const load = async (persona: PersonaView): Promise<void> => {
     loading = true;
     try {
@@ -378,8 +397,7 @@ export function mountPersonaPage(deps: DeskDeps, store: TeamStore, mountHost: HT
         return;
       }
       if (!improvements.ok) {
-        loadError = improvements.error;
-        render();
+        failLoad(improvements.error);
         return;
       }
       view = persona;
@@ -392,8 +410,7 @@ export function mountPersonaPage(deps: DeskDeps, store: TeamStore, mountHost: HT
       host.retitle(persona.title);
       render();
     } catch (error) {
-      loadError = error instanceof Error ? error.message : String(error);
-      render();
+      failLoad(error instanceof Error ? error.message : String(error));
     } finally {
       loading = false;
     }
@@ -465,8 +482,8 @@ export function mountPersonaPage(deps: DeskDeps, store: TeamStore, mountHost: HT
       return;
     }
     if (view === null) {
-      // The tab may be restored before the snapshot or the directory arrive.
-      if (!loading && loadError === '' && vaultOptions() !== null) {
+      // The tab may be restored before the snapshot or the directory arrive; a failed load tries again on the next change.
+      if (!loading && vaultOptions() !== null) {
         void load(persona);
       }
       return;
@@ -505,6 +522,9 @@ export function mountPersonaPage(deps: DeskDeps, store: TeamStore, mountHost: HT
   onChange();
   return () => {
     disposed = true;
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer);
+    }
     offStore();
     offDeps();
     root.remove();
