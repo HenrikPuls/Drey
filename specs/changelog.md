@@ -21,6 +21,10 @@ cuts off at the timeout, a worker crash. The engine knows no parent and has no i
 - Not covered: homes a spec creates under its own prefix (`tickets-fleet-snapshot.spec.ts` uses `dfs-`); those specs
   stop their engine in `afterAll` and are not part of this sweep.
 - **Roadmap:** D-43 left with this change.
+- **Verification (owner, 2026-11-07): after the first e2e run on this build.** The five engines of 2026-11-06 (pids
+  44160, 52484, 49940, 49820, 49192) and the 265 `drey-e2e-home-*` homes were still there when this shipped — the sweep
+  was not run by hand. Done when, after that run, no `engine-main.js` process with a `test-results` vault is alive and
+  the temp dir holds no leftover home; the run's output shows the `e2e engine sweep:` line.
 
 ### Milestone 191 — req-110: the fleet runner exits when it is deactivated or when Drey quits idle
 
