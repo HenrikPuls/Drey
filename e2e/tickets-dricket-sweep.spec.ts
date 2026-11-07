@@ -162,7 +162,7 @@ test('the sweep defects on the store', async ({ page, electronApp }, testInfo) =
   expect(asked).toEqual({ count: 1, parented: true });
   await shot('tab-title');
 
-  // D-21: a live run opens the thread; the composer stays above the Capacity band at the Work view's default sizes.
+  // D-21: the card's Thread opens the thread (a row opens the document, ruling O1); the composer stays above the Capacity band at the Work view's default sizes.
   const pushRuns = (runs: readonly Record<string, unknown>[]): Promise<void> =>
     electronApp.evaluate(
       ({ BrowserWindow }, data) => {
@@ -183,6 +183,7 @@ test('the sweep defects on the store', async ({ page, electronApp }, testInfo) =
       async () => {
         await pushRuns([run]);
         await row('T-0002').click();
+        await page.locator('.tickets-card:visible .tickets-doc-btn', { hasText: 'Thread' }).first().click();
         return composer.isVisible();
       },
       { timeout: 30_000 },
