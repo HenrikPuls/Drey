@@ -96,10 +96,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 
 
-- **D-50 — `e2e/tickets-dricket-sweep.spec.ts` fails on `desktop-integration`, also without milestone 204** (S; owner request, outside the list, 2026-11-07; found by the milestone 204 gate). The test "the sweep defects on the store" failed 2 of 2 on a clean build of `4d5604f1` and at line 190 on the milestone 204 branch: a row click on a live run is expected to show the thread's composer. Probably milestone 203's ruling O1 (a Work row opens the ticket's document, whatever its run does), not proven. Done when the spec follows the ruling, reaching the composer through the card's Thread button, and passes.
-
-
-(D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.; what the wave-3 smoke could not see — the Autopilot status item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
+(D-50, `tickets-dricket-sweep` red since 203, shipped with 205's spec fix (the row opens the ticket, the thread is reached through the card's button) and green on the integrated tip; D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.; what the wave-3 smoke could not see — the Autopilot status item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field

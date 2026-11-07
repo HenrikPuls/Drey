@@ -21,6 +21,10 @@
 - **Left open:** four follow-ups in the roadmap (a store's open Work row has no outline; an uncommitted hand edit in a checkout; a larger vault flagged as managed as a whole; a board event during a running refresh).
 - **Engine hunks for the integrator:** `server/standalone-host.ts` (`announceStoreChanges`), `server/drey-port.ts` (one comment); no change to `server/engine.ts` or `server/notes.ts`. Outside `server/`: `services/host.ts`, `services/board-service.ts` (the constructor's options, one import), `store/document-paths.ts`, `store/store-board-source.ts`, `store/store-path-report.ts` (new). Nothing in `fleet/`.
 
+### Integration note (2026-11-07): D-49 proven, D-50 closed
+
+On the integrated tip (204 + 205 + 206 merged) the one-push `work-panel` test "groups the tickets" passes 4 of 4 on the integration checkout where it failed 3 of 4 before 205's snapshot ordering — D-49 is proven fixed. `tickets-dricket-sweep`, red since milestone 203 (D-50, found by the engine session), passes with 205's spec change; D-50 leaves the roadmap without a fix of its own. Gate 4533 tests, 38 e2e green.
+
 ### Milestone 204 — engine defects D-29, D-30, D-42, D-34, D-31, D-46, D-41
 
 **Not yet manually verified by the owner.** The engine and runner defects the cut-over smoke of 2026-11-06 found ([record](../docs/design/dricket/cutover-2026-11-06.md)). Nothing of the owner's real board was changed; the causes were read from its run records and logs. Left in place for the owner: the untracked `tickets/10-inbox/T-0092.md` in the legacy vault (D-30's file, safe to delete).
