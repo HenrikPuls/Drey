@@ -12,6 +12,30 @@ import { personaCardOf } from './team-model';
 import type { TeamStore } from './team-store';
 import { mountTeam } from './team-view';
 
+describe('Edit persona (board 7f -> 7k)', () => {
+  it('is drawn when the page can be opened, and opens the selected persona', async () => {
+    const opens: string[] = [];
+    const host = document.createElement('div');
+    const dispose = mountTeam(
+      {
+        api: { i18n },
+        runs: () => [],
+        chain: () => null,
+        titleOf: () => null,
+        subscribe: () => () => undefined,
+        openPersona: (id: string) => opens.push(id),
+      } as unknown as DeskDeps,
+      { personas: () => [persona({})], loaded: () => true, error: () => '', subscribe: () => () => undefined, refresh: async () => undefined, nameOf: () => 'Ben' } as TeamStore,
+      host,
+    );
+    const button = host.querySelector<HTMLButtonElement>('.desk-detail-head .persona-edit-btn');
+    expect(button?.textContent).toBe('Edit persona');
+    button?.click();
+    expect(opens).toEqual(['ben']);
+    dispose();
+  });
+});
+
 const persona = (patch: Partial<PersonaView>): PersonaView => ({
   id: 'ben',
   title: 'Ben',

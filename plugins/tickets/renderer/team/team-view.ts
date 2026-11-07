@@ -4,7 +4,8 @@
  * its state, what it does, and - for a stuck run - Nudge, Hand to Claude
  * Code and Stop (asking first); under the cards the selected persona's
  * detail: a list of panes at the left (Setup, Memory, 1:1) and the pane.
- * Not built yet and left out, as the board has them: New persona, Edit persona, Talk to 1:1 in the
+ * `Edit persona` opens the Persona page (board 7k, `persona-page.ts`).
+ * Not built yet and left out, as the board has them: New persona, Talk to 1:1 in the
  * Assistant, Remove from crew, Friction, Notify / Runs after, the slot
  * share and the week / typical-run costs (E12-16, E13-19). Plain DOM over
  * the model in `team-model.ts`.
@@ -376,6 +377,13 @@ function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, pe
   const name = h('div', 'desk-detail-name');
   name.append(h('span', 'desk-persona-title', card.title), h('span', 'desk-persona-role', card.role));
   head.append(avatar, name);
+  const openPersona = deps.openPersona;
+  if (openPersona !== undefined) {
+    const edit = h('button', 'persona-edit-btn', deps.api.i18n.t('persona.page.edit'));
+    edit.type = 'button';
+    edit.addEventListener('click', () => openPersona(persona.id));
+    head.append(h('span', 'desk-head-spacer'), edit);
+  }
   const main = h('div', 'desk-detail-main');
   const tabs = h('div', 'desk-tabs');
   tabs.setAttribute('role', 'tablist');

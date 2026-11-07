@@ -79,6 +79,8 @@ import { teamModelOf } from './team/team-model';
 import { createTeamStore, type TeamStore } from './team/team-store';
 import { createConversationProvider } from './conversation/targets';
 import { mountTeam } from './team/team-view';
+import { PERSONA_KIND, personaIdOfKey, personaKeyOf } from './team/persona-model';
+import { mountPersonaPage, personaWordCountOf } from './team/persona-page';
 import { bandHeaderStatusOf, bandStatusOf, mountCapacity } from './team/capacity-view';
 import { mountBoard } from './board/board-view';
 
@@ -1699,6 +1701,7 @@ function deskDeps(api: DreyPluginApi): DeskDeps {
     mutate: runMutation,
     chainAction: runChainAction,
     toggleAutopilot: () => toggleAutopilotPopover?.(),
+    openPersona: (id) => openPersonaDoc(api, id),
     openTicket: (card) => void openTicketPage(api, card),
     newIdea: () => {
       if (snapshot?.vaultId != null) {
@@ -1721,6 +1724,11 @@ function openBoardDoc(api: DreyPluginApi): void {
 
 function openTeamDoc(api: DreyPluginApi): void {
   api.documents.addDoc(TEAM_KIND, TEAM_KEY, 'Crew');
+}
+
+/** The Persona page (board 7k) opens in the view it is asked from: Work or Crew. */
+function openPersonaDoc(api: DreyPluginApi, id: string): void {
+  api.documents.addDoc(PERSONA_KIND, personaKeyOf(id), api.i18n.t('persona.page.tab', { name: teamStore(api).nameOf(id) }), { stayInView: true });
 }
 
 function threadTitle(api: DreyPluginApi, ticketId: string): string {
@@ -3276,6 +3284,22 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       restore: () => openTeamDoc(api),
       mount: (host) => mountTeam(deskDeps(api), teamStore(api), host),
       statusText: () => bandStatusOf(fleetRuns),
+    });
+    api.ui.registerDocKind({
+      kind: PERSONA_KIND,
+      homeView: WORK_VIEW_ID,
+      icon: 'users',
+      serialize: () => null,
+      restore: (path) => openPersonaDoc(api, personaIdOfKey(path)),
+      mount: (host, path) =>
+        mountPersonaPage(deskDeps(api), teamStore(api), host, personaIdOfKey(path), {
+          back: () => openTeamDoc(api),
+          retitle: (title) => api.documents.rename(path, api.i18n.t('persona.page.tab', { name: title })),
+        }),
+      statusText: (path) => {
+        const count = personaWordCountOf(personaIdOfKey(path));
+        return count === null ? null : api.i18n.t('persona.page.words', { count });
+      },
     });
 
     api.ui.registerDocKind({

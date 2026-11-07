@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–200, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–201, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -370,9 +370,15 @@ owner confirms scope and order before any of it starts:
 - **E13-17 — Board filter and cost toggle.** "Filter: all personas" and
   "Cost by column" on the Board tab (board 7e) (G-15).
 - **E13-19 — Crew tab completion.** New persona from a template, Remove from
-  crew, editable Setup, Friction tab, Notify / Runs after / This week /
-  Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
-  per-persona slot share (needs an engine count) (G-14).
+  crew, Friction tab, Notify / Runs after / This week / Typical run fields,
+  "Talk to <name> 1:1 in the Assistant" (with E13-5), the per-persona slot
+  share (needs an engine count) (G-14). Editing a persona shipped as the
+  Persona page (board 7k, milestone 201); what that page still lacks belongs
+  here: the portrait (upload, drop; `avatar.png` has no route), `Tell me when`
+  (Notify), the steps as toggles (no write route), a provider per pool row
+  (the record has one `worker`), removing and reordering pool entries, writing
+  the daily budget (not in `personaPatch`), and the file's commit age beside
+  `Saved`.
 - **E12-9d — "Initialize board" seeds the default crew** (owner decision 2026-11-05,
   answering E12-9b Q2: yes). A new board gets the default crew of decision D7 — **Paul**
   (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
@@ -397,7 +403,7 @@ owner confirms scope and order before any of it starts:
 - **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
-  from crew`, editable Setup, the Friction tab, the Setup fields and `Talk to …
+  from crew`, the Friction tab, the Setup fields and `Talk to …
   1:1` (E13-19) [H-01–H-03, I-02]. Files: `plugins/tickets/renderer/board/`,
   `team/team-view.ts`.
 - **E12-19 — Assistant labels, review layout, settings leftovers** (proposed by

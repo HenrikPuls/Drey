@@ -1,0 +1,394 @@
+/*
+ * The Persona page (board 7k, milestone 201), measured from the board's
+ * HTML. 13/19 type, tokens only; every class is scoped under `persona-`.
+ * Also the `Edit persona` button on the Crew tab's detail head (board 7f),
+ * which links here.
+ */
+.persona-page {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-editor);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.persona-page *,
+.persona-page *::before,
+.persona-page *::after {
+  box-sizing: border-box;
+}
+
+.persona-page :focus-visible,
+.persona-edit-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.persona-muted {
+  color: var(--text-4);
+}
+
+.persona-grow {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.persona-line {
+  display: block;
+}
+
+.persona-mono {
+  font-family: var(--font-mono);
+}
+
+.persona-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.persona-gap-4 {
+  margin-top: 4px;
+}
+
+.persona-note {
+  padding: 18px 20px;
+  color: var(--text-4);
+}
+
+.persona-state-error {
+  color: var(--status-deleted);
+}
+
+/* The head */
+.persona-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 65px; /* the board's 64, its border on top */
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.persona-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--persona-color, var(--accent));
+  color: var(--on-pastel);
+  font-weight: 700;
+}
+
+.persona-avatar-head {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.persona-avatar-profile {
+  width: 72px;
+  height: 72px;
+  font-size: 22px;
+  border: 2px dashed var(--field-border);
+}
+
+/* The board's row height, set by the upload column beside the circle (not built yet): what is below stays in place. */
+.persona-profile-row {
+  display: flex;
+  align-items: center;
+  min-height: 76px;
+}
+
+.persona-head-names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.persona-head-name {
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 700;
+}
+
+/* Buttons */
+.persona-btn,
+.persona-save,
+.persona-back,
+.persona-edit-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.persona-btn,
+.persona-edit-btn {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--field-border);
+}
+
+.persona-btn:hover,
+.persona-edit-btn:hover {
+  background: var(--hover-bg);
+}
+
+.persona-btn:disabled,
+.persona-save:disabled {
+  opacity: 0.5;
+}
+
+.persona-btn-32 {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+}
+
+.persona-btn-30 {
+  align-self: flex-start;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+}
+
+.persona-btn-28 {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-chip);
+}
+
+.persona-back {
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--accent);
+}
+
+.persona-back:hover {
+  color: var(--text-primary);
+}
+
+.persona-save {
+  height: 32px;
+  padding: 0 16px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 0;
+  border-radius: var(--radius-control);
+  font-weight: 600;
+}
+
+.persona-edit-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+}
+
+.persona-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--text-4);
+}
+
+.persona-icon-btn:hover {
+  background: var(--active-bg);
+  color: var(--text-primary);
+}
+
+/* The two columns */
+.persona-body {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.persona-general {
+  flex-shrink: 0;
+  width: 401px; /* the board's 360 content box, its padding and border on top */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+  border-right: 1px solid var(--border);
+  line-height: 19px;
+}
+
+.persona-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.persona-rule {
+  flex: none;
+  height: 1px;
+  background: var(--border);
+}
+
+.persona-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.persona-field-first {
+  margin-top: 4px;
+}
+
+.persona-half {
+  width: calc(50% - 6px);
+}
+
+.persona-input {
+  flex: none;
+  height: 34px; /* the board's 32 content box, its border on top */
+  width: 100%;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+/* Steps */
+.persona-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.persona-step {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-dialog);
+  background: transparent;
+  color: var(--text-4);
+  border: 1px solid var(--field-border);
+}
+
+.persona-step-on {
+  background: var(--active-bg);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+/* The model pool */
+.persona-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.persona-pool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+/* Instructions */
+.persona-prompt {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 19px;
+}
+
+.persona-prompt-head {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 20px 10px;
+}
+
+.persona-prompt-scroll {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 20px 12px;
+  overflow-y: auto;
+}
+
+.persona-text {
+  flex-grow: 1;
+  min-height: 260px;
+  padding: 12px 14px;
+  background: var(--bg-editor);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 21px;
+  resize: none;
+}
+
+.persona-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.persona-skill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 37px; /* the board's 36, its border on top */
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--active-bg);
+}
+
+.persona-skill-path {
+  margin-left: 8px;
+}
+
+.persona-friction {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.persona-foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+}

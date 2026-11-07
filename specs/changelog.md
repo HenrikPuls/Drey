@@ -1,3 +1,41 @@
+### Milestone 201 — wave row 4.9: the Persona page, board 7k
+
+**Not yet manually verified by the owner.** Wave row 4.9 `desk-persona`. The app had no such page; a persona's setup could not be edited on the desktop at all (the Crew tab's Setup is a read-out). Rulings on the measure sheet (integrator, 2026-11-07): the three port methods reach the desktop, the instructions are read over the vault, what the engine cannot serve stays absent.
+
+- **The page.** A tab of its own (doc kind `tickets-persona`, key `persona://<id>`, title `<name> · persona`), opened by **Edit persona** on the Crew tab's detail head, in the view it is asked from. Head with the avatar, name, role and file, the save state, **Open as Markdown** (opens `persona.md`), **Back to Crew**. Left column: **Profile** (picture circle with the initials on the persona's colour, Name, Role), **Work** (the steps as read-only chips, the model pool in order with the provider's slots, **Add a model**, the daily budget read-only). Right column: **Instructions** (the editor over `prompt.md`), **Skills** (rows with remove), the "also loaded" note, the **Friction** card with **Show diff** (the SDK's diff dialog, prompt proposals only) and **Dismiss**, the footer with **Discard** and **Save**. The status bar counts the instructions' words.
+- **Save.** Only the changed keys, through the existing `personaPatch`: one commit `personas: <id> updated` for `persona.md` and `prompt.md` together. The engine's refusal (an unknown role, an empty title) shows in the save state and the draft stays. An unsaved draft survives switching tabs (a tab switch remounts a doc kind). Before writing the prompt the page reads the file again and refuses if it moved since (Mission Control writes it too); Discard then loads it.
+- **Reading the prompt.** No route serves `prompt.md`, so the renderer reads `tickets/_meta/personas/<id>/prompt.md` with `api.vault.readFile` (owner ruling on the sheet, no engine change). A missing file is an empty prompt; **any other read failure leaves the editor and Save disabled**, so an unread prompt can never be overwritten. Confirmed on a dricket store, not assumed: the persona files stay in the checkout vault (`e2e/persona-page-store.spec.ts`, with a ticket only the store has as proof that the board really runs on it). `skills` come from `personaImprovements().persona`, the read that already carries the record. A load that fails shows the reason and tries again every 2 s while the tab is open (seen as `fetch failed` from the engine call about once in 20 runs of the screenshot spec, then 40 clean runs with the retry; why the engine call failed was not traced).
+- **Hunks outside `team/persona*`:** `packages/tickets-engine/src/server/engine.ts` (`personaPatch`, `personaImprovements`, `personaImprovementDecide` join `TEAM_METHODS`; all one-argument and without an actor, so no parsed `table.set`), `plugins/tickets/main/index.ts` (three thin handlers), `plugins/tickets/renderer/index.ts` (the kind, `openPersonaDoc`, `deskDeps.openPersona`), `plugins/tickets/renderer/desk-deps.ts` (`openPersona`), `plugins/tickets/renderer/team/team-view.ts` (the button, its comment), `plugins/tickets/renderer/team/team-view.spec.ts` (its test), `plugins/tickets/plugin.json` (the stylesheet), `shared/i18n/catalog/en.json` (`persona.page.*`). `desk.css` untouched. No schema or contract change, no SDK change.
+- **Specs.** `persona-model.spec.ts`, `persona-page.spec.ts`, a case in `team-view.spec.ts`; e2e `persona-page` (edit, discard, save as one commit, a refused role, Dismiss, an unreadable prompt), `persona-page-store`, opt-in `fidelity-desk-persona` (`DREY_FIDELITY_SHOTS=1`).
+- **Roadmap:** the editable part of E13-19 / E12-16 left the list; what 7k leaves open is written into E13-19, req-142, req-143, req-137, D-46, and req-144 (the crew-list line, id held by the integrator).
+
+**Fidelity:** board `DeskPersona` (7k), screenshot `test-results/fidelity/DeskPersona.png`, `compare.html` captures beside it; built app, 1440×900, scale factor 1, theme Anthrazit. Per-region diff at `compare.html`'s threshold with the frame's 4 px shift taken out: Name + Role 0.08 %, head buttons 0.11 %, textarea 0.01 %, "also loaded" 0.00 %, Friction card 0.05 %. Fixed in the build: the column at the board's 401 px (360 content box), head 65, inputs 34, skill rows 37 (the board's content-box measures), Save and Discard at full strength on a clean page. Open: none. Justified:
+
+| Region | Board | Build | Justification |
+|---|---|---|---|
+| Everything under the tab bar | starts at y 74 | y 78, foot and status bar in place | owner decision 2026-11-07 (`decisions.md`, milestone 192): one line at y 77; the textarea takes the 4 px |
+| App glyph, strip and tab glyphs, tab paddings, status bar heights | canvas set | our set | owner decision 2026-11-07 (milestones 192, 194) |
+| Head sub line, Instructions sub line, footer note, Save title | `personas/ben.md` | `personas/ben/persona.md`, `personas/ben/prompt.md`, `personas/ben/` | data: where the engine stores them (`specs/ticket-schema.md`) |
+| Save state | `Saved · committed 2 days ago` | `Saved` | feature not yet built — E13-19 (no route serves a file's commit age) |
+| Profile | *Upload picture…*, its hint, an illustrated portrait on other boards | the circle with the initials; the row keeps its 76 px, so what is below stays in place | feature not yet built — E13-19 (portrait) |
+| Profile | *One line for the crew list* | absent | feature not yet built — req-144 (no such field) |
+| Steps | chips toggle | read-only chips from the pipeline's `persona:` keys | feature not yet built — E13-19 (no write route; the flow editor owns it) |
+| Model pool, row 2 | `Claude Code · sonnet`, `3 slots` | `Local · sonnet`, `2 slots` | feature not yet built — E13-19 (a persona has one `worker`, so one provider per pool) |
+| Add a model | button | the button; a click opens an inline field the board does not draw | data: the board has no state for it; removing or reordering a pool entry is not built — E13-19 |
+| Daily budget | editable | read-only (`personaPatch` has no `budget` key) | feature not yet built — E13-19 |
+| Tell me when | select beside the budget | absent; the budget keeps its half width | feature not yet built — E13-19 (Notify) |
+| Allowed to | whole block, *Change permissions…* | absent, also its rule | feature not yet built — req-142 |
+| Instructions head | `≈ 2,490 tokens at start`, *Preview full prompt* | absent | feature not yet built — req-143 |
+| Skills head | *Add skill…* | absent | feature not yet built — req-137 |
+| Skills note | "Shared, reusable instructions … everyone who uses it gets the change." | absent, so the textarea is 50 px taller | feature not yet built — D-46: the sentence is untrue while `persona.skills` never reaches a run |
+| Skill rows | a title, `310 tokens` | the file id as the name, no count | feature not yet built — req-143, req-137 (the record holds ids only) |
+| Left column | runs past the fold, cut at *Daily budget* | fits, nothing cut | follows from the absent rows above |
+| Work panel, status bar | `3 need you`, `2 running · $4.10 today`, *Done this week*, `412 words` | the seeded vault, the cost slot of milestone 197, `81 words` | data; belongs to wave 4.2 / 4.4 |
+| View tab *Work* | no dot | the needs-you dot | owner decision: req-126 draws it from board 7h; 7k's canvas predates that |
+| Bold and mono text | canvas export | Electron | text rasterization: same font, size, weight, line height; no CSS difference found |
+
+Not on the board, belongs to the frame: with the Capacity band open in the view, an empty band stays under this tab, exactly as under Crew (the panel hides its body, the dock keeps its height). The screenshot has the band closed, as 7k does.
+
 ### Milestone 200 — wave row 4.8: the Assistant panel body matches boards 9a, 7a, 7c and 7d; the decision card with Send back with N comments
 
 **Not yet manually verified by the owner.** Row 4.8 `desk-assistant`: the Assistant's body — target row, thread, decision card, composer,

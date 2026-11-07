@@ -22,6 +22,8 @@ export interface DeskDeps {
   chainAction(method: string, payload: unknown): Promise<void>;
   /** Opens or closes the Autopilot popover (the Crew head's chip, board 7f). */
   toggleAutopilot?(): void;
+  /** Opens a persona's page (`Edit persona`, board 7f -> 7k). */
+  openPersona?(id: string): void;
   /** Opens a ticket as its page (file and thread). */
   openTicket(card: TicketCard): void;
   /** Opens the capture dialog (a new idea lands in the first column). */
