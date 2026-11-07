@@ -48,10 +48,16 @@ memory or in an accepted proposal, nothing else rides along.
 line carries its author and evidence (date, ticket, persona/model or `you`)
 and is removable one by one on the Memory tab; a run writes only when
 something was out of the ordinary. Prompt, skill and model changes stay
-proposal cards (nothing adopted before a 1:1). Whether a run's *finding* is
-kept apart from its *lesson* (a `reviews.md` journal beside `memory.md`, the
-session's recommendation) is **open**; the two variants are in the concept
-note, R4.
+proposal cards (nothing adopted before a 1:1). A run's *finding* is kept
+apart from its *lesson* (R14): the finding goes to `reviews.md` in the
+persona folder (one entry per run — model, ticket, gate, cost, `friction:`;
+`friction.md` goes up in it and the prompt-proposal aggregation reads the
+journal), the lesson to `memory.md`. Both are written in **one closing
+round** of the session after the gate verdict, and only **on a signal** (red
+gate, retry, an owner steer, cost far above the typical run, self-reported
+friction; configurable) — a smooth run costs no round. The report groups
+the journal by model, which is what answers "would another model do
+better".
 
 ## Consequences
 
@@ -65,5 +71,6 @@ note, R4.
   reasoning (cheap single shot) loses to identity and tools.
 - The context pack loses `personaCoachingSection`; `thread.md` reading goes
   with the migration.
-- Open: the memory variant (R4), the exact 1:1 tool list, and whether Shape
-  with Paul follows into a session once the numbers of req-109 are in.
+- Open: the exact 1:1 tool list, the line formats of memory and journal,
+  and whether Shape with Paul follows into a session once the numbers of
+  req-109 are in. A `memory_write` tool during the run is a later item.

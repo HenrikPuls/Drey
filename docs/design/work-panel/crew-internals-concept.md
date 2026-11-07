@@ -92,7 +92,7 @@ migrate once into the persona's first 1:1 session. Nothing a 1:1 says reaches
 the next run unasked any more — only what lands in memory (R4) or in an accepted
 proposal.
 
-### R4 — Memory: direct entries by model and owner, each removable (2026-11-07), details OPEN
+### R4 — Memory: direct entries by model and owner, each removable (2026-11-07); journal and lesson apart, written in a closing round on a signal (ruled 2026-11-08, see R14)
 
 **Ruling (the owner's words):** *"das modell soll einträge ins memory einfügen
 können, ebenso der nutzer direkt … beides soll der nutzer aber auch einzeln
@@ -131,9 +131,23 @@ sinnvoll ist"*, then "noch nicht entschieden"). The two variants on the table:
 - **B — one file.** Finding and lesson as lines in `memory.md`; the next run
   reads both; the evaluation by hand.
 
-Open until the owner rules: A or B; the exact trigger list of "noteworthy";
-the line format; whether the journal shows on the Crew tab or only in the
-report.
+Ruled 2026-11-08 — see R14.
+
+### R14 — Memory, the details: variant A, signal trigger, closing round (2026-11-08)
+
+**Ruling:** **variant A** — the finding goes to a journal (`reviews.md` in
+the persona folder: one entry per run with model, ticket, gate, cost and a
+`friction:` field; `friction.md` goes up in it, the prompt-proposal
+aggregation reads the journal), the lesson, at most one line, goes directly
+to `memory.md` with author and evidence; both removable per line on the
+Memory tab (Memory and Journal listed apart), pin as today; the context pack
+takes the owner's and pinned lines first, the persona's after, capped; the
+report groups the journal by model. **Trigger: only on a signal** — red
+gate, retry, an owner steer, cost far above the typical run, friction the
+persona reported in the run; the list is configurable; a smooth run costs no
+round. **Write path: a closing round** of the session after the gate verdict
+(structured answer, output capped); a `memory_write` / `journal_write` tool
+during the run is a later item if lessons turn out to get lost.
 
 ### R5 — Vault rights of a run: read all, write none by default (2026-11-07)
 
@@ -317,8 +331,8 @@ truth for two devices, as it already is for pipeline and personas.
 
 ## 2. Open questions the owner deferred
 
-1. **Memory A or B** (R4) and its details: trigger list for "noteworthy", line
-   format, where the journal shows.
+1. ~~Memory A or B~~ — ruled (R14). Still to fix at build time: the line
+   format of `memory.md` and the journal entry shape.
 2. **Who requests which class** (R10, assumed: Paul's part size, phase floor,
    ticket pin).
 3. **Shape with Paul as a session** (R9 says "later also"): keep the bridge
@@ -341,7 +355,7 @@ order. "req-16x" are placeholders after req-160, the highest id on 2026-11-08.
 | **req-163** | Drey Service Sessions area: every harness session raw, Stream / Instruction / Tool calls / Process, send to stdin, interrupt, resume, attach command | ADR-0075 steer ladder at raw level |
 | **req-164** | The vault MCP served by Drey Service: ADR-0071 toolset over `shared/`, per-run tokens, persona permissions (R5), call log in the run stream, harness MCP configuration per adapter — ADR-0094 | ADR-0071 later change; req-142 gets its enforcement |
 | **req-165** | The 1:1 as a persona session: quiet start without ticket, lean toolset, context of R2, chat session file with `persona:` (R3), `thread.md` migrated, the Crew tab's 1:1 tab talks to it; release after idle (req-157) — ADR-0093 | **resolves D-52**; reshapes E13-19's "Talk to <name> 1:1" |
-| **req-166** | Persona memory per R4: author and evidence per line, delete per line on the Memory tab, the persona's own entries at run end (variant A or B once ruled) | reshapes the Friction flow (memory lines leave it) |
+| **req-166** | Persona memory and journal per R4/R14: `reviews.md` (finding per run, `friction:` field, replaces `friction.md`), `memory.md` lessons with author and evidence, delete per line on the Memory tab (Memory and Journal apart), the closing round on a configurable signal list, report grouped by model | reshapes the Friction flow (the aggregation reads the journal) |
 | **req-167** | Settings → Models and the capacity pool: the model table (category, class, cost factor, provider slots), the cap, class requests, queue without a process, three ledgers — ADR-0095 | **replaces req-112**; absorbs req-113's allowance, req-63's `fleet.pool.<provider>.size` |
 | **req-168** | Persona page v2 per R11 (req-153 done when this ships): the Markdown editor in Instructions, Allowed to, models from the table, Skills with switches, Proposals, one prose | **replaces the page part of req-153**; closes req-142/143/144/137's page halves; E13-19 loses the page items |
 | **req-169** | Skills as Agent Skills: `_meta/skills/<name>/SKILL.md`, listing and upload (req-137), token count (req-143); progressive loading as a later item | reword req-137 |

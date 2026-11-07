@@ -46,7 +46,8 @@ h1{font-size:18px;font-weight:600;margin:0 0 4px}
 .seg span{padding:3px 8px}.seg span.on{background:var(--panel2);color:var(--fg)}
 .log{flex:1;margin:0;padding:10px 16px;font:12px/1.6 var(--mono);color:var(--muted);overflow:auto;background:var(--bg);white-space:pre-wrap;word-break:break-word}
 .log i{color:var(--dim);font-style:normal}.log b{color:var(--fg);font-weight:500}.log .e{color:var(--bad)}.log .w{color:var(--warn)}
-.foot{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.foot>span:first-of-type{flex:1 1 240px;min-width:0}
 .foot .sp{margin-left:auto;display:flex;gap:6px}
 /* settings */
 .set{display:grid;grid-template-columns:230px 1fr;min-height:560px}
