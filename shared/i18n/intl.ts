@@ -92,8 +92,9 @@ export function formatDate(locale: string, date: Date, style: DateStyle = 'mediu
   return new Intl.DateTimeFormat(locale, { dateStyle: style }).format(date);
 }
 
+/** A 24-hour clock in every locale: the boards' "Resume at 18:00" (D-36). */
 export function formatTime(locale: string, date: Date): string {
-  return new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(date);
+  return new Intl.DateTimeFormat(locale, { timeStyle: 'short', hourCycle: 'h23' }).format(date);
 }
 
 export function formatDateTime(locale: string, date: Date): string {

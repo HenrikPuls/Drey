@@ -71,8 +71,8 @@
 
 .slot-dot {
   flex: none;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
@@ -90,6 +90,15 @@
 
 .slot-btn:hover {
   background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* Its popup is open (SDK 1.49): the bar's full height, square, lit. Same width as closed, so nothing moves. */
+.slot-open,
+.slot-open:hover {
+  height: calc(var(--status-h) - 1px);
+  border-radius: 0;
+  background: var(--active-bg);
   color: var(--text-primary);
 }
 

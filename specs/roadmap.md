@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169, 171–188 and 190, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–190, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -96,10 +96,11 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   widgets, only the `▸ Frontmatter` pill. The vault the checkout prompt adds is the checkout itself, so that route is not
   affected. Fix: the renderer has to learn the prefix from main, or main hands it the checkout-relative path.
 
-- **D-36 — The desktop Autopilot popover does not match its board** (M; found 2026-11-06 comparing the running popover
-  with `docs/design/work-panel/boards/Autopilot.png`). The board anchors it above the status item, with a title row and the
-  chord, a segmented On | Paused | Off, the state's one sentence and chips for the resume time and today's cost. The build opens
-  a plain list of rows at the bottom left, without title, sentence or chips. Done when a screenshot matches the board.
+- **D-38 — Mission Control's Autopilot does not match its board** (M; found 2026-11-07 fixing D-36, read from the code, not
+  run). `libs/mission-ui/src/autopilot/panel.html` draws plain rows with a dot on both devices. `Autopilot.png` wants on the iPad
+  the desktop's popover in 380 px (title and chord, segments 44 px high, sentence, chips, divider, Stop) and on the phone
+  a sheet whose 56 px rows carry an icon and their sentence, with the resume time in the sheet's title row. The sentences are in the
+  catalog since D-36 (`autopilot.sentence.*`). Done when screenshots match the board.
 
 - **D-39 — A context-menu flyout closes on the way to it** (S; owner request, outside the list, 2026-11-07). The flyout cannot be
   selected with the mouse: it folds away between its row and its panel. By the code, not reproduced yet: the one flyout in the app,
@@ -120,7 +121,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   `claude/w3-e14-7-cutover-cee921` the same finding is D-36 (`968078bf`); that merge renames it to this id, because D-36 here is the
   Autopilot popover.
 
-(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-37 as 190.)
+(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.

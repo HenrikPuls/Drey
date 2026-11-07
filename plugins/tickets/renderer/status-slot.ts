@@ -95,6 +95,10 @@ export interface StatusSlotHost {
 
 export interface StatusSlotController {
   update(input: StatusSlotInput): void;
+  /** The Autopilot item on screen: what the popover sits above. */
+  autopilotElement(): HTMLElement | null;
+  /** The Autopilot item shows whether its popover is open. */
+  setAutopilotExpanded(open: boolean): void;
   dispose(): void;
 }
 
@@ -112,7 +116,7 @@ export function createStatusSlots(
   const cost = host.createStatusItem({ text: '', priority: 12 });
   const needs = host.createStatusItem({ text: '', commandId: needsCommandId, priority: 11 });
   // Left of the cost item (board 10t); a click opens the popover.
-  const autopilot = host.createStatusItem({ text: '', commandId: autopilotCommandId, priority: 13 });
+  const autopilot = host.createStatusItem({ text: '', commandId: autopilotCommandId, priority: 13, expanded: false });
   const apply = (handle: StatusItemHandle, patch: StatusSlotPatch): void => {
     handle.update({ text: patch.text, tooltip: patch.tooltip, dot: patch.dot });
   };
@@ -122,6 +126,10 @@ export function createStatusSlots(
       apply(cost, slots.cost);
       apply(needs, slots.needs);
       apply(autopilot, slots.autopilot);
+    },
+    autopilotElement: () => autopilot.element(),
+    setAutopilotExpanded(open) {
+      autopilot.update({ expanded: open });
     },
     dispose() {
       cost.dispose();

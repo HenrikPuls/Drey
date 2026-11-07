@@ -90,4 +90,33 @@ describe('StatusBar', () => {
     expect(slots[1].querySelector('.slot-dot.dot-positive')).not.toBeNull();
     expect(slots[2].querySelector('.slot-dot')).toBeNull();
   });
+
+  it('marks an item that opens a popup, and lights it while it is open (SDK 1.49)', () => {
+    const items = TestBed.inject(StatusItemsService);
+    const popup = items.create({ text: 'Autopilot · On', commandId: 'x.open', expanded: false, priority: 2 });
+    items.create({ text: 'plain', commandId: 'x.run', priority: 1 });
+    fixture.detectChanges();
+    const [item, plain] = Array.from(el.querySelectorAll('.slot'));
+    expect(item.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(item.getAttribute('aria-expanded')).toBe('false');
+    expect(item.classList.contains('slot-open')).toBe(false);
+    expect(plain.hasAttribute('aria-haspopup')).toBe(false);
+    expect(plain.hasAttribute('aria-expanded')).toBe(false);
+    popup.update({ expanded: true });
+    fixture.detectChanges();
+    expect(item.getAttribute('aria-expanded')).toBe('true');
+    expect(item.classList.contains('slot-open')).toBe(true);
+  });
+
+  it('hands a plugin its item on screen, and null while it is hidden (SDK 1.49)', () => {
+    const items = TestBed.inject(StatusItemsService);
+    const handle = items.create({ text: 'Autopilot · On', commandId: 'x.open' });
+    document.body.append(el);
+    fixture.detectChanges();
+    expect(handle.element()).toBe(el.querySelector('.slot'));
+    handle.update({ text: '' });
+    fixture.detectChanges();
+    expect(handle.element()).toBeNull();
+    el.remove();
+  });
 });

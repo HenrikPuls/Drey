@@ -37,7 +37,7 @@ describe('McI18n (Mission Control)', () => {
     expect(i18n.locale).toBe('en');
     expect(i18n.t('autopilot.state.paused')).toBe('Paused');
     expect(i18n.t('autopilot.resume_at', { time: i18n.formatTime(new Date(2026, 10, 6, 15, 5)) })).toBe(
-      'Resume at 3:05 PM',
+      'Resume at 15:05',
     );
     expect(i18n.t('cost.estimate.none')).toBe('no estimate yet (first run)');
     expect(i18n.currencyRange(3, 5.2).text).toBe('$3.00–5.20');

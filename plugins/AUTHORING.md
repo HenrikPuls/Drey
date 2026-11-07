@@ -113,6 +113,8 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.49 adds to a status item: `expanded` on the spec (the item opens a popup; `true` draws it lit and
+  sets `aria-expanded`) and `handle.element()` (the item on screen, to anchor that popup to).
   1.48 adds the optional `title(vaultId, path, content)` to a `DocumentRoute`: what an owned document
   is called on screen when its file name says nothing (every ticket document is `ticket.md`).
   1.47 adds `ui.registerTitlebarAction({ label, icon?, commandId })`: a button in the title bar.

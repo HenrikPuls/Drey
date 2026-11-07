@@ -78,7 +78,7 @@ describe('createI18n', () => {
     expect(i18n.formatCurrency(3)).toBe('$3.00');
     expect(i18n.formatNumber(1234.5)).toBe('1,234.5');
     expect(i18n.formatDuration(64_000)).toBe('1 min 4 sec');
-    expect(i18n.formatTime(new Date(2026, 10, 6, 15, 5))).toBe('3:05 PM');
+    expect(i18n.formatTime(new Date(2026, 10, 6, 15, 5))).toBe('15:05');
   });
 
   it('ships the default reporters: a console warning once, or silence', () => {
@@ -102,7 +102,7 @@ describe('createI18n', () => {
     expect(i18n.locale).toBe('en');
     expect(i18n.t('autopilot.state.paused')).toBe('Paused');
     expect(i18n.t('autopilot.resume_at', { time: i18n.formatTime(new Date(2026, 10, 6, 9, 30)) })).toBe(
-      'Resume at 9:30 AM',
+      'Resume at 09:30',
     );
   });
 });
