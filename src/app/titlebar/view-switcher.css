@@ -75,8 +75,8 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--status-modified);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--status-modified) 70%, transparent);
+  background: var(--needs-you, var(--status-modified));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--needs-you, var(--status-modified)) 70%, transparent);
 }
 
 .vs-layout {
@@ -121,7 +121,7 @@
 }
 
 .ctx-menu.wide {
-  width: 280px;
+  width: 294px;
 }
 
 .ctx-menu button {

@@ -218,7 +218,7 @@
   /* Chevron and title sit where the 5h / 5i bars have them. */
   .sub-page {
     grid-template-columns: 150px minmax(0, 1fr) 150px;
-    padding: 0 8px;
+    padding: 0 4px 0 8px;
   }
   .no-wide-back,
   .top-page {

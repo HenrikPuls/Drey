@@ -531,8 +531,8 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
   height: 9px;
   border: 2px solid var(--bg-dock);
   border-radius: 50%;
-  background: var(--status-modified);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--status-modified) 70%, transparent);
+  background: var(--needs-you, var(--status-modified));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--needs-you, var(--status-modified)) 70%, transparent);
 }
 
 .desk-cap-text {
@@ -624,6 +624,10 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
 .desk-cap-budget .desk-bar {
   margin-top: 0;
   background: var(--active-bg);
+}
+
+.desk-cap-budget .desk-bar-fill {
+  background: var(--text-4);
 }
 
 .desk-bar-fill {
@@ -851,7 +855,7 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
   flex: none;
   flex-direction: column;
   gap: 2px;
-  width: 150px;
+  width: 167px;
   padding: 8px;
   border-right: 1px solid var(--border);
 }

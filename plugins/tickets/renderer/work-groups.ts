@@ -430,11 +430,11 @@ export function runningStepOf(row: WorkRow, board: BoardSnapshot): RunningStep {
   }
   const blocker = row.card.blocked[0];
   if (blocker === undefined) {
-    return { step: 'Queued', line: 'waits for a free worker', live: false };
+    return { step: 'queued', line: 'waits for a free worker', live: false };
   }
   const title =
     board.columns.flatMap((column) => column.tickets).find((card) => card.id === blocker)?.meta.title ?? blocker;
-  return { step: 'Queued', line: `waits for “${title}”`, live: false };
+  return { step: 'queued', line: `waits for “${title}”`, live: false };
 }
 
 /** A stamp as the rows show it: `now`, `4 min`, `3 h`, `yesterday`, `2 d`. */

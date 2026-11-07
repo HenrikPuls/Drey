@@ -1,3 +1,11 @@
+### Milestone 202 — wave 4.7: the fidelity review
+
+**Not yet manually verified by the owner.** Row 4.7 of the fidelity wave: one session compared 39 of the 40 boards (9b is not a target) against the built app and wrote one deviation table, [fidelity-review-2026-11.md](../docs/design/work-panel/fidelity-review-2026-11.md); the open-for-owner list comes first there. Entered and left the roadmap with this change.
+
+- **Counts:** 39 boards, 17 with no open row (Main is reference only, nothing to shoot), 130 table rows: 13 fixed, 88 justified, 23 open, 6 noted (how a composite state was reached). 16 items on the open list (O1–O15, D-48), now req-146 and D-48 on the roadmap. Thirteen rows of milestones 194–201 did not hold as written; they have their own section in the review.
+- **Fixes:** Work rows 52 and 29 px, the step word 13 px, `queued` (`plugins/tickets/renderer/board.css`, `work-groups.ts`, its spec); the needs-you orange as token `--needs-you` in Anthrazit instead of the git-status yellow (`src/styles.css`, `src/app/status-bar/status-bar.css`, `src/app/titlebar/view-switcher.css`, `board.css`, `desk.css`); Layout menu 294 px (`view-switcher.css`); Crew detail list 167 px and Capacity's grey budget bar (`desk.css`); composer text under its chip (`plugins/assistant/renderer/assistant.css`); board 5h's Accept at 17 px, video length, amount (`libs/mission-ui/src/ticket/pad.css`); the proof strip's gap on 5h, 10q, 10o, 10d (`ticket/view.html`); 10f's `+` (`app-bar/app-bar.css`); Live Preview's title, heading, tags and source box on 10p, 10r (`markdown/markdown.css`); two fidelity specs (`e2e/fidelity-desk-work.spec.ts`: the band at 103 px; `e2e/fidelity-desk-tickets.spec.ts`: its 9a test failed at the tip, the group's fold).
+- **Limits:** comparison by side-by-side reading, crops and a script with `compare.html`'s threshold, not in `compare.html` itself; Anthrazit only; 7a and 7d not as one composite state.
+
 ### req-145 — the out-of-Angular suite runs with at most 4 workers
 
 Owner request, outside the list (2026-11-07): the machine ran out of RAM during the day. Cause found: several

@@ -92,7 +92,8 @@
             <div class="ph-proof">
               <span class="ph-proof-item" [attr.title]="'ticket.phone.proof_checks_title' | t">
                 <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
-                <span><b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b> {{ 'ticket.phone.proof_checks' | t }}</span>
+                <b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b>
+                <span>{{ 'ticket.phone.proof_checks' | t }}</span>
               </span>
               @if (strip.testedBy !== '') {
                 <span class="ph-proof-item">
@@ -188,7 +189,8 @@
               <div class="ph-proof pd-strip">
                 <span class="ph-proof-item">
                   <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
-                  <span><b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b> {{ 'ticket.phone.proof_checks' | t }}</span>
+                  <b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b>
+                <span>{{ 'ticket.phone.proof_checks' | t }}</span>
                 </span>
                 @if (strip.testedBy !== '') {
                   <span class="ph-proof-item">
@@ -518,7 +520,8 @@
                     <div class="ph-proof pd-rstrip">
                       <span class="ph-proof-item">
                         <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
-                        <span><b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b> {{ 'review.checks' | t }}</span>
+                        <b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b>
+                <span>{{ 'review.checks' | t }}</span>
                       </span>
                       @if (strip.testedBy !== '') {
                         <span class="ph-proof-item">

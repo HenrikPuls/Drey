@@ -69,7 +69,7 @@
 }
 
 .slot-dot.dot-attention {
-  background: var(--status-modified);
+  background: var(--needs-you, var(--status-modified));
 }
 
 .slot-dot.dot-positive {

@@ -445,8 +445,8 @@ describe('runningStepOf', () => {
       build: [card('T-0001', 'build', { blocked: ['T-0002'] }), card('T-0003', 'build')],
       review: [card('T-0002', 'review')],
     });
-    expect(stepOf('T-0001', snap)).toEqual({ step: 'Queued', line: 'waits for “Ticket T-0002”', live: false });
-    expect(stepOf('T-0003', snap)).toEqual({ step: 'Queued', line: 'waits for a free worker', live: false });
+    expect(stepOf('T-0001', snap)).toEqual({ step: 'queued', line: 'waits for “Ticket T-0002”', live: false });
+    expect(stepOf('T-0003', snap)).toEqual({ step: 'queued', line: 'waits for a free worker', live: false });
     // An unknown blocker falls back to its id.
     const orphan = board({ build: [card('T-0004', 'build', { blocked: ['T-0099'] })] });
     expect(stepOf('T-0004', orphan).line).toBe('waits for “T-0099”');
