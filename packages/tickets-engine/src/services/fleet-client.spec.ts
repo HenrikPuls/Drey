@@ -160,3 +160,77 @@ describe('FleetClient Autopilot', () => {
     }
   });
 });
+
+/**
+ * Drey quit (req-110): the client asks a live runner to retire if idle and
+ * takes the runner's verdict — it never spawns one to ask, and a runner from
+ * before the route is left to its idle span.
+ */
+describe('FleetClient retireIfIdle', () => {
+  let root = '';
+  let server: http.Server;
+  let verdict: Record<string, unknown> | 404;
+  const retires: string[] = [];
+  const logs: string[] = [];
+
+  beforeEach(async () => {
+    root = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-client-'));
+    retires.length = 0;
+    logs.length = 0;
+    verdict = { ok: true, exiting: true };
+    server = http.createServer((req, res) => {
+      const send = (status: number, body: unknown): void => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(body));
+      };
+      if (req.url === '/health') {
+        send(200, { ok: true, live: 0 });
+      } else if (req.url === '/retire-if-idle' && req.method === 'POST') {
+        retires.push(req.headers.authorization ?? '');
+        if (verdict === 404) {
+          send(404, { ok: false, error: 'no such route: POST /retire-if-idle' });
+        } else {
+          send(200, verdict);
+        }
+      } else {
+        send(404, {});
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as AddressInfo).port;
+    // An OLDER build than this one: a stale runner must still not be retired by handover on this path.
+    await fsp.writeFile(path.join(root, 'runner.json'), JSON.stringify({ port, token: 't', pid: 7, startedAt: '', version: 1, build: formatStamp('2000-01-01T00:00:00.000Z', 'old0') }));
+    await fsp.writeFile(path.join(root, 'runner.js'), 'exports.newer = true;\n');
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await fsp.rm(root, { recursive: true, force: true });
+  });
+
+  const client = (): FleetClient =>
+    new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: (message) => logs.push(message), onFleetChanged: () => undefined });
+
+  it('asks the runner with the bearer token and reports it gone', async () => {
+    expect(await client().retireIfIdle()).toEqual({ ok: true, exiting: true });
+    expect(retires).toEqual(['Bearer t']);
+    expect(logs.some((line) => line.includes('fleet runner retired (pid 7)'))).toBe(true);
+  });
+
+  it('a runner with a live run stays — the verdict is the runner\'s', async () => {
+    verdict = { ok: true, exiting: false, reason: 'live runs' };
+    expect(await client().retireIfIdle()).toEqual({ ok: true, exiting: false, reason: 'live runs' });
+    expect(logs.some((line) => line.includes('stays after Drey closed: live runs'))).toBe(true);
+  });
+
+  it('a runner from before the route (404) is left to its idle span', async () => {
+    verdict = 404;
+    expect(await client().retireIfIdle()).toEqual({ ok: true, exiting: false, reason: 'unsupported' });
+  });
+
+  it('no runner: nothing is spawned and nothing is asked', async () => {
+    await fsp.rm(path.join(root, 'runner.json'));
+    expect(await client().retireIfIdle()).toEqual({ ok: true, exiting: false, reason: 'down' });
+    expect(retires).toEqual([]);
+  });
+});

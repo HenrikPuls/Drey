@@ -1,3 +1,39 @@
+### Milestone 191 — req-110: the fleet runner exits when it is deactivated or when Drey quits idle
+
+**Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): after closing Drey the runner
+(the pid in `runner.json` under `~/.drey-engine/fleet`) stayed alive, and an idle machine had filled up with leftover
+processes. The owner's rule: the runner is always ended when it is deactivated, and when Drey is closed while no run
+is live. The leftover's cause: the engine outlives Drey and polls `/status` every 2.5 s, and every request reset the
+runner's idle clock — the documented "~15 min idle" exit never fired once the engine was alive.
+
+- **One verdict** (`packages/tickets-engine/src/fleet/runner-lifecycle.ts`, `retireVerdict`): the runner may leave only
+  with no live run and no On/Paused Autopilot (`Orchestrator.keepsRunnerAlive`). A live run survives Drey as before
+  (ADR-0075); a running or paused chain keeps draining the board with Drey closed (ADR-0077).
+- **Deactivated:** the Autopilot switched **Off** — the popover, Settings → Tickets, the Notaus (`/chain/autopilot`,
+  `/chain/master`, `/chain/abort`) — ends the runner at once when nothing is live: the reply leaves first, then the
+  descriptor goes and the process exits. With a live run it stays and logs that the idle span takes over.
+- **Drey quits:** a new runner route `POST /retire-if-idle` — the runner decides and answers `{exiting: true}` (and
+  ends) or `{exiting: false, reason: "live runs" | "autopilot"}`; a route of its own rather than a `/shutdown` flag,
+  so a runner from before this build answers 404 instead of reading the flag as the stop-all. The engine sends it
+  from `DreyPresence` (`server/drey-presence.ts`): every Drey instance holds one `/api/events` stream, and once the
+  last has been closed for 5 s (longer than the client's 2 s reconnect) the engine asks — a second
+  `DREY_MULTI_INSTANCE` Drey still subscribed holds it, the phone never counts. `FleetClient.retireIfIdle` never spawns
+  and never retires a stale build on the way; it is on the invoke allowlist, and the plugin's `deactivate` asks it
+  best-effort as the quick path.
+- **Idle clock** (`IdleWatch`): counts writes (any POST) and live runs; reads never reset it. The daemon's `main()`
+  became `startRunner(args, deps)` with `exit` / `stdout` seams, the process entry guarded by `require.main`.
+- **Specs** (`npm run test:plugin -- packages/tickets-engine`): `runner-lifecycle.spec.ts` (the verdict incl. live
+  runs, the idle clock), `runner.spec.ts` (the real daemon in-process on a temp fleet root: Off → `exit(0)` and
+  `runner.json` removed; `retire-if-idle` with `live: 0` → gone; an On or Paused Autopilot → stays with its reason;
+  an unknown route → 404), `fleet-client.spec.ts` (`retireIfIdle`: the verdict is the runner's, 404 and a down
+  runner leave nothing spawned), `drey-presence.spec.ts` (grace, reconnect, second instance), `engine.spec.ts` (an
+  SSE stream closing → the fake runner receives `/retire-if-idle` with its token; a second stream holds it;
+  `retireIfIdle` on the invoke channel). Not covered in-process: a real live worker during the verdict (no worker
+  is spawned in the specs).
+- **Docs:** `plugins/tickets/FLEET.md` (route table, "Lifecycle gotchas"), docs/05 (the fleet row), docs/06 §6.65
+  "When the runner leaves", the manual §13.
+- **Roadmap:** req-110 left with this change.
+
 ### Milestone 190 — D-37: `npm run e2e` is green again, the two flakes were stale handles in the specs
 
 **Not yet manually verified by the owner.** Owner request, outside the list; found while fixing D-35. Specs only, no app code

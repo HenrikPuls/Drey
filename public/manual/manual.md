@@ -1395,6 +1395,12 @@ it. You
 can reach it from a terminal, too: its address and token live in
 `<user data>/plugins/fleet/runner.json`.
 
+The runner does not stand around, either: switching the Autopilot **Off**
+ends it as soon as nothing is running, and closing Drey ends it when no run
+is live and the Autopilot is Off. A live run keeps it, and so does an On or
+Paused Autopilot — the chain keeps working with Drey closed. It comes back by
+itself the next time a run starts.
+
 ### The chain runs itself (milestone 85)
 
 A column with a **worker** runs itself. Settings → *Tickets* shows the
@@ -2140,7 +2146,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.8.1; manual content last changed
-2026-11-06. Screenshots were captured automatically from
+2026-11-07. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

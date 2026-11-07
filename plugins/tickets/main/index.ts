@@ -62,6 +62,7 @@ function messageOf(error: unknown): string {
 }
 
 let engineEvents: (() => void) | null = null;
+let engineFleet: { retireIfIdle(): Promise<unknown> } | null = null;
 let pathAnnouncer: PathAnnouncer | null = null;
 let missionControl: MissionControlHost | null = null;
 
@@ -74,6 +75,13 @@ const plugin: MainPluginModule = {
     missionControl = null;
     engineEvents?.();
     engineEvents = null;
+    // The fleet runner leaves with Drey when nothing needs it (req-110). The
+    // engine's own signal is this event stream closing (its last Drey client
+    // gone, after a grace span); this ask is the quick path when the quit
+    // still gives the request time to leave. Best-effort: a quit waits for
+    // nothing here.
+    void engineFleet?.retireIfIdle().catch(() => undefined);
+    engineFleet = null;
     pathAnnouncer?.dispose();
     pathAnnouncer = null;
   },
@@ -107,6 +115,7 @@ const plugin: MainPluginModule = {
     });
     const board = client.board();
     const fleet = client.fleet();
+    engineFleet = fleet;
     const remoteService = client.remote();
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
     // The vault's priority vocabulary (pipeline.md's `priorities:`), as

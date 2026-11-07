@@ -46,6 +46,12 @@ export interface FleetSnapshot {
 
 type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { readonly ok: false; readonly error: string };
 
+/** What `retireIfIdle` found (req-110): gone, or why the runner stays. */
+export type RetireReply =
+  | { readonly ok: true; readonly exiting: true }
+  | { readonly ok: true; readonly exiting: false; readonly reason: 'live runs' | 'autopilot' | 'down' | 'unsupported' }
+  | { readonly ok: false; readonly error: string };
+
 export class FleetClient {
   private descriptor: RunnerDescriptor | null = null;
   private spawning: Promise<boolean> | null = null;
@@ -318,6 +324,49 @@ export class FleetClient {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Drey is gone (req-110): asks a live runner to leave if nothing needs it.
+   * The runner decides — a live run or an On/Paused Autopilot keeps it and
+   * the reply says why. Never spawns, never retires a stale build on the
+   * way (that would spawn a successor to retire), and a runner from before
+   * the route (404) is left alone: its idle span ends it.
+   */
+  async retireIfIdle(): Promise<RetireReply> {
+    const peer = await this.adoptAlive();
+    if (peer === null) {
+      return { ok: true, exiting: false, reason: 'down' };
+    }
+    try {
+      const res = await fetch(`${this.base()}/retire-if-idle`, { method: 'POST', headers: this.headers() });
+      if (res.status === 404) {
+        this.opts.log('the fleet runner predates retire-if-idle — it leaves after its idle span', 'warn');
+        return { ok: true, exiting: false, reason: 'unsupported' };
+      }
+      const body = (await res.json()) as { exiting?: unknown; reason?: unknown };
+      if (body.exiting === true) {
+        this.opts.log(`fleet runner retired (pid ${peer.pid}) — Drey closed and nothing is live`);
+        this.descriptor = null;
+        return { ok: true, exiting: true };
+      }
+      const reason = body.reason === 'live runs' || body.reason === 'autopilot' ? body.reason : 'unsupported';
+      this.opts.log(`fleet runner stays after Drey closed: ${reason}`);
+      return { ok: true, exiting: false, reason };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  /** The descriptor's runner when it answers `/health`; nothing else — no spawn, no handover. */
+  private async adoptAlive(): Promise<RunnerDescriptor | null> {
+    if (this.descriptor === null || !(await this.alive(this.descriptor))) {
+      this.descriptor = await this.readDescriptor();
+      if (this.descriptor === null || !(await this.alive(this.descriptor))) {
+        return null;
+      }
+    }
+    return this.descriptor;
   }
 
   dispose(): void {

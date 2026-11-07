@@ -3288,6 +3288,45 @@ resume in place), so the board and an open takeover tab simply carry on;
 the takeover tab's saved title lets a Drey restart reopen it before the
 first fleet snapshot.
 
+### When the runner leaves (req-110)
+
+The runner outlives Drey so that runs do — not so that it stands around.
+Three exits, one verdict (`fleet/runner-lifecycle.ts`: nothing live and
+no On/Paused Autopilot; a live run always keeps the runner, and a
+running or paused chain is what drains the board with Drey closed):
+
+```mermaid
+sequenceDiagram
+    participant D as Drey (tickets plugin)
+    participant E as Engine (FleetClient, DreyPresence)
+    participant R as Runner
+    Note over R: Autopilot switched Off (popover / Settings / Notaus)
+    D->>E: chainAutopilot {state: off}
+    E->>R: POST /chain/autopilot
+    R-->>E: status
+    R->>R: verdict: nothing live → exit (descriptor removed)
+    Note over D,E: Drey quits
+    D->>E: retireIfIdle (best-effort, may not leave the process)
+    D--xE: /api/events stream closes
+    E->>E: last Drey stream gone — 5 s grace (a reconnect cancels it)
+    E->>R: POST /retire-if-idle
+    alt nothing live, Autopilot Off
+        R-->>E: {exiting: true}
+        R->>R: descriptor removed, server closed, exit 0
+    else a live run or an On/Paused Autopilot
+        R-->>E: {exiting: false, reason}
+        Note over R: stays; the idle span (writes only) ends it later
+    end
+```
+
+The grace span outlasts the client's 2 s reconnect, and a second Drey
+instance (`DREY_MULTI_INSTANCE`) still on its stream holds the count
+above zero. The idle clock counts writes (any POST) and live runs; reads
+never reset it — before req-110 every request did, and the engine's
+2.5 s `/status` poll kept the runner alive for as long as the engine
+lived. The route is new rather than a `/shutdown` flag so that a runner
+from before req-110 answers 404 instead of reading it as the stop-all.
+
 ## 6.66 The chain dispatches: the board drains itself (milestone 85, [ADR-0077](09_architecture_decisions/0077-continuous-orchestration.md))
 
 ```mermaid
@@ -3321,8 +3360,8 @@ sequenceDiagram
 
 The pass is event-driven — configure, a control change, a run settle —
 with a 15-second safety-net rescan, so external board moves are picked
-up even with Drey closed (a running chain also keeps the runner's idle
-shutdown off). Master on / off / emergency stop and the per-column brakes are
+up even with Drey closed (a running or paused chain also keeps the
+runner: neither the idle span nor Drey's quit ends it then, req-110). Master on / off / emergency stop and the per-column brakes are
 runner state under `<userRoot>/fleet/chain.json`, never in the tickets
 repo (ADR-0076). The lease reaper (a 60 s sweep) fails runs whose
 worker process is provably dead; a `ci` handover column runs its `ci:`

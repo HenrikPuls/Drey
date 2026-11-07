@@ -10,8 +10,12 @@
  * `<root>/runner.json`) — Drey talks to it, and so can a terminal
  * (curl), which the owner asked for explicitly. Single instance: a
  * second runner finding a healthy peer exits quietly; a stale
- * descriptor (peer dead) is taken over. With no live runs and no
- * requests for the idle span the runner shuts itself down.
+ * descriptor (peer dead) is taken over.
+ *
+ * When it leaves (req-110, `runner-lifecycle.ts`): with no live run and no
+ * On/Paused Autopilot it exits when the Autopilot is switched Off, when
+ * the engine asks (`POST /retire-if-idle`, sent once Drey is gone) and
+ * after the idle span without a write. A live run always keeps it.
  *
  * Usage: node runner.js --root <abs-path-to-fleet-root> [--idle-ms <n>]
  */
@@ -31,6 +35,7 @@ import { FleetEventWriter, statusPathFor } from './event-writer';
 import { dkTargetFor, retreatStages } from './dk-target';
 import { MAX_ATTACHMENT_BYTES, RunSupervisor, type SupervisorRecord } from './runs';
 import { personaCostReport, tokenReport, type ReportRun } from './report';
+import { IdleWatch, retireVerdict, type RunnerLiveness } from './runner-lifecycle';
 import {
   isWorkerProvider,
   normalizeFleetCaps,
@@ -49,7 +54,7 @@ import {
 const VERSION = 1;
 const MAX_BODY = 1024 * 1024;
 
-interface Args {
+export interface Args {
   readonly root: string;
   readonly idleMs: number;
 }
@@ -73,8 +78,26 @@ function parseArgs(argv: readonly string[]): Args {
   return { root, idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 15 * 60_000 };
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+/** The process seams the in-process spec replaces; the real entry uses the defaults. */
+export interface RunnerDeps {
+  /** Ends the process; `process.exit` by default. */
+  readonly exit?: (code: number) => void;
+  /** Mirrors every log line; `console.log` by default. */
+  readonly stdout?: (line: string) => void;
+}
+
+/** What `startRunner` hands back: the spec reads the descriptor and ends the runner through it. */
+export interface RunnerHandle {
+  readonly port: number;
+  readonly token: string;
+  readonly descriptorPath: string;
+  /** The graceful stop: live runs stopped (bounded), the descriptor removed, `exit(0)`. */
+  stop(): Promise<void>;
+}
+
+export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<RunnerHandle | null> {
+  const exit = deps.exit ?? ((code: number): void => process.exit(code));
+  const stdout = deps.stdout ?? ((line: string): void => console.log(line));
   await fsp.mkdir(args.root, { recursive: true });
   await fsp.mkdir(path.join(args.root, 'runs'), { recursive: true });
   const descriptorPath = path.join(args.root, 'runner.json');
@@ -83,7 +106,8 @@ async function main(): Promise<void> {
   // descriptor (crashed runner) is taken over.
   const existing = await readDescriptor(descriptorPath);
   if (existing !== null && (await peerAlive(existing))) {
-    process.exit(0);
+    exit(0);
+    return null;
   }
 
   // The daemon's log reaches three places: the console (lost for a
@@ -101,7 +125,7 @@ async function main(): Promise<void> {
   let logChain: Promise<void> = Promise.resolve();
   const log = (message: string): void => {
     const line = `[fleet ${new Date().toISOString()}] ${message}`;
-    console.log(line);
+    stdout(line);
     ring.push(line);
     if (ring.length > 1000) {
       ring.splice(0, ring.length - 1000);
@@ -238,9 +262,13 @@ async function main(): Promise<void> {
   };
   const tokenBuffer = Buffer.from(token, 'utf8');
 
-  let lastRequest = Date.now();
+  // The idle clock counts writes only (req-110): the engine's 2.5 s
+  // `/status` poll used to reset it for as long as the engine lived.
+  const idle = new IdleWatch(args.idleMs);
   const server = http.createServer((req, res) => {
-    lastRequest = Date.now();
+    if (req.method !== 'GET') {
+      idle.noteActivity();
+    }
     const given = req.headers.authorization ?? '';
     const okToken =
       given.startsWith('Bearer ') &&
@@ -327,7 +355,21 @@ async function main(): Promise<void> {
         // stop path is the owner's own button; the wait is bounded so a
         // hung adapter cannot hold the daemon hostage.
         await stopLiveRunsForExit();
-        setTimeout(() => process.exit(0), 100);
+        setTimeout(() => shutdown(0), 100);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/retire-if-idle') {
+        // Drey is gone (req-110): the engine asks the runner to leave when
+        // nothing needs it. The decision is the runner's own — a live run or
+        // an On/Paused Autopilot says no, and the reply says why — so no
+        // `/health` → `/shutdown` pair can race a run that starts in between.
+        // A route of its own, not a `/shutdown` flag: a runner from before
+        // this build would read an unknown flag as the plain stop-all.
+        const verdict = retireVerdict(liveness());
+        respond(200, { ok: true, ...verdict });
+        if (verdict.exiting) {
+          leave('Drey closed and nothing is live');
+        }
         return;
       }
       if (req.method === 'GET' && pathname === '/log') {
@@ -398,6 +440,7 @@ async function main(): Promise<void> {
           return;
         }
         respond(200, await orchestrator.setMaster(body.mode as ChainMaster));
+        leaveIfDeactivated();
         return;
       }
       if (req.method === 'POST' && pathname === '/chain/autopilot') {
@@ -407,6 +450,7 @@ async function main(): Promise<void> {
           return;
         }
         respond(200, await orchestrator.setAutopilot(parsed.value));
+        leaveIfDeactivated();
         return;
       }
       if (req.method === 'POST' && pathname === '/chain/column') {
@@ -428,6 +472,10 @@ async function main(): Promise<void> {
       }
       if (req.method === 'POST' && pathname === '/chain/abort') {
         respond(200, await orchestrator.abortAll());
+        // The Notaus leaves the Autopilot Off; the runs it stopped are
+        // still settling, so this usually finds them live and the idle
+        // span takes over once they are gone.
+        leaveIfDeactivated();
         return;
       }
       if (req.method === 'POST' && pathname === '/chain/persona-pause') {
@@ -613,6 +661,32 @@ async function main(): Promise<void> {
 
   const supervisorsOfLive = (): number =>
     [...supervisors.values()].filter((s) => s.hasLive()).length;
+  const liveness = (): RunnerLiveness => ({
+    live: supervisorsOfLive(),
+    keepsAlive: orchestrator?.keepsRunnerAlive ?? false,
+  });
+
+  // The exit after a reply (req-110): the response leaves first, then the
+  // descriptor goes and the server closes. Never during a handover — that
+  // path ends the process itself once its records are written.
+  let leaving = false;
+  const leave = (why: string): void => {
+    if (leaving || handingOver) {
+      return;
+    }
+    leaving = true;
+    log(`${why} — exiting (the engine respawns the runner on the next start)`);
+    setTimeout(() => shutdown(0), 100);
+  };
+  /** The Autopilot was switched Off: deactivated, so the runner leaves unless a run is live. */
+  const leaveIfDeactivated = (): void => {
+    const state = liveness();
+    if (retireVerdict(state).exiting) {
+      leave('the Autopilot is off and nothing is live');
+    } else if (!state.keepsAlive) {
+      log('the Autopilot is off — the runner stays for its live runs and leaves after the idle span once they end');
+    }
+  };
 
   const supervisorOfRun = (runId: string): RunSupervisor | null => {
     for (const s of supervisors.values()) {
@@ -623,9 +697,12 @@ async function main(): Promise<void> {
     return null;
   };
 
-  server.listen(port, '127.0.0.1', () => {
-    fsSync.writeFileSync(descriptorPath, `${JSON.stringify(descriptor)}\n`, { mode: 0o600 });
-    log(`listening on 127.0.0.1:${port} (pid ${process.pid})`);
+  const listening = new Promise<void>((resolve) => {
+    server.listen(port, '127.0.0.1', () => {
+      fsSync.writeFileSync(descriptorPath, `${JSON.stringify(descriptor)}\n`, { mode: 0o600 });
+      log(`listening on 127.0.0.1:${port} (pid ${process.pid})`);
+      resolve();
+    });
   });
 
   // The lease reaper's round (M85): a run whose worker process is
@@ -635,27 +712,34 @@ async function main(): Promise<void> {
   }, 60_000);
   reapTimer.unref();
 
-  // Idle shutdown: nothing live, the Autopilot is Off, and nobody asked
-  // for a while — the plugin respawns the runner on demand. A running
-  // chain keeps the process alive: it is the thing that drains the board
-  // while Drey is closed (M85). So does a Paused one: the runner is what
-  // resumes it, and a respawn would boot as Off.
+  // Idle shutdown: nothing live, the Autopilot is Off, and no write for
+  // a while — the engine respawns the runner on demand. A running chain
+  // keeps the process alive: it is the thing that drains the board while
+  // Drey is closed (M85). So does a Paused one: the runner is what
+  // resumes it, and a respawn would boot as Off. Reads never count
+  // (req-110): the engine polls for as long as it lives.
   const idleTimer = setInterval(() => {
-    if (
-      !orchestrator.keepsRunnerAlive &&
-      !supervisorsOfLive() &&
-      Date.now() - lastRequest > args.idleMs
-    ) {
+    if (!leaving && !handingOver && idle.expired(liveness())) {
       log(`idle for ${Math.round(args.idleMs / 1000)}s — shutting down`);
+      leaving = true;
       shutdown(0);
     }
   }, 15_000);
   idleTimer.unref();
 
+  let exited = false;
   const shutdown = (code: number): void => {
     fsSync.rmSync(descriptorPath, { force: true });
-    server.close(() => process.exit(code));
-    setTimeout(() => process.exit(code), 2_000).unref();
+    clearInterval(idleTimer);
+    clearInterval(reapTimer);
+    const once = (): void => {
+      if (!exited) {
+        exited = true;
+        exit(code);
+      }
+    };
+    server.close(once);
+    setTimeout(once, 2_000).unref();
   };
   const onSignal = (): void => {
     void stopLiveRunsForExit().finally(() => shutdown(0));
@@ -665,6 +749,24 @@ async function main(): Promise<void> {
   process.once('exit', () => {
     fsSync.rmSync(descriptorPath, { force: true });
   });
+
+  await listening;
+  return {
+    port,
+    token,
+    descriptorPath,
+    stop: async () => {
+      await stopLiveRunsForExit();
+      await new Promise<void>((resolve) => {
+        server.once('close', resolve);
+        shutdown(0);
+      });
+    },
+  };
+}
+
+async function main(): Promise<void> {
+  await startRunner(parseArgs(process.argv.slice(2)));
 }
 
 async function readDescriptor(descriptorPath: string): Promise<RunnerDescriptor | null> {
@@ -695,4 +797,8 @@ async function peerAlive(peer: RunnerDescriptor): Promise<boolean> {
   }
 }
 
-void main();
+// The process entry only: the spec imports `startRunner` and runs the
+// daemon in-process against a temp root.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  void main();
+}

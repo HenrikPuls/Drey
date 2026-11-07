@@ -25,6 +25,7 @@ import { FilePlanShadowStore } from '../services/plan-shadow';
 import { FleetEventWriter, statusPathFor } from '../fleet/event-writer';
 import type { FleetEvents } from '../fleet/orchestrator';
 import { ChangeHub, DreyTicketsPort, type PathsChange } from './drey-port';
+import { DreyPresence } from './drey-presence';
 import { FileConfigStore } from './file-config';
 import { RemoteService } from './service';
 import { parseSettingsPatch } from './settings';
@@ -54,6 +55,12 @@ export interface EngineOptions {
   readonly verifyHarness?: VerifyHarness;
   /** The Mission Control chat's LLM bridge; `createChatBridge` by default (the specs' seam). */
   readonly chatBridge?: ChatBridge;
+  /**
+   * How long after the last Drey event stream closed the engine asks the
+   * runner to retire if idle (req-110); 5 s by default, longer than the
+   * client's 2 s reconnect.
+   */
+  readonly dreyGoneGraceMs?: number;
 }
 
 export interface Engine {
@@ -86,7 +93,7 @@ const BOARD_METHODS = [
   'initialize', 'onVaultEvent',
 ] as const;
 
-const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setAutopilot', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status'] as const;
+const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setAutopilot', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status', 'retireIfIdle'] as const;
 
 // The team's reads and controls (E13-8): the remote port's own methods, so
 // Drey's Team tab and Capacity band show exactly what the phone shows.
@@ -120,6 +127,19 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     log,
     onFleetChanged: () => hub.emit('fleet'),
   });
+  // req-110: when the last Drey instance's event stream has been closed for
+  // the grace span, the runner is asked to retire if idle — the runner keeps
+  // itself for a live run or an On/Paused Autopilot.
+  const presence = new DreyPresence(() => {
+    void fleet.retireIfIdle().then(
+      (reply) => {
+        if (!reply.ok) {
+          log(`the fleet runner could not be asked to retire: ${reply.error}`, 'warn');
+        }
+      },
+      (error: unknown) => log(`the fleet runner could not be asked to retire: ${String(error)}`, 'warn'),
+    );
+  }, opts.dreyGoneGraceMs ?? 5_000);
   // E7: one shared event writer for the engine process — the board stamps
   // ledger phase/merged/archived lines, the verify service proof_ready
   // lines; the append-only files ride the next regular commit.
@@ -390,6 +410,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         connection: 'keep-alive',
       });
       res.write(`: connected\n\n`);
+      const detach = presence.attach();
       const unsubscribe = hub.subscribe((what, payload) => {
         res.write(`data: ${JSON.stringify(payload === undefined ? { change: what } : { change: what, ...payload })}\n\n`);
       });
@@ -401,6 +422,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         clearInterval(keepAlive);
         unsubscribe();
         unsubscribePaths();
+        detach();
       });
       return;
     }
@@ -459,6 +481,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         return;
       }
       closed = true;
+      presence.dispose();
       stopSettling();
       improvements.dispose();
       verify.dispose();
