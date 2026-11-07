@@ -4,12 +4,12 @@
  * its state, what it does, and - for a stuck run - Nudge, Hand to Claude
  * Code and Stop (asking first); under the cards the selected persona's
  * detail: a list of panes at the left (Setup, Memory, 1:1) and the pane.
- * Not built yet and left out, as the board has them: the Autopilot chip
- * (the status bar's item), New persona, Edit persona, Talk to 1:1 in the
+ * Not built yet and left out, as the board has them: New persona, Edit persona, Talk to 1:1 in the
  * Assistant, Remove from crew, Friction, Notify / Runs after, the slot
  * share and the week / typical-run costs (E12-16, E13-19). Plain DOM over
  * the model in `team-model.ts`.
  */
+import { autopilotToneOf, autopilotViewOf } from '../../../../shared/autopilot';
 import type { PersonaView } from '../../shared/remote-protocol';
 import type { PersonaMemoryReply, PersonaThreadReply } from '../../shared/remote-protocol';
 import { h, textButton, type DeskDeps } from '../desk-deps';
@@ -402,6 +402,28 @@ function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, pe
 
 // --- the tab -------------------------------------------------------------------
 
+/**
+ * The Autopilot chip of the head (board 7f): the state with its dot, and a click opens the
+ * same popover the status bar's item does. Absent without a chain config (no tickets vault).
+ */
+function autopilotChipOf(deps: DeskDeps): HTMLElement | null {
+  const view = autopilotViewOf(deps.chain());
+  if (view === null) {
+    return null;
+  }
+  const { api } = deps;
+  const state = api.i18n.t(`autopilot.state.${view.state}`);
+  const chip = h('button', 'desk-autopilot-chip');
+  chip.type = 'button';
+  chip.setAttribute('aria-haspopup', 'dialog');
+  chip.setAttribute('aria-expanded', 'false');
+  chip.title = api.i18n.t('status.autopilot.tooltip', { state, chord: 'Mod+Alt+P' });
+  const tone = autopilotToneOf(view.state);
+  chip.append(h('span', `desk-autopilot-dot desk-autopilot-dot-${tone}`), document.createTextNode(api.i18n.t('status.autopilot', { state })));
+  chip.addEventListener('click', () => deps.toggleAutopilot?.());
+  return chip;
+}
+
 /** The day's cost against the budget as the head writes it (`$4.10 of $15 today` over a bar). */
 function budgetNode(model: TeamModel): HTMLElement | null {
   if (model.todayCost === null) {
@@ -449,6 +471,10 @@ export function mountTeam(deps: DeskDeps, store: TeamStore, host: HTMLElement): 
     const budget = budgetNode(model);
     if (budget !== null) {
       head.append(budget);
+    }
+    const autopilot = autopilotChipOf(deps);
+    if (autopilot !== null) {
+      head.append(autopilot);
     }
     head.append(
       iconButton(

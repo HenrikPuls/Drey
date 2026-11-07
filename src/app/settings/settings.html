@@ -1,63 +1,80 @@
-<div class="backdrop" appOverlayGuard (click)="requestClose()"></div>
-
 <div
   class="panel settings-ui"
-  role="dialog"
-  aria-modal="true"
+  role="region"
   aria-label="Settings"
   (focusin)="onFocusIn($event)"
   (focusout)="onFocusOut($event)"
   (keydown.enter)="onEnter($event)"
 >
-  <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">
-    <app-icon name="x" [size]="15" />
-  </button>
-
-  <nav class="categories" aria-label="Settings categories">
-    <div class="head">
-      <span class="title">Settings</span>
+  <div class="top">
+    <div class="searchbar">
+      <app-icon name="search" [size]="16" class="search-icon" />
+      <input
+        type="search"
+        class="search"
+        aria-label="Search settings"
+        [placeholder]="'settings.search.placeholder' | t"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="query()"
+        (input)="onSearch($event)"
+        (keydown)="onSearchKey($event)"
+      />
+      @if (searching()) {
+        <span class="found" role="status">{{ 'settings.search.found' | t: { n: hits().length } }}</span>
+      }
+      <button
+        type="button"
+        class="clear"
+        [attr.aria-label]="'settings.search.clear' | t"
+        [title]="'settings.search.clear' | t"
+        (click)="clearSearch()"
+      >
+        <app-icon name="x" [size]="15" />
+      </button>
     </div>
-    <input
-      type="search"
-      class="search"
-      aria-label="Search settings"
-      title="Search settings"
-      autocomplete="off"
-      spellcheck="false"
-      [value]="query()"
-      (input)="onSearch($event)"
-      (keydown)="onSearchKey($event)"
-    />
-    @for (category of categories(); track category.id) {
-      <div class="cat-row">
+    <div class="scope-tabs" role="tablist" aria-label="Setting scope">
+      @for (item of scopes; track item.id) {
+        <button
+          type="button"
+          role="tab"
+          class="scope-tab"
+          [class.active]="shownScope() === item.id"
+          [attr.aria-selected]="shownScope() === item.id"
+          (click)="pickScope(item.id)"
+        >
+          {{ item.labelKey | t }}
+        </button>
+      }
+      <span class="spacer"></span>
+      <span class="scope-note">{{ scopeNoteKey() | t }}</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <nav class="categories" aria-label="Settings categories">
+      @for (category of categories(); track category.id) {
         <button
           type="button"
           class="category"
-          [class.active]="selected() === category.id && !searching()"
+          [class.active]="selected() === category.id && !searching() && !(isExpanded(category.id) && currentSection() !== null)"
+          [class.dim]="searching() && categoryHits(category.id) === 0"
           [attr.aria-current]="selected() === category.id && !searching() ? 'page' : null"
+          [attr.aria-expanded]="category.sections?.length ? isExpanded(category.id) : null"
+          [title]="category.hint"
           (click)="selectCategory(category.id)"
         >
+          <span class="chev" aria-hidden="true">
+            @if (category.sections?.length) {
+              <app-icon [name]="isExpanded(category.id) ? 'chevron-down' : 'chevron-right'" [size]="14" />
+            }
+          </span>
           <span class="label">{{ category.label }}</span>
-          @if (pageCount(category.id) > 0) {
-            <span class="count" [attr.aria-label]="pageCount(category.id) + ' settings'">{{ pageCount(category.id) }}</span>
+          @if (searching() && categoryHits(category.id) > 0) {
+            <span class="count">{{ categoryHits(category.id) }}</span>
           }
-          <span class="hint">{{ category.hint }}</span>
         </button>
-        @if (category.sections?.length) {
-          <button
-            type="button"
-            class="twisty"
-            [attr.aria-expanded]="isExpanded(category.id)"
-            [attr.aria-label]="(isExpanded(category.id) ? 'Collapse ' : 'Expand ') + category.label"
-            [title]="(isExpanded(category.id) ? 'Collapse ' : 'Expand ') + category.label"
-            (click)="toggleExpanded(category.id)"
-          >
-            <app-icon [name]="isExpanded(category.id) ? 'chevron-down' : 'chevron-right'" [size]="13" />
-          </button>
-        }
-      </div>
-      @if (category.sections?.length && isExpanded(category.id)) {
-        <div class="sections" role="group" [attr.aria-label]="category.label + ' sections'">
+        @if (category.sections?.length && isExpanded(category.id)) {
           @for (section of category.sections; track section.id) {
             <button
               type="button"
@@ -73,82 +90,62 @@
               (click)="openSection(category.id, section.id)"
             >
               <span class="section-label">{{ section.label }}</span>
-              @if (sectionCount(category.id, section) > 0) {
-                <span class="count">{{ sectionCount(category.id, section) }}</span>
+              @if (searching() && sectionHits(category.id, section.id) > 0) {
+                <span class="count">{{ sectionHits(category.id, section.id) }}</span>
               }
             </button>
           }
-        </div>
+        }
       }
-    }
-  </nav>
+    </nav>
 
-  <div class="right">
-    <div class="scope-tabs" role="tablist" aria-label="Setting scope">
-      @for (item of scopes; track item.id) {
-        <button
-          type="button"
-          role="tab"
-          class="scope-tab"
-          [class.active]="scope() === item.id"
-          [attr.aria-selected]="scope() === item.id"
-          (click)="pickScope(item.id)"
-        >
-          {{ item.labelKey | t }}
-        </button>
-      }
-    </div>
-    <div #detail class="detail" (scroll)="onScroll()">
-      @if (searching()) {
-        <div class="results" role="list" aria-label="Search results">
-          @for (hit of hits(); track hit.categoryId + hit.entry.key) {
-            <button type="button" class="result" role="listitem" (click)="openHit(hit)">
-              <span class="result-where">
-                {{ hit.categoryLabel }}{{ hit.sectionLabel ? ' › ' + hit.sectionLabel : '' }}
-              </span>
-              <span class="result-label">{{ hit.entry.label }}</span>
-              @if (hit.entry.description) {
-                <span class="result-desc">{{ hit.entry.description }}</span>
-              }
-            </button>
-          } @empty {
-            <div class="no-match" role="status">
-              <p>
-                @if (query().trim() !== '') {
-                  No setting matches "{{ query().trim() }}"
-                } @else {
-                  No setting has this scope
+    <div class="right">
+      <div #detail class="detail" (scroll)="onScroll()">
+        @if (searching()) {
+          <h1 class="results-title">{{ 'settings.results.title' | t }}</h1>
+          <div class="results" role="list" aria-label="Search results">
+            @for (hit of hits(); track hit.categoryId + hit.entry.key) {
+              <button type="button" class="result" role="listitem" (click)="openHit(hit)">
+                <span class="result-title">
+                  <span class="result-where">
+                    {{ hit.categoryLabel }}{{ hit.sectionLabel ? ' › ' + hit.sectionLabel : '' }} ›
+                  </span>
+                  <b class="result-label">{{ hit.entry.label }}</b>
+                </span>
+                @if (hit.entry.description) {
+                  <span class="result-desc">{{ hit.entry.description }}</span>
                 }
-              </p>
-              <button type="button" class="ghost" (click)="clearSearch()">Clear search</button>
-            </div>
-          }
+              </button>
+            } @empty {
+              <div class="no-match" role="status">
+                <p>
+                  @if (query().trim() !== '') {
+                    No setting matches "{{ query().trim() }}". Try another word, or clear the search.
+                  } @else {
+                    No setting has this scope
+                  }
+                </p>
+                <button type="button" class="ghost" (click)="clearSearch()">Clear search</button>
+              </div>
+            }
+          </div>
+        } @else if (settings.draft()) {
+          <ng-container
+            *ngComponentOutlet="selectedComponent(); inputs: selectedInputs()"
+          />
+        } @else {
+          <p class="loading">Loading settings…</p>
+        }
+      </div>
+
+      @if (settings.saveError(); as error) {
+        <div class="save-error" role="alert">
+          <span>Could not save settings: {{ error }}</span>
+          <button type="button" class="ghost" (click)="closeWithoutSaving()">
+            Close without saving
+          </button>
         </div>
-      } @else if (settings.draft()) {
-        <ng-container
-          *ngComponentOutlet="selectedComponent(); inputs: selectedInputs()"
-        />
-      } @else {
-        <p class="loading">Loading settings…</p>
       }
     </div>
-
-    <footer class="actions-bar">
-      @if (settings.saveError(); as error) {
-        <span class="save-error" role="alert">Could not save settings: {{ error }}</span>
-      } @else if (settings.saving() || settings.isDirty()) {
-        <span class="saved">Saving…</span>
-      } @else {
-        <span class="saved">Changes are saved automatically</span>
-      }
-      <div class="spacer"></div>
-      @if (settings.saveError()) {
-        <button type="button" class="ghost" (click)="closeWithoutSaving()">
-          Close without saving
-        </button>
-      } @else {
-        <button type="button" class="ghost" (click)="requestClose()">Close</button>
-      }
-    </footer>
   </div>
 </div>

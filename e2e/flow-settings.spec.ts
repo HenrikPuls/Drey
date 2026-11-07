@@ -119,15 +119,14 @@ test.describe('Flow tab and Settings → Tickets (E13-11, E13-12)', () => {
     await page.locator('app-settings .category', { hasText: 'Tickets' }).click();
     const settings = page.locator('.tset-desk');
     await expect(settings).toBeVisible({ timeout: 15_000 });
-    await expect(settings.locator('.tset-desk-chip')).toHaveText(['Ben', 'Paul', 'Ralf', 'You']);
-    await expect(settings.locator('.tset-desk-step')).toHaveText([/^Plan · Paul/, /^Build · Ben/, /^Review · Ralf/]);
-    // D-17: a step offers workers, never tickets.
-    await expect(settings.locator('select[aria-label="Worker for Build"] option')).toHaveText(['OpenCode', 'Claude Code', 'Kimi Code']);
+    await expect(settings.locator('.tset-set-controls').first()).toContainText('Ben, Paul, Ralf');
+    await expect(settings.locator('[aria-label="Standard flow"]')).toHaveText('Plan → Build → Review');
     await expect(settings).toContainText('$12 across 3 personas');
-    await expect(settings.locator('#tset-videos-limit')).not.toHaveValue('');
-    await expect(settings.locator('#tset-videos-in-git')).not.toBeChecked();
+    const videos = page.locator('[data-settings-section="videos"]');
+    await expect(videos.locator('#tset-videos-limit')).not.toHaveValue('');
+    await expect(videos.locator('#tset-videos-in-git')).not.toBeChecked();
     await page.screenshot({ path: testInfo.outputPath('settings-tickets.png') });
-    await settings.locator('#tset-videos-limit').scrollIntoViewIfNeeded();
+    await videos.locator('#tset-videos-limit').scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath('settings-tickets-videos.png') });
 
     // The flow editor opens from Settings on the picked ticket (the overlay stays over it).

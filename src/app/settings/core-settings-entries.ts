@@ -46,7 +46,7 @@ const RAW_ENTRIES: Readonly<Record<string, readonly SettingsSearchEntry[]>> = {
   entry: [e('entry.format', 'Entry format', 'The / menu Entry block')],
   shortcuts: [e('shortcuts', 'Keyboard shortcuts', 'Commands, chords and quick capture')],
   tools: [e('tools', 'Assistant tools', 'Vault, tasks, web search, web fetch, MCP servers')],
-  widgets: [e('widgets', 'Panels & plugins', 'Toggle panels and plugins')],
+  widgets: [e('widgets', 'Panels and plugins', 'Toggle panels and plugins')],
   spellcheck: [e('spelling', 'Spelling', 'Dictionaries and language')],
 };
 

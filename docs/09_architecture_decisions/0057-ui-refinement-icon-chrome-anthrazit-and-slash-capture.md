@@ -164,6 +164,10 @@ had 7px), and the borders line up. The titlebar keeps 36px; the image/PDF
 meta rows, the browser toolbar and the assistant head stay on `--bar-h` —
 none of them touches the window's top line.
 
+## Later change — Settings is an editor tab (milestone 197)
+
+Board 7g draws Settings as a `Settings ×` tab in the editor area, not a full-surface overlay: the overlay of this ADR's Settings paragraph is now the body of that tab (ADR-0010 later change).
+
 ## Consequences
 
 - **Autotag has no surface.** Its only button lived in the drawer. The

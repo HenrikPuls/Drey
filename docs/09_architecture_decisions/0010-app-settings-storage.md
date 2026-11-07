@@ -286,3 +286,24 @@ longer compiles knowledge about the assistant's features.
 - The ADR-0020 later change (Appearance previews from the draft until
   Save) is reduced to: the draft shows a change before its automatic
   save.
+
+## Later change — board 7g: the overlay becomes an editor tab (milestone 197, 2026-11-07)
+
+Board 7g draws Settings inside the frame: a `Settings ×` tab in the editor area, a search block across the top, the
+scope tabs, a section tree and the page — no backdrop, no footer, no *Close*, no X. The owner ruled (2026-11-07): the
+overlay becomes a tab.
+
+- **What changed.** `<app-settings>` is no longer mounted by `App`. A core doc kind `settings` (`SettingsTabService`,
+  `src/app/settings/`) registers on the `DocKindRegistry` seam and mounts the component into the pane's body through
+  `createComponent`; the status-bar entry, File → Settings, `Mod+,` (`settings.open`) and Help → About all call
+  `SettingsTabService.open(category?)`, which `addPluginDoc`s one tab under the key `settings://` — opening it again
+  focuses it. The session stores the tab's presence and nothing else. The tab carries no glyph, the status bar says
+  "Settings" while it is active.
+- **Leaving.** `Escape` (focus inside the tab or on nothing) and the tab's X close it like any tab; a pending save is
+  flushed first. A failed save keeps the tab open and shows its message with *Close without saving* in a strip under the
+  page. Closing by the tab's X while a save fails ends the session with the error unseen — the draft is dropped.
+- **What stays.** The framework (registry, draft, categories, plugin pages), the one stylesheet `settings-ui.css`, and
+  the rule of this ADR's earlier change: every change applies as it is made, a typed value when the field is left or on
+  Enter. `SettingsService.openScreen` / `closeScreen` now mark the tab's session (the draft preview of Appearance
+  follows the tab being mounted); `closeScreen(session)` ignores a session that a newer open replaced.
+- **Views.** The tab belongs to the view it was opened in (ADR-0089), like any other tab.

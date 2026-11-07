@@ -76,8 +76,11 @@ export class SettingsService {
   /** The Settings screen's working copy. `null` before the screen has ever opened. */
   readonly draft = this._draft.asReadonly();
 
-  /** Whether the Settings overlay is showing (the sidebar entry opens it). */
+  /** Whether the Settings tab is mounted (board 7g: Settings is an editor tab). */
   readonly screenOpen = signal(false);
+
+  /** Counts the Settings sessions, so a late close of an older one cannot end a newer one. */
+  private screenEpoch = 0;
 
   /**
    * A category the screen should open on (Help -> About passes `'about'`).
@@ -225,11 +228,12 @@ export class SettingsService {
   // -- Screen lifecycle ----------------------------------------------------
 
   /**
-   * Opens the Settings overlay on a fresh copy of the persisted config.
+   * Starts a Settings session (the tab mounted) on a fresh copy of the persisted config.
    * `category` optionally names the category to select (Help -> About);
-   * the component falls back to the first one when it is unknown.
+   * the component falls back to the first one when it is unknown. Returns the
+   * session's number for `closeScreen`.
    */
-  openScreen(category?: string): void {
+  openScreen(category?: string): number {
     const config = this._config();
     if (config) {
       this._draft.set(structuredClone(config));
@@ -238,6 +242,7 @@ export class SettingsService {
     this.connectionTest.set(null);
     this.openCategory.set(category ?? null);
     this.screenOpen.set(true);
+    return ++this.screenEpoch;
   }
 
   /**
@@ -245,7 +250,10 @@ export class SettingsService {
    * component calls `flush()` first and only comes here once that went
    * through (or the user chose to close without saving after a failure).
    */
-  closeScreen(): void {
+  closeScreen(session?: number): void {
+    if (session !== undefined && session !== this.screenEpoch) {
+      return; // a newer session started since: it owns the draft now
+    }
     this.cancelTimer();
     this.editingText.set(false);
     const config = this._config();

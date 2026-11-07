@@ -72,7 +72,8 @@ export class TabBar {
    * was the hardcoded `kind === 'browser'` branch).
    */
   protected tabIcon(doc: OpenDoc): { url: string | null; glyph: IconName } | null {
-    if (doc.kind === 'text' || doc.kind === 'image' || doc.kind === 'pdf') {
+    // Settings is a core tab and, as board 7g draws it, carries no glyph.
+    if (doc.kind === 'text' || doc.kind === 'image' || doc.kind === 'pdf' || doc.kind === 'settings') {
       return null;
     }
     return {

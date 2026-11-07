@@ -2,8 +2,8 @@ import { test, expect, type Page } from './fixtures/drey';
 
 /**
  * ADR-0010 "Later change": Settings has no Save and no Discard. A change
- * applies as it is made and saves itself a moment later; the footer shows
- * the save status and one Close button.
+ * applies as it is made and saves itself a moment later. Board 7g draws no
+ * footer and no Close button: Escape (or a click beside the panel) leaves.
  */
 const accentVar = (page: Page): Promise<string> =>
   page.evaluate(() =>
@@ -16,8 +16,6 @@ async function openAppearance(page: Page): Promise<void> {
   await expect(page.locator('app-settings-appearance')).toBeVisible();
 }
 
-const footer = (page: Page) => page.locator('app-settings .actions-bar');
-
 /** The stored config, read back over IPC -- what a restart would start on. */
 const storedConfig = (page: Page): Promise<{ appearance: { accent: string }; daily: { dir: string } }> =>
   page.evaluate(() => window.dreyApi.getConfig());
@@ -26,18 +24,15 @@ test('Appearance: a change applies at once, saves itself and survives closing', 
   await openAppearance(page);
 
   expect(await accentVar(page)).toBe('#8ecbef'); // default = Anthrazit's seed accent
-  await expect(footer(page).locator('.saved')).toHaveText('Changes are saved automatically');
-  // One button, and it closes: no Save, no Discard.
-  await expect(footer(page).locator('button')).toHaveCount(1);
-  await expect(footer(page).locator('button')).toHaveText('Close');
+  // No footer, no Save, no Discard, no Close button (board 7g).
+  await expect(page.locator('app-settings .actions-bar, app-settings .close')).toHaveCount(0);
 
   // Pick "Sage" -> shows immediately and reaches disk without a Save click.
   await page.locator('app-settings .swatch[title="Sage"]').click();
   await expect.poll(() => accentVar(page)).toBe('#7d8f6e');
   await expect.poll(async () => (await storedConfig(page)).appearance.accent).toBe('sage');
-  await expect(footer(page).locator('.saved')).toHaveText('Changes are saved automatically');
 
-  await footer(page).locator('button', { hasText: 'Close' }).click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('app-settings')).toHaveCount(0);
   expect(await accentVar(page)).toBe('#7d8f6e');
 
@@ -88,7 +83,7 @@ test('Appearance: theme picker re-tints the shell and persists', async ({ page }
   await expect.poll(dataTheme).toBe('nord');
   expect(await seedBg()).toBe('#2e3440'); // Nord's seed background
 
-  await page.locator('app-settings .close').click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('app-settings')).toHaveCount(0);
   expect(await dataTheme()).toBe('nord'); // stuck after closing
 

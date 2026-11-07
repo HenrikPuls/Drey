@@ -686,7 +686,7 @@ test.describe('manual: settings', () => {
       }
     }
 
-    await page.locator('app-settings .close').click();
+    await page.keyboard.press('Escape');
   });
 });
 

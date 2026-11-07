@@ -1,70 +1,20 @@
 /*
- * Settings → Tickets, the rows of board 7g (E13-12): team chips, the
- * standard flow strip, budget and runners, video storage. Built on the
- * page's own vocabulary (settings.css: tset-section, tset-kv); only what
- * those lack is here. Theme tokens only; radii 4 / 8, nothing under 13 px.
+ * Settings → Tickets, the rows of board 7g (E13-12): crew, flow,
+ * autopilot, budget and runners, video storage. The row look itself
+ * (.tset-set, .tset-sets) is in settings.css beside the page's other
+ * vocabulary; only what those lack is here. Theme tokens only; radii 4 / 8,
+ * nothing under 13 px.
  */
 .tset-desk {
   display: flex;
   flex-direction: column;
-  gap: 28px;
 }
 
-.tset-desk-chips,
 .tset-desk-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-}
-
-.tset-desk-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 10px;
-  font-size: 13px;
-  color: var(--text-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-chip);
-}
-
-.tset-desk-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.tset-desk-flow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tset-desk-step {
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-.tset-desk-step select {
-  margin-left: 6px;
-}
-
-.tset-desk-step:not(:last-child)::after {
-  margin-left: 6px;
-  color: var(--text-4);
-  content: '→';
-}
-
-.tset-desk-check {
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: var(--text-2);
 }
 
 .tset-desk-confirm {
@@ -72,7 +22,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--field-border);
   border-radius: var(--radius-control);
 }
 
@@ -85,5 +35,13 @@
 }
 
 #tset-videos-limit {
-  width: 8ch;
+  width: 80px;
+}
+
+#tset-autopilot-resume {
+  width: 100px;
+}
+
+#tset-human-name {
+  width: 200px;
 }

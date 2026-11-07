@@ -97,7 +97,7 @@ Two paths cover almost everything:
 | Editor | `editor/` | The only place CodeMirror is used: Live Preview, source mode, the Markdown dialect, toolbar, slash menu, spellcheck, wikilinks, tag pills. |
 | Vault view | `vault/`, `calendar/`, `windows/` | The Files panel and file operations, the calendar, the open-windows list. |
 | Dialogs and viewers | `confirmation-dialog/`, `conflict/`, `history/`, `diff-view/`, `link-update/`, `tool-approval/`, `image-viewer/`, `pdf-viewer/`, `palette/`, `help/` | Each one surface. |
-| Settings | `settings/`, `services/settings.service.ts`, `services/update.service.ts` | The settings overlay and the config it edits; the update status mirror + triggers (ADR-0074). |
+| Settings | `settings/`, `services/settings.service.ts`, `services/update.service.ts` | The Settings tab (a core doc kind, ADR-0010 later change) and the config it edits; the update status mirror + triggers (ADR-0074). |
 | Commands | `keybindings/` | Every command and its shortcut; the menu, the palette and the shortcuts page read this registry. |
 | Plugins | `plugin-host/` | Loads plugin renderer modules, implements `DreyPluginApi`, owns the registries plugins fill, mounts their DOM. |
 

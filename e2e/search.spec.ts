@@ -179,7 +179,7 @@ test.describe('Tags settings (prefix colors)', () => {
     await pane.locator('.tags-settings-prefix').first().press('Enter');
     await pane.locator('.tags-settings-color').first().fill('#123456');
 
-    await page.locator('app-settings .close').click();
+    await page.keyboard.press('Escape');
     await expect(page.locator('app-settings')).toHaveCount(0);
 
     // A tag pill for #sailing now renders with the configured hue (inline

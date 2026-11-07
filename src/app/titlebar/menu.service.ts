@@ -23,6 +23,7 @@ import { DocHistoryService } from '../services/doc-history.service';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
+import { SettingsTabService } from '../settings/settings-tab.service';
 import { VaultService } from '../vault';
 import { ZenService } from '../services/zen.service';
 import { WindowChromeService } from './window-chrome.service';
@@ -78,6 +79,7 @@ export class MenuService {
   private readonly history = inject(DocHistoryService);
   private readonly editTarget = inject(EditTargetService);
   private readonly settings = inject(SettingsService);
+  private readonly settingsTab = inject(SettingsTabService);
   private readonly vault = inject(VaultService);
   private readonly widgets = inject(WidgetRegistryService);
   private readonly contributions = inject(MenuContributionsService);
@@ -278,7 +280,7 @@ export class MenuService {
           hint: this.hint('settings.open'),
           run: () => {
             this.close();
-            this.settings.openScreen();
+            this.settingsTab.open();
           },
         },
         ...this.contributionRows('file'),
@@ -456,7 +458,7 @@ export class MenuService {
           label: 'About Drey',
           run: () => {
             this.close();
-            this.settings.openScreen('about');
+            this.settingsTab.open('about');
           },
         },
       ],

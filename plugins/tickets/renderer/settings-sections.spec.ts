@@ -16,13 +16,20 @@ describe('Settings -> Tickets sections (E13-22)', () => {
 });
 
 describe('Settings -> Tickets, the board 7g sections and rows', () => {
-  it('lists Crew, Default flow and Budget and runners first, in that order', () => {
-    expect(TICKETS_SECTIONS.slice(0, 3).map((s) => s.label)).toEqual(['Crew', 'Default flow', 'Budget and runners']);
+  it('lists the six headings of the board first, in its order', () => {
+    expect(TICKETS_SECTIONS.slice(0, 6).map((s) => s.label)).toEqual([
+      'Crew',
+      'Flow',
+      'Autopilot',
+      'Budget and runners',
+      'Walkthrough videos',
+      'Devices',
+    ]);
   });
-  it('finds the two Autopilot rows under Budget and runners', () => {
+  it('finds the two Autopilot rows under Autopilot', () => {
     const rows = TICKETS_ENTRIES.filter((e) => e.key.startsWith('autopilot'));
     expect(rows.map((e) => e.label)).toEqual(['Autopilot', 'Resume paused autopilot at']);
-    expect(rows.every((e) => e.section === 'budget')).toBe(true);
+    expect(rows.every((e) => e.section === 'autopilot')).toBe(true);
   });
   it('gives every entry a scope', () => {
     expect(TICKETS_ENTRIES.every((e) => e.scope !== undefined)).toBe(true);

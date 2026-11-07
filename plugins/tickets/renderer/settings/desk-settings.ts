@@ -1,22 +1,22 @@
 /**
  * Settings → Tickets, the top of the page the boards show (E13-12, board
- * 7g): Team, Default flow, Budget and runners, Walkthrough videos. The
- * devices and the pairing are the page's Remote section (req-66) under its
- * new heading, and the pipeline, prompts and workers keep their sections
- * below. Every value is read from what the engine answers; the only things
- * written here are `videos.inGit` and `videos.maxMb`, through the
- * engine's own settings guard (E12-3) — nothing is defined twice.
+ * 7g): Crew, Flow, Autopilot, Budget and runners, Walkthrough videos. Every
+ * setting is drawn as the board draws it — bold name, one description, then
+ * its control. The devices and the pairing are the page's Remote section
+ * (req-66) under its own heading, and the pipeline, prompts and workers keep
+ * their sections below. Every value is read from what the engine answers;
+ * the only things written here are `videos.inGit` and `videos.maxMb`,
+ * through the engine's own settings guard (E12-3) — nothing is defined twice.
  */
-import { autopilotViewOf, resumeAtOfTime, timeFieldOfResume, type AutopilotKind, type AutopilotView } from '../../../../shared/autopilot';
+import { autopilotViewOf, resumeAtOfTime, timeFieldOfResume, type AutopilotView } from '../../../../shared/autopilot';
 import { writeAutopilot } from '../autopilot/controller';
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
-import { parseHandover } from '../../../../packages/tickets-engine/src/contracts/tickets';
 import { WORKER_PROVIDERS } from '../../../../packages/tickets-engine/src/fleet/protocol';
 import { fleetSettingDefault } from '../../shared/fleet-defaults';
 import type { PersonaView } from '../../shared/remote-protocol';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { RUNNER_LABEL } from '../settings-workers';
-import { el, mutate, textButton } from '../settings-dom';
+import { el, textButton } from '../settings-dom';
 import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
 
 export interface DeskSettingsHooks {
@@ -26,33 +26,42 @@ export interface DeskSettingsHooks {
   readonly openFlow: (ticketId: string) => void;
   /** Brings the page's runner settings into view ("Manage"). */
   readonly manageRunners: () => void;
+  /** Opens the Autopilot popover over the status item ("Change…"). */
+  readonly openAutopilot: () => void;
 }
 
 export interface DeskSettings {
+  /** Crew, Flow, Autopilot and Budget and runners. */
   readonly root: HTMLElement;
+  /** Walkthrough videos: the page places it after the runner settings. */
+  readonly videos: HTMLElement;
   /** Repaints the rows that follow the board; refetches the engine's answers. */
   update(snapshot: BoardSnapshot): void;
 }
 
-const row = (label: string, value: HTMLElement): HTMLElement[] => [el('div', 'tset-kv-label', label), value];
-
-function section(id: string, title: string): { root: HTMLElement; grid: HTMLElement } {
+/** One group of the page: the board's heading, then its settings. */
+function section(id: string, title: string, anchor: string): { root: HTMLElement; list: HTMLElement } {
   const root = el('section', 'tset-section');
   root.setAttribute('aria-labelledby', id);
-  const head = el('div', 'tset-section-head');
+  root.dataset['settingsSection'] = anchor;
   const h = el('h3', undefined, title);
   h.id = id;
-  head.append(h);
-  const grid = el('div', 'tset-kv');
-  root.append(head, grid);
-  return { root, grid };
+  const list = el('div', 'tset-sets');
+  root.append(h, list);
+  return { root, list };
 }
 
-const value = (...children: Array<HTMLElement | string>): HTMLElement => {
-  const box = el('div', 'tset-kv-value');
-  box.append(...children.map((c) => (typeof c === 'string' ? document.createTextNode(c) : c)));
+/** One setting (board 7g): the name in bold, the description, then the control row. */
+function setting(name: string, description: string, ...controls: Array<HTMLElement | string>): HTMLElement {
+  const box = el('div', 'tset-set');
+  box.append(el('b', 'tset-set-name', name), el('span', 'tset-set-desc', description));
+  if (controls.length > 0) {
+    const row = el('div', 'tset-set-controls');
+    row.append(...controls.map((c) => (typeof c === 'string' ? el('span', undefined, c) : c)));
+    box.append(row);
+  }
   return box;
-};
+}
 
 export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks): DeskSettings {
   const root = el('div', 'tset-desk');
@@ -63,14 +72,14 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   let confirming = false;
   let asked = false;
 
-  // --- Team --------------------------------------------------------------
-  const team = section('tset-team-head', 'Crew');
-  const teamChips = el('div', 'tset-desk-chips');
+  // --- Crew --------------------------------------------------------------
+  const team = section('tset-team-head', 'Crew', 'crew');
+  const teamNames = el('span');
   const editTeam = textButton('Edit crew');
   editTeam.addEventListener('click', hooks.openTeam);
-  team.grid.append(...row('Crew', value(teamChips, editTeam)));
+  team.list.append(setting('Personas', 'Default crew for new tickets. Add more, for example a security reviewer.', teamNames, editTeam));
   // The owner's own name: the human persona's title, shown wherever the owner works a column.
-  const humanName = el('input', 'mono-input');
+  const humanName = el('input');
   humanName.type = 'text';
   humanName.spellcheck = false;
   humanName.id = 'tset-human-name';
@@ -87,11 +96,11 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
       await loadPersonas();
     })();
   });
-  team.grid.append(...row('Your name', value(humanName)));
+  team.list.append(setting('Your name', 'The human persona, shown wherever you work a column.', humanName));
 
-  // --- Default flow ------------------------------------------------------
-  const flow = section('tset-flow-head', 'Default flow');
-  const flowStrip = el('ol', 'tset-desk-flow');
+  // --- Flow --------------------------------------------------------------
+  const flow = section('tset-flow-head', 'Flow', 'flow');
+  const flowStrip = el('span');
   flowStrip.setAttribute('aria-label', 'Standard flow');
   const ticketPick = el('select');
   ticketPick.setAttribute('aria-label', 'Ticket to edit the flow of');
@@ -102,29 +111,16 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
       hooks.openFlow(ticketPick.value);
     }
   });
-  const flowTools = el('div', 'tset-desk-tools');
-  flowTools.append(ticketPick, openFlow);
-  // Two rows on purpose (D-17): the steps offer workers; which ticket's flow to edit is another question.
-  flow.grid.append(...row('Standard flow', value(flowStrip)), ...row('Flow of one ticket', value(flowTools)));
+  flow.list.append(setting('Default flow', 'Steps a new ticket runs through unless its plan says otherwise.', flowStrip, ticketPick, openFlow));
 
-  // --- Budget and runners ------------------------------------------------
-  const budget = section('tset-budget-head', 'Budget and runners');
-  const budgetLine = el('span');
-  const runnersLine = el('span');
-  const manage = textButton('Manage');
-  manage.addEventListener('click', hooks.manageRunners);
-  budget.grid.append(...row('Daily budget', value(budgetLine)), ...row('Runners', value(runnersLine, manage)));
-
-  // Autopilot (req-95b, concept 6.1): the same three states the status item switches; a
-  // refusal reads as words from the catalog, under the row.
-  const autopilot = el('select');
-  autopilot.id = 'tset-autopilot';
-  autopilot.dataset['settingKey'] = 'autopilot';
-  autopilot.setAttribute('aria-label', 'Autopilot');
-  for (const id of ['on', 'paused', 'off'] as const) {
-    autopilot.append(Object.assign(el('option', undefined, api.i18n.t(`autopilot.state.${id}`)), { value: id }));
-  }
-  const resumeAt = el('input', 'mono-input');
+  // --- Autopilot (req-95b, concept 6.1): the same three states the status item switches --
+  const autopilot = section('tset-autopilot-head', 'Autopilot', 'autopilot');
+  const autopilotState = el('span');
+  autopilotState.id = 'tset-autopilot';
+  autopilotState.dataset['settingKey'] = 'autopilot';
+  const change = textButton('Change…');
+  change.addEventListener('click', hooks.openAutopilot);
+  const resumeAt = el('input');
   resumeAt.type = 'time';
   resumeAt.id = 'tset-autopilot-resume';
   resumeAt.dataset['settingKey'] = 'autopilot.resumeAt';
@@ -136,7 +132,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   const paintAutopilot = async (): Promise<void> => {
     try {
       const view = autopilotViewOf(await api.backend.invoke('chainStatus'));
-      autopilot.value = view?.state ?? 'off';
+      autopilotState.textContent = api.i18n.t(`autopilot.state.${view?.state ?? 'off'}`);
       resumeAt.value = timeFieldOfResume(view?.resumeAt);
       resumeAt.disabled = view?.state !== 'paused';
     } catch {
@@ -148,59 +144,60 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
     autopilotNote.textContent = outcome.ok ? '' : outcome.words;
     await paintAutopilot();
   };
-  autopilot.addEventListener('change', () => void writeAutopilotRow({ state: autopilot.value as AutopilotKind }));
   resumeAt.addEventListener('change', () => {
     const at = resumeAtOfTime(resumeAt.value, new Date());
     if (at !== null) {
       void writeAutopilotRow({ state: 'paused', resumeAt: at });
     }
   });
-  budget.grid.prepend(
-    ...row('Autopilot', value(autopilot)),
-    ...row('Resume paused autopilot at', value(resumeAt, autopilotNote)),
+  autopilot.list.append(
+    setting(
+      'Autopilot',
+      'What starts next: On (workers pick up tickets by themselves), Paused (running steps finish, nothing new starts) or Off (you start every step). Also in the status bar and with Mod+Alt+P.',
+      autopilotState,
+      change,
+    ),
+    setting('Resume paused autopilot at', 'A paused autopilot switches itself on again at this time.', resumeAt, autopilotNote),
+  );
+
+  // --- Budget and runners --------------------------------------------------
+  const budget = section('tset-budget-head', 'Budget and runners', 'budget');
+  const budgetLine = el('span');
+  const runnersLine = el('span');
+  const manage = textButton('Manage');
+  manage.addEventListener('click', hooks.manageRunners);
+  budget.list.append(
+    setting('Daily budget', "The personas' daily budgets added up, and what they spent today.", budgetLine),
+    setting('Runners', 'Where builds run and how many at once.', runnersLine, manage),
   );
 
   // --- Walkthrough videos ------------------------------------------------
-  const video = section('tset-videos-head', 'Walkthrough videos');
+  const video = section('tset-videos-head', 'Walkthrough videos', 'videos');
   const keep = el('input');
   keep.type = 'checkbox';
   keep.id = 'tset-videos-in-git';
-  const keepLabel = el('label', 'tset-desk-check');
+  const keepLabel = el('label', 'tset-set-check');
   keepLabel.htmlFor = keep.id;
-  keepLabel.append(keep, document.createTextNode('Keep in Git'));
+  keepLabel.append(keep, el('span', undefined, 'Videos are large and stay in the history once committed. Off keeps them in tickets/videos only.'));
   const confirmBox = el('div', 'tset-desk-confirm');
-  const limit = el('input', 'mono-input');
+  const limit = el('input');
   limit.type = 'number';
   limit.min = '1';
   limit.step = '1';
   limit.id = 'tset-videos-limit';
   limit.setAttribute('aria-label', 'Largest video in MB');
   const limitUnit = el('span', 'tset-muted', 'MB');
-  const limitBox = el('div', 'tset-desk-tools');
-  limitBox.append(limit, limitUnit);
   const videoNote = el('span', 'field-hint');
-  video.grid.append(...row('Videos', value(keepLabel, confirmBox, videoNote)), ...row('Largest video', value(limitBox)));
+  const keepSetting = el('div', 'tset-set');
+  keepSetting.append(el('b', 'tset-set-name', 'Keep videos in Git'), keepLabel, confirmBox, videoNote);
+  video.list.append(keepSetting, setting('Largest video', 'One limit per video. Nothing is removed automatically.', limit, limitUnit));
 
-  // The page's section anchors (settings-sections.ts).
-  team.root.dataset['settingsSection'] = 'crew';
-  flow.root.dataset['settingsSection'] = 'flow';
-  budget.root.dataset['settingsSection'] = 'budget';
-  root.append(team.root, flow.root, budget.root, video.root);
+  root.append(team.root, flow.root, autopilot.root, budget.root);
 
   // --- painting ------------------------------------------------------------
   const paintTeam = (): void => {
-    teamChips.replaceChildren(
-      ...personas.map((p) => {
-        const chip = el('span', 'tset-desk-chip');
-        const dot = el('span', 'tset-desk-dot');
-        dot.style.background = p.color;
-        chip.append(dot, document.createTextNode(p.title));
-        return chip;
-      }),
-    );
-    if (personas.length === 0) {
-      teamChips.textContent = 'No crew yet';
-    }
+    const crew = personas.filter((p) => p.kind !== 'human');
+    teamNames.textContent = crew.length === 0 ? 'No crew yet' : crew.map((p) => p.title).join(', ');
     const human = personas.find((p) => p.kind === 'human');
     if (human !== undefined && document.activeElement !== humanName) {
       humanName.value = human.title;
@@ -210,28 +207,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
 
   const paintFlow = (): void => {
     const items = snapshot === null ? [] : standardFlowOf(snapshot.pipeline, personas);
-    flowStrip.replaceChildren(
-      ...items.map((item) => {
-        const li = el('li', 'tset-desk-step');
-        li.append(el('b', undefined, item.title));
-        if (item.who !== null) {
-          li.append(document.createTextNode(` · ${item.who}`));
-        }
-        const phase = snapshot?.pipeline.find((candidate) => candidate.id === item.id);
-        const worker = el('select');
-        worker.setAttribute('aria-label', `Worker for ${item.title}`);
-        for (const id of WORKER_PROVIDERS) {
-          worker.append(Object.assign(el('option', undefined, RUNNER_LABEL[id]), { value: id }));
-        }
-        worker.value = phase?.worker ?? parseHandover(phase?.handover ?? '').worker ?? snapshot?.defaultWorker ?? WORKER_PROVIDERS[0]!;
-        worker.addEventListener('change', () => void mutate(api, 'columns', { phase: item.id, worker: worker.value }));
-        li.append(worker);
-        return li;
-      }),
-    );
-    if (items.length === 0) {
-      flowStrip.textContent = 'No column runs an agent';
-    }
+    flowStrip.textContent = items.length === 0 ? 'No column runs an agent' : items.map((item) => item.title).join(' → ');
     const tickets =
       snapshot === null
         ? []
@@ -351,6 +327,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   paintVideos();
   return {
     root,
+    videos: video.root,
     update: (next) => {
       snapshot = next;
       paintFlow();

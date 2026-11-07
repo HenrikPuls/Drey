@@ -9,11 +9,11 @@
 .tset {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 0;
 }
 
 .tset-muted {
-  font-size: 0.78rem;
+  font-size: 13px;
   color: var(--text-4);
 }
 
@@ -31,7 +31,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin-top: -12px;
+  padding: 12px 0;
 }
 
 .tset-repo-path {
@@ -40,14 +40,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 13px;
   color: var(--text-2);
 }
 
 .tset-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -55,7 +55,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: var(--icon-btn);
+  min-height: 26px;
+  /* The head carries the group heading's own spacing (board 7g: 22 px above, 4 below). */
+  margin: 22px 0 4px;
 }
 
 .tset-section-head > h3 {
@@ -77,7 +79,7 @@
   padding: 0 8px;
   box-sizing: border-box;
   border-radius: var(--radius-chip);
-  font-size: 0.75rem;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -149,7 +151,7 @@
 }
 
 .tset-th {
-  font-size: 0.75rem;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-4);
 }
@@ -188,7 +190,7 @@
 
 .tset-num {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--text-4);
 }
@@ -211,7 +213,7 @@
   flex: none;
   height: 18px;
   padding: 0 6px;
-  font-size: 0.75rem;
+  font-size: 13px;
 }
 
 .tset-name-title {
@@ -227,7 +229,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 13px;
   color: var(--text-4);
 }
 
@@ -279,7 +281,7 @@
   align-items: center;
   gap: 8px;
   min-height: 28px;
-  font-size: 0.82rem;
+  font-size: 13px;
   color: var(--text-2);
 }
 
@@ -322,7 +324,7 @@
 
 .tset-combo-group {
   padding: 6px 8px 2px;
-  font-size: 0.75rem;
+  font-size: 13px;
   color: var(--text-4);
 }
 
@@ -330,7 +332,7 @@
   padding: 4px 8px;
   border-radius: var(--radius-chip);
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 13px;
   color: var(--text-2);
   cursor: pointer;
 }
@@ -346,7 +348,7 @@
 
 .tset-combo-empty {
   padding: 6px 8px;
-  font-size: 0.75rem;
+  font-size: 13px;
   color: var(--text-4);
 }
 
@@ -396,12 +398,12 @@
 
 .tset-pitem-name {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 13px;
   color: var(--text-primary);
 }
 
 .tset-pitem-used {
-  font-size: 0.75rem;
+  font-size: 13px;
   color: var(--text-4);
 }
 
@@ -423,7 +425,7 @@
 
 .tset-pname {
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -453,7 +455,7 @@
 
 .tset-pfoot {
   min-height: 16px;
-  font-size: 0.75rem;
+  font-size: 13px;
   color: var(--text-4);
 }
 
@@ -499,25 +501,101 @@
 
 /* --- fleet ---------------------------------------------------------------- */
 
+/* A name, then its hint and control stacked under it (board 7g's setting). */
 .tset-kv {
   display: grid;
-  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
-  column-gap: 24px;
-  row-gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 6px;
   align-items: start;
 }
 
 .tset-kv-label {
-  padding-top: 5px;
-  font-weight: 600;
-  color: var(--text-2);
+  padding-top: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .tset-kv-value {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-width: 360px;
+  gap: 6px;
+  padding-bottom: 12px;
+}
+
+.tset-kv-value .field-hint {
+  order: -1;
+}
+
+/* Board 7g's fields have a width of their own, not the page's: text 360, numbers 100. */
+.tset-kv-value > :is(input, select):not([type='checkbox'], [type='radio']) {
+  align-self: flex-start;
+  width: min(100%, 360px);
+}
+
+.tset-kv-value > input[type='number'] {
+  width: 100px;
+}
+
+/* The settings the board draws (desk-settings.ts): bold name, description, control row. */
+.tset-sets {
+  display: flex;
+  flex-direction: column;
+}
+
+.tset-set {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* The board's row: a 2 px bar on the left (accent for a changed setting, req-132), hanging out 14 px. */
+  padding: 12px 0 12px 14px;
+  margin-left: -14px;
+  border-left: 2px solid transparent;
+}
+
+.tset-set-name {
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--text-primary);
+}
+
+.tset-set-desc {
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--text-4);
+}
+
+.tset-set-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.tset-set-controls > select,
+.tset-set-controls > button.ghost.small {
+  height: 30px;
+}
+
+.tset-set-controls > button.ghost.small {
+  padding: 0 12px;
+}
+
+.tset-set-controls > .tset-muted {
+  font-size: 13px;
+}
+
+.tset-set-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--text-4);
+}
+
+.tset-set-check input {
+  margin-top: 2px;
 }
 
 /* The Workers section's runner switch (req-71) — the look of the host's
@@ -556,17 +634,6 @@
 
 .tset-runner-switch > button:focus-visible {
   outline-offset: -2px;
-}
-
-@media (max-width: 720px) {
-  .tset-kv {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 4px;
-  }
-
-  .tset-kv-value {
-    margin-bottom: 10px;
-  }
 }
 
 /* `hidden` must win over the vocabulary's display rules (.callout is flex). */
@@ -608,12 +675,12 @@
 
 .tset-repo-name {
   font-family: var(--mono, monospace);
-  font-size: 0.86rem;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .tset-repo-meta {
-  font-size: 0.76rem;
+  font-size: 13px;
   color: var(--text-4);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -665,7 +732,7 @@
 
 .tset-remote-sub {
   margin: 8px 0 0;
-  font-size: 0.86rem;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
 }
@@ -729,7 +796,7 @@
 
 .tset-remote-url {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 13px;
   color: var(--text-2);
   overflow-wrap: anywhere;
   user-select: all;

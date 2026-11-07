@@ -25,9 +25,9 @@ function setup(settingsReply: unknown = videos(false)) {
     return Promise.resolve(videos(true, 40));
   });
   const api = { i18n, backend: { invoke }, settings: { get: () => Promise.resolve(undefined) } } as unknown as DreyPluginApi;
-  const hooks = { openTeam: vi.fn(), openFlow: vi.fn(), manageRunners: vi.fn() };
+  const hooks = { openTeam: vi.fn(), openFlow: vi.fn(), manageRunners: vi.fn(), openAutopilot: vi.fn() };
   const desk = createDeskSettings(api, hooks);
-  document.body.append(desk.root);
+  document.body.replaceChildren(desk.root, desk.videos);
   const snapshot = {
     pipeline: [
       { id: 'inbox', title: 'Inbox', handover: 'manual', persona: null },
@@ -50,35 +50,24 @@ const settle = async (): Promise<void> => {
 const button = (root: HTMLElement, name: string): HTMLButtonElement => [...root.querySelectorAll('button')].find((b) => b.textContent === name)!;
 
 describe('Settings → Tickets desk rows', () => {
-  it('shows the team, the standard flow and the budget, and opens the Team tab', async () => {
+  it('shows the crew, the flow as one line and the budget, and opens the Team tab', async () => {
     const { desk, hooks } = setup();
     await settle();
-    expect([...desk.root.querySelectorAll('.tset-desk-chip')].map((n) => n.textContent)).toEqual(['Paul', 'You']);
-    expect(desk.root.querySelector('.tset-desk-step')?.textContent).toContain('Build · Paul');
+    expect(desk.root.querySelector('.tset-set-controls')?.textContent).toContain('Paul');
+    expect(desk.root.textContent).not.toContain('Paul, You');
+    expect(desk.root.querySelector('[aria-label="Standard flow"]')?.textContent).toBe('Build');
     expect(desk.root.textContent).toContain('$10 across 1 persona · $1 spent today');
     button(desk.root, 'Edit crew').click();
     expect(hooks.openTeam).toHaveBeenCalled();
   });
 
-  it('D-17: a Build step offers workers, and changing one writes the column', async () => {
-    const { desk, invoke } = setup();
-    await settle();
-    const worker = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Worker for Build"]');
-    expect(worker).not.toBeNull();
-    expect([...worker!.options].map((o) => o.textContent)).toEqual(['OpenCode', 'Claude Code', 'Kimi Code']);
-    expect([...worker!.options].some((o) => o.textContent?.includes('T-0002'))).toBe(false);
-    worker!.value = 'claude-code';
-    worker!.dispatchEvent(new Event('change'));
-    await settle();
-    expect(invoke).toHaveBeenCalledWith('columns', { phase: 'build', worker: 'claude-code' });
-  });
-
-  it('D-17: the ticket pick is its own labelled row, not part of the step', async () => {
+  it('draws every setting as the board does: bold name, description, then the control', async () => {
     const { desk } = setup();
     await settle();
-    const pick = desk.root.querySelector('select[aria-label="Ticket to edit the flow of"]');
-    expect(pick?.closest('.tset-desk-flow')).toBeNull();
-    expect([...desk.root.querySelectorAll('.tset-kv-label')].map((l) => l.textContent)).toContain('Flow of one ticket');
+    const names = [...desk.root.querySelectorAll('.tset-set-name')].map((n) => n.textContent);
+    expect(names).toEqual(['Personas', 'Your name', 'Default flow', 'Autopilot', 'Resume paused autopilot at', 'Daily budget', 'Runners']);
+    expect([...desk.root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Crew', 'Flow', 'Autopilot', 'Budget and runners']);
+    expect([...document.querySelectorAll('section')].map((n) => (n as HTMLElement).dataset['settingsSection'])).toEqual(['crew', 'flow', 'autopilot', 'budget', 'videos']);
   });
 
   it('opens the flow editor on the picked ticket, not an inbox idea', async () => {
@@ -93,12 +82,12 @@ describe('Settings → Tickets desk rows', () => {
   it('turning videos in Git on asks first, then patches with the confirmation', async () => {
     const { desk, invoke } = setup(videos(false, 25, 2));
     await settle();
-    const keep = desk.root.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+    const keep = desk.videos.querySelector<HTMLInputElement>('input[type=checkbox]')!;
     keep.checked = true;
     keep.dispatchEvent(new Event('change'));
     expect(invoke).not.toHaveBeenCalledWith('settingsPatch', expect.anything());
-    expect(desk.root.textContent).toContain('stay in the history once committed');
-    button(desk.root, 'Keep in Git and include the 2 existing videos').click();
+    expect(desk.videos.textContent).toContain('stay in the history once committed');
+    button(desk.videos, 'Keep in Git and include the 2 existing videos').click();
     await settle();
     expect(invoke).toHaveBeenCalledWith('settingsPatch', { inGit: true, confirm: true, includeExisting: true });
   });
@@ -106,7 +95,7 @@ describe('Settings → Tickets desk rows', () => {
   it('writes the largest video and refuses a non-number before asking the engine', async () => {
     const { desk, invoke } = setup();
     await settle();
-    const limit = desk.root.querySelector<HTMLInputElement>('input[type=number]')!;
+    const limit = desk.videos.querySelector<HTMLInputElement>('input[type=number]')!;
     expect(limit.value).toBe('25');
     limit.value = '60';
     limit.dispatchEvent(new Event('change'));
@@ -114,38 +103,34 @@ describe('Settings → Tickets desk rows', () => {
     expect(invoke).toHaveBeenCalledWith('settingsPatch', { maxMb: 60 });
     limit.value = 'many';
     limit.dispatchEvent(new Event('change'));
-    expect(desk.root.textContent).toContain('whole number of megabytes');
+    expect(desk.videos.textContent).toContain('whole number of megabytes');
   });
 
-  it('shows the Autopilot row from the chain and switches it through chainAutopilot (req-95b)', async () => {
-    const { desk, invoke } = setup();
+  it('shows the Autopilot state as words and opens the popover from "Change…" (board 7g)', async () => {
+    const { desk, hooks } = setup();
     await settle();
-    const state = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Autopilot"]')!;
-    expect([...state.options].map((o) => o.textContent)).toEqual(['On', 'Paused', 'Off']);
-    expect(state.value).toBe('on');
-    expect(state.disabled).toBe(false);
+    expect(desk.root.querySelector('#tset-autopilot')?.textContent).toBe('On');
+    expect(desk.root.querySelector('select[aria-label="Autopilot"]')).toBeNull();
     const time = desk.root.querySelector<HTMLInputElement>('input[type="time"]')!;
     expect(time.disabled).toBe(true); // only a Paused state takes a resume time
-    expect(desk.root.textContent).toContain('Resume paused autopilot at');
-    state.value = 'off';
-    state.dispatchEvent(new Event('change'));
-    await settle();
-    expect(invoke).toHaveBeenCalledWith('chainAutopilot', { state: 'off' });
+    button(desk.root, 'Change…').click();
+    expect(hooks.openAutopilot).toHaveBeenCalled();
   });
 
-  it('shows a refusal of the Autopilot row as words, not a code', async () => {
+  it('writes a resume time as a paused autopilot and shows a refusal as words, not a code', async () => {
     const { desk, invoke } = setup();
     await settle();
     invoke.mockImplementation((method: string) =>
       Promise.resolve(
-        method === 'chainAutopilot' ? { ok: false, error: 'this device is paired read-only', code: 'read_only' } : { master: 'run' },
+        method === 'chainAutopilot' ? { ok: false, error: 'this device is paired read-only', code: 'read_only' } : { master: 'run', autopilot: { state: 'paused' } },
       ),
     );
-    const state = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Autopilot"]')!;
-    state.value = 'paused';
-    state.dispatchEvent(new Event('change'));
+    const time = desk.root.querySelector<HTMLInputElement>('input[type="time"]')!;
+    time.disabled = false;
+    time.value = '18:00';
+    time.dispatchEvent(new Event('change'));
     await settle();
+    expect(invoke).toHaveBeenCalledWith('chainAutopilot', expect.objectContaining({ state: 'paused' }));
     expect(desk.root.querySelector('[role="alert"]')!.textContent).toContain('paired read-only');
-    expect(state.value).toBe('on'); // the row goes back to what the engine reports
   });
 });

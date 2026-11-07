@@ -257,7 +257,7 @@ export default mod;
 
     // The Panels & plugins settings page lists it with its status.
     await page.locator('app-status-bar .settings').click();
-    await page.locator('.category', { hasText: 'Panels & plugins' }).click();
+    await page.locator('.category', { hasText: 'Panels and plugins' }).click();
     const row = page.locator('.switch-row', { hasText: 'E2E user plugin' });
     await expect(row).toBeVisible();
     await expect(row.locator('.plugin-status')).toHaveText('active');

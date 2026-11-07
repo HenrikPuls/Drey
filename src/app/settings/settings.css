@@ -1,252 +1,230 @@
-.backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 30;
-}
-
+/*
+ * The Settings surface as board 7g draws it: a search block, the scope tabs,
+ * then the section tree and the page -- the body of an editor tab, as wide
+ * as its pane (ADR-0010 later change, milestone 197).
+ */
 .panel {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  z-index: 31;
-  /* Grows with the window (E13-22); the pages inside share one width. */
-  width: min(1400px, calc(100vw - 48px));
-  height: min(900px, calc(100vh - 48px));
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  /* Cap the single row at the panel height -- an implicit `auto` row would
-     size to the (plugin-extended) category list and push the footer out. */
-  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-main);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 
-.categories {
+/* --- search block and scope tabs ------------------------------------------ */
+
+.top {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  /* No top padding: it would sit above the sticky head's containing
-     block (the nav's content box), so the head could not pin flush with
-     the scrollport top and scrolled rows leaked through the gap. The 8px
-     live in the head's padding instead. */
-  padding: 0 8px 8px;
+  gap: 10px;
+  padding: 14px 24px 0;
+}
+
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px; /* the board: 36 px content + 2 px border */
+  padding: 0 6px 0 12px;
+  box-sizing: border-box;
+  background: var(--hover-bg);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+}
+
+.searchbar:focus-within {
+  border-color: var(--accent);
+}
+
+.search-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-4);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.search::-webkit-search-cancel-button {
+  display: none;
+}
+
+.found {
+  color: var(--text-4);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.clear {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-chip);
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+.clear:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.scope-tabs {
+  display: flex;
   gap: 2px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.scope-tab {
+  height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+.scope-tab:hover {
+  color: var(--text-primary);
+}
+
+.scope-tab.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  border-bottom-color: var(--text-primary);
+}
+
+.scope-note {
+  align-self: center;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* --- section tree ---------------------------------------------------------- */
+
+.body {
+  flex: 1;
   min-height: 0;
+  display: flex;
+}
+
+.categories {
+  /* The board's 240 px nav is a content box: 240 + 2 × 8 padding + 1 border. */
+  width: 257px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 12px 8px;
+  box-sizing: border-box;
   overflow-y: auto;
-  background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
 }
 
-.head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+.category,
+.section-entry {
   display: flex;
   align-items: center;
-  /* Stretch to the nav's side edges so scrolled rows pass under an opaque
-     head: the -8px margins undo the nav's side padding, its own padding
-     adds it back visually. */
-  margin: 0 -8px;
-  padding: 22px 14px 10px;
-  background: var(--bg-sidebar);
-}
-
-.head .title {
-  font-size: var(--set-fs-title);
-  font-weight: 600;
-  color: var(--text-heading);
-}
-
-.close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  border: 0;
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-  display: inline-flex;
-}
-
-.close:hover {
-  background: var(--hover-bg);
-  color: var(--text-2);
-}
-
-.category {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  text-align: left;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  font: inherit;
-  line-height: 1.35;
-  cursor: pointer;
-}
-
-.category:hover {
-  background: var(--hover-bg);
-}
-
-.category.active {
-  background: var(--accent-surface);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.category.active .label {
-  color: var(--text-primary);
-}
-
-.category .label {
-  font-size: var(--set-fs-body);
-  color: var(--text-2);
-}
-
-.category .hint {
-  font-size: var(--set-fs-tiny);
-  color: var(--set-hint);
-}
-
-/* The search field: icon-less, no placeholder -- its label is the aria-label. */
-.search {
+  gap: 6px;
   flex-shrink: 0;
-  height: var(--set-control-h-compact);
-  margin: 0 2px 8px;
-  padding: 0 10px;
-  font: inherit;
-  font-size: var(--set-fs-small);
+  height: 30px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
   color: var(--text-primary);
-  background: var(--bg-main);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.search:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.cat-row {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-}
-
-.cat-row .category {
-  flex: 1;
-  min-width: 0;
-}
-
-.twisty {
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  transform: translateY(-50%);
-  display: inline-flex;
-  padding: 4px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
-}
-
-.twisty:hover {
-  background: var(--hover-bg);
-  color: var(--text-2);
-}
-
-.cat-row:has(.twisty) .category {
-  padding-right: 28px;
-}
-
-.sections {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 0 0 4px 14px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border);
-}
-
-.section-entry {
-  text-align: left;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
   font: inherit;
-  font-size: var(--set-fs-small);
-  color: var(--text-3);
+  font-size: 14px;
+  line-height: 18px;
+  text-align: left;
   cursor: pointer;
 }
 
+/* The board's child rows keep the chevron slot of their parent: 28 px + 14 + 6. */
+.section-entry {
+  padding-left: 48px;
+}
+
+.category:hover,
 .section-entry:hover {
   background: var(--hover-bg);
 }
 
+.category.active,
 .section-entry.active {
-  background: var(--accent-surface);
-  color: var(--text-primary);
+  background: var(--active-bg);
+  font-weight: 600;
+}
+
+.category.dim {
+  color: var(--text-5);
+}
+
+.chev {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  color: var(--text-4);
+}
+
+.category .label,
+.section-entry .section-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  color: var(--text-4);
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 .category:focus-visible,
 .section-entry:focus-visible,
-.twisty:focus-visible,
+.scope-tab:focus-visible,
+.clear:focus-visible,
 .result:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-.results {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: var(--set-page-w);
-}
-
-.result {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  text-align: left;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-}
-
-.result:hover {
-  background: var(--hover-bg);
-}
-
-.result-where {
-  font-size: var(--set-fs-tiny);
-  color: var(--set-hint);
-}
-
-.result-label {
-  font-size: var(--set-fs-body);
-  color: var(--text-primary);
-}
-
-.result-desc {
-  font-size: var(--set-fs-small);
-  color: var(--set-hint);
-}
+/* --- the page and the search results --------------------------------------- */
 
 .right {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -257,105 +235,59 @@
   flex: 1;
   overflow: auto;
   scrollbar-gutter: stable;
-  /* Extra right padding keeps pane content clear of the panel's
-     top-right close button. */
-  padding: 22px 44px 24px 26px;
+  padding: 18px 32px 32px;
 }
 
 .loading {
-  font-size: var(--set-fs-small);
-  color: var(--set-hint);
+  color: var(--text-4);
 }
 
-/* Footer: the save status and the one Close button. */
-.actions-bar {
+.results-title {
+  margin: 0 0 4px;
+  font-size: 26px;
+  line-height: 34px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.results {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
+  flex-direction: column;
+  max-width: var(--set-page-w);
 }
 
-.spacer {
-  flex: 1;
-}
-
-.saved,
-.save-error {
-  font-size: var(--set-fs-small);
-}
-
-.saved {
-  color: var(--set-hint);
-}
-
-.save-error {
-  color: var(--status-deleted);
-}
-
-/* The buttons are the shared `ghost` / `primary` (settings-ui.css); in a
-   bar they centre on the row instead of hugging its top. */
-.actions-bar button {
-  align-self: center;
-}
-
-/* Counts: how many settings a page or a section holds. */
-.count {
-  font-size: var(--set-fs-tiny);
-  color: var(--set-hint);
-  font-variant-numeric: tabular-nums;
-}
-
-.cat-row .category .count {
-  position: absolute;
-  top: 9px;
-  right: 10px;
-}
-
-.cat-row:has(.twisty) .category .count {
-  right: 32px;
-}
-
-.section-entry {
+.result {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-
-/* Scope tabs (board 7g): All devices / This device / This vault. */
-.scope-tabs {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 10px 44px 0 26px;
-  border-bottom: 1px solid var(--border);
-}
-
-.scope-tab {
-  padding: 6px 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  text-align: left;
   border: 0;
-  border-bottom: 2px solid transparent;
   background: transparent;
   font: inherit;
-  font-size: var(--set-fs-small);
-  color: var(--text-3);
   cursor: pointer;
 }
 
-.scope-tab:hover {
+.result:hover .result-label {
+  text-decoration: underline;
+}
+
+.result-title {
+  font-size: 14px;
+}
+
+.result-where {
+  color: var(--text-4);
+}
+
+.result-label {
   color: var(--text-primary);
 }
 
-.scope-tab.active {
-  color: var(--text-primary);
-  border-bottom-color: var(--accent);
-}
-
-.scope-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+.result-desc {
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--text-4);
 }
 
 .no-match {
@@ -363,10 +295,26 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  font-size: var(--set-fs-body);
-  color: var(--text-2);
+  margin-top: 16px;
+  color: var(--text-4);
 }
 
 .no-match p {
   margin: 0;
+}
+
+/* A failed save is the one thing that still needs words (ADR-0010). */
+.save-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 10px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--status-deleted);
+  font-size: 13px;
+}
+
+.save-error span {
+  flex: 1;
 }

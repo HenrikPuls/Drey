@@ -19,7 +19,7 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
   const section = el('section', 'tset-section');
   section.setAttribute('aria-labelledby', 'tset-remote-head');
   const head = el('div', 'tset-section-head');
-  const title = el('h3', undefined, 'Mission Control on other devices');
+  const title = el('h3', undefined, 'Devices');
   title.id = 'tset-remote-head';
   const state = el('span', 'tset-chip tset-chip-manual');
   head.append(title, state);

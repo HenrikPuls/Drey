@@ -368,6 +368,8 @@ const liveRuns = (): readonly RunInfo[] =>
 /** The status-bar items (E12-15, boards 7a / 7h): today's cost, needs-you, Autopilot. */
 let statusSlots: StatusSlotController | null = null;
 let statusApi: DreyPluginApi | null = null;
+/** Opens or closes the Autopilot popover: what Settings' "Change…" runs (board 7g). */
+let toggleAutopilotPopover: (() => void) | null = null;
 const refreshStatusItem = (): void => {
   if (statusSlots === null || statusApi === null) {
     return;
@@ -1696,6 +1698,7 @@ function deskDeps(api: DreyPluginApi): DeskDeps {
     },
     mutate: runMutation,
     chainAction: runChainAction,
+    toggleAutopilot: () => toggleAutopilotPopover?.(),
     openTicket: (card) => void openTicketPage(api, card),
     newIdea: () => {
       if (snapshot?.vaultId != null) {
@@ -3061,6 +3064,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       anchor: () => slots.autopilotElement(),
       onOpenChange: (open) => slots.setAutopilotExpanded(open),
     });
+    toggleAutopilotPopover = () => autopilotCommand.toggle();
     fleetListeners.add(() => autopilotCommand.refresh());
     teamStore(api).subscribe(() => autopilotCommand.refresh());
     api.commands.register({
@@ -3142,6 +3146,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       createTicketsSettingsPage(api, {
         openTeam: () => openTeamDoc(api),
         openFlow: (ticketId) => openFlowTab(api, ticketId),
+        openAutopilot: () => toggleAutopilotPopover?.(),
       }),
     );
 
