@@ -16,7 +16,7 @@ h1{font-size:18px;font-weight:600;margin:0 0 4px}
 .titlebar{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;background:#17191c;border-bottom:1px solid var(--line);font-size:13px}
 .titlebar .sq{width:18px;height:18px;border-radius:var(--r4);background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-weight:700;font-size:12px}
 .titlebar .win{margin-left:auto;color:var(--dim);letter-spacing:6px}
-.sv{display:grid;grid-template-columns:300px 1fr;min-height:520px}
+.sv{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:520px}
 .sv-list{border-right:1px solid var(--line);padding:12px 0}
 .sv-head{display:flex;align-items:center;gap:8px;padding:6px 14px 10px;color:var(--muted);font-size:12px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;flex:none}
@@ -27,10 +27,12 @@ h1{font-size:18px;font-weight:600;margin:0 0 4px}
 .row .ac{display:flex;gap:4px;opacity:.85}
 .ib{width:24px;height:24px;border:1px solid var(--line);border-radius:var(--r4);background:transparent;color:var(--fg);display:grid;place-items:center;font-size:11px}
 .sv-detail{display:flex;flex-direction:column;min-width:0}
-.dh{display:flex;align-items:center;gap:12px;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
-.dh h2{font-size:15px;font-weight:600;margin:0}
-.dh .meta{color:var(--muted);font-size:12px}
-.dh .sp{margin-left:auto;display:flex;gap:6px}
+.dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.dh h2{font-size:15px;font-weight:600;margin:0;white-space:nowrap}
+.dh .meta{color:var(--muted);font-size:12px;flex:1 1 220px;min-width:0}
+.dh .sp{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.logbar{flex-wrap:wrap}
+.facts .fact span{overflow-wrap:anywhere}
 .btn{height:28px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r4);background:transparent;color:var(--fg);font:13px var(--ui)}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .btn.danger{color:var(--bad);border-color:var(--bad)}

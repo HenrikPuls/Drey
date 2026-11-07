@@ -48,7 +48,7 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
 @media (max-width:900px){.cols{grid-template-columns:1fr}.left{border-right:0;border-bottom:1px solid var(--line)}}
 </style>
 <h1>Persona Page v2</h1>
-<p class="lead">Vorschlag für req-153 nach den Rulings 1 bis 5: ein Markdown-Editor für die Instruktionen, Modelle aus der Modelltabelle der Settings, der Rechte-Block, Memory und Journal als eigene Tabs im Crew-Detail. Beispieldaten.</p>
+<p class="lead">Vorschlag für req-153 nach den Rulings 1 bis 5 und der Regel „zu viel Text“: Abschnittstitel bleiben, erklärende Sätze gehen (Tooltip oder Handbuch). Beispieldaten.</p>
 
 <div class="frame">
   <div class="cap">Editor-Tab „Ben · persona“, geöffnet aus Crew → Edit persona</div>
@@ -61,23 +61,23 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
   <div class="cols">
     <div class="left">
       <div class="blk"><h3>Profile</h3>
-        <div style="display:grid;grid-template-columns:72px 1fr;gap:14px;align-items:center"><div class="av" style="width:72px;height:72px;font-size:20px">BE</div><div><div class="in" style="justify-content:center">Upload picture…</div><div class="note">Square PNG or JPG, or drop it on the circle.</div></div></div>
+        <div style="display:grid;grid-template-columns:72px 1fr;gap:14px;align-items:center"><div class="av" style="width:72px;height:72px;font-size:20px">BE</div><div><div class="in" style="justify-content:center">Upload picture…</div></div></div>
         <label>Name</label><div class="in">Ben</div>
         <label>Role</label><div class="in" style="justify-content:space-between">Builder <span style="color:var(--dim)">▾</span></div>
         <label>One line for the crew list</label><div class="in">Builds one part of a ticket, test first.</div>
       </div>
       <div class="blk"><h3>Work</h3>
-        <label>Steps Ben can take <span style="color:var(--dim)">· from your flows, edited there</span></label>
+        <label>Steps Ben can take</label>
         <div class="chips"><span class="chip">Shape</span><span class="chip">Plan</span><span class="chip on">✓ Build</span><span class="chip">Review</span><span class="chip">Test</span></div>
         <label>Harness</label><div class="in" style="justify-content:space-between">Claude Code <span style="color:var(--dim)">▾</span></div>
-        <label>Models, strongest first <span style="color:var(--dim)">· classes and slots under Settings → Models</span></label>
+        <label>Models, strongest first</label>
         <div class="pool">
           <div class="r"><span class="n">1</span><span>opus<small>Claude Code · class A · factor 3</small></span><span class="tag">0 / 2 busy</span><span style="color:var(--dim)">⋮</span></div>
           <div class="r"><span class="n">2</span><span>sonnet<small>Claude Code · class B · factor 1</small></span><span class="tag">1 / 3 busy</span><span style="color:var(--dim)">⋮</span></div>
           <div class="r"><span class="n">3</span><span>qwen3-coder<small>Local · class C · factor 0.2</small></span><span class="tag">2 / 2 busy</span><span style="color:var(--dim)">⋮</span></div>
           <div class="r" style="color:var(--accent)"><span></span><span>Add a model…</span><span></span><span></span></div>
         </div>
-        <div class="note">A task asks for a class; Ben runs it on his model of that class when a slot is free, otherwise it waits. Never a smaller class.</div>
+        
         <label>Daily budget</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="in">$5.00</div><div class="in" style="justify-content:space-between;color:var(--muted)">Tell me when: asks or stuck <span style="color:var(--dim)">▾</span></div></div>
       </div>
       <div class="blk"><h3>Allowed to</h3>
@@ -91,7 +91,7 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
       </div>
     </div>
     <div class="right">
-      <div class="blk"><h3>Instructions <small>prompt.md, edited here in Drey's Markdown editor (Live Preview ⇄ Source) · ≈ 2,490 tokens at start</small><button class="btn" style="float:right">Preview full prompt</button></h3>
+      <div class="blk"><h3>Instructions <small>≈ 2,490 tokens at start</small><button class="btn" style="float:right">Preview full prompt</button></h3>
         <div class="ed">
           <div class="bar"><span><b>B</b></span><span><i>I</i></span><span>H</span><span>• List</span><span>☑ Task</span><span>`code`</span><span class="sp"></span><span class="on">Live</span><span>Source</span></div>
           <div class="body">
@@ -103,9 +103,9 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
             <p>Tests green, rebased on main, no new lint warnings, and the acceptance criteria of the part ticked in the ticket.</p>
           </div>
         </div>
-        <div class="note">Also loaded at session start, not edited here: the repository's agent instructions, the skills below, Ben's memory, the ticket and its part.</div>
+        
       </div>
-      <div class="blk"><h3>Skills <small>shared under _meta/skills, Ben's own under personas/ben/skills</small><button class="btn" style="float:right">Add skill…</button></h3>
+      <div class="blk"><h3>Skills<button class="btn" style="float:right">Add skill…</button></h3>
         <div class="skills">
           <div class="s"><span>Go conventions <code>_meta/skills/go-conventions/SKILL.md</code></span><span class="m">shared · 310 tokens</span><span class="tog"></span><span style="color:var(--dim)">⋮</span></div>
           <div class="s"><span>Test first <code>_meta/skills/tdd/SKILL.md</code></span><span class="m">shared · 240 tokens</span><span class="tog"></span><span style="color:var(--dim)">⋮</span></div>
@@ -113,11 +113,11 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
           <div class="s"><span>Diff review <code>_meta/skills/diff-review/SKILL.md</code></span><span class="m">shared · 400 tokens</span><span class="tog off"></span><span style="color:var(--dim)">⋮</span></div>
         </div>
       </div>
-      <div class="blk"><h3>Proposals <small>from Friction and the 1:1</small></h3>
+      <div class="blk"><h3>Proposals</h3>
         <div class="card"><div><b>Add “Read the ADR index before adding a new component.” to How you work</b><span class="m">Friction · 3 reports · T-0098, T-0104, T-0117</span></div><div style="display:flex;gap:8px"><button class="btn">Show diff</button><button class="btn">Dismiss</button><button class="btn pri">Apply</button></div></div>
         <div class="links" style="margin-top:14px"><span>Memory · 12 →</span><span>Journal · 7 →</span><span>Talk to Ben 1:1 →</span></div>
       </div>
     </div>
   </div>
-  <div class="foot"><span>One commit to personas/ben/. New sessions get the change; running sessions keep the prompt they started with.</span><span class="sp"><button class="btn">Discard</button><button class="btn pri">Save</button></span></div>
+  <div class="foot"><span></span><span class="sp"><button class="btn">Discard</button><button class="btn pri">Save</button></span></div>
 </div>

@@ -264,11 +264,56 @@ Friction and the 1:1; Show diff / Dismiss / Apply). Memory, Journal and the 1:1
 stay tabs of the Crew detail; the page links to them and its head counts them.
 Footer: Discard, Save — one commit to `personas/<id>/`.
 
+**"Zu viel Text" (owner, canvas comments on 7k, 2026-11-07, relayed by the
+integrator 2026-11-08):** the rule for the page — section titles stay, the
+explanatory sentences under them go (Profile's picture hint, Steps, Models,
+Instructions, Skills, Proposals, the footer sentence); an explanation lives
+in a tooltip or the manual. The mockup was revised accordingly.
+
 **One prose, not two (ruled "Ja"):** `persona.md` keeps the frontmatter plus
 the one-liner (`summary:`); the "who Ben is" prose lives at the top of
 `prompt.md` — the prompt *is* the persona. The placeholder sentence ("Who
 build-default is: role, tone, limits. Edit freely — the next run reads it.")
 disappears; existing `persona.md` prose migrates once into `prompt.md`.
+
+### R12 — The session is a record of its own; free sessions; an explicit working directory (2026-11-08)
+
+Addendum from the owner, relayed by the integrator: *"man muss auch Sessions
+anlegen können; der Tickets-Vault kann selbst eine sein; irgendwie muss der
+Runner wissen, in welchem Verzeichnis er startet; und die globale
+Konfiguration ist vielleicht nicht so ideal."*
+
+**Ruling:** a **session is a first-class record of Drey Service**: id, kind
+(`run` | `1:1` | `shape` | `free`), persona, harness + model + class, **working
+directory**, token, state (`queued` | `held` | `running` | `released`), ledger
+links, stream file. Runs and 1:1s are sessions with a ticket or a persona. A
+**free session** is created by the owner (service window, Crew tab: "New
+session… persona, folder, class") **or proposed by Pia as a card**; it runs
+through the same pool and ledgers (persona and provider; no ticket allowance)
+and is released after idle. The directory is explicit on the record: a run
+takes the ticket repo's worktree as today (`repos.md` `path:` +
+`_worktrees/<id>`); a 1:1 starts in the tickets repository, read-only; a free
+session where the owner says — **the tickets vault itself is an allowed
+directory** (it is a git repository like any other). The service's Sessions
+area shows the directory.
+
+### R13 — Configuration in three layers; `chain.json` is runtime state per vault (2026-11-08)
+
+**Ruling:** three layers instead of three copies.
+
+- **Machine** (Settings, the service's `service.json`): the model table, the
+  capacity cap, providers and keys, paths, autostart — what this computer is.
+- **Vault** (`_meta/` in the tickets repository, versioned): pipeline,
+  personas with budget and `allowed:`, repos, default persona, default worker,
+  permission mode, caps. Today partly in `~/.drey-engine/config.json` and in
+  `chain.json`'s `config`; they move here.
+- **Session** (the record of R12): directory, class, model pin, handover,
+  permission override.
+
+`chain.json` keeps **runtime state only** (autopilot, column states, breaker,
+streaks), **one per tickets vault** under the service home, so two vaults
+never share a master. One-time key migration; `_meta/` becomes the shared
+truth for two devices, as it already is for pipeline and personas.
 
 ## 2. Open questions the owner deferred
 
@@ -300,6 +345,7 @@ order. "req-16x" are placeholders after req-160, the highest id on 2026-11-08.
 | **req-167** | Settings → Models and the capacity pool: the model table (category, class, cost factor, provider slots), the cap, class requests, queue without a process, three ledgers — ADR-0095 | **replaces req-112**; absorbs req-113's allowance, req-63's `fleet.pool.<provider>.size` |
 | **req-168** | Persona page v2 per R11 (req-153 done when this ships): the Markdown editor in Instructions, Allowed to, models from the table, Skills with switches, Proposals, one prose | **replaces the page part of req-153**; closes req-142/143/144/137's page halves; E13-19 loses the page items |
 | **req-169** | Skills as Agent Skills: `_meta/skills/<name>/SKILL.md`, listing and upload (req-137), token count (req-143); progressive loading as a later item | reword req-137 |
+| **req-170** | Sessions as records and the three configuration layers (R12, R13): the session record with kind and working directory, free sessions from the owner and from Pia, `service.json` (machine) / `_meta/` (vault) / record (session), `chain.json` runtime-only per vault, key migration from `~/.drey-engine/config.json` | ADR-0092 and 0095 later sections; touches ADR-0077 (chain.json), ADR-0080 (worktree home) |
 | reword **req-152** | now "designed — see `docs/design/work-panel/crew-internals-concept.md`"; leaves the roadmap when req-161–169 are on it | |
 | reword **req-153** | same; the mockup is `crew-internals/persona-page-mockup.html` | |
 | reword **req-157** | the session lifecycle now applies to runs *and* 1:1 sessions held by the Crew runner | |

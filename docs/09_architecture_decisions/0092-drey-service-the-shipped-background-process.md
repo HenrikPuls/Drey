@@ -56,6 +56,15 @@ leaves after the idle span when nothing lives and no Autopilot is on
 (every start is Autopilot Off). A component's crash restarts the component,
 not the service, and shows as a red row.
 
+**Homes and configuration (R13).** The service keeps one `service.json`
+(machine scope: model table, capacity cap, providers, keys, paths,
+autostart) and per tickets vault one runtime-state file (the former
+`chain.json`: autopilot, column states, breaker). Everything that describes
+a vault's crew — pipeline, personas, repos, default persona and worker,
+permission mode, caps — lives in that vault's `_meta/`; keys that sit in
+`~/.drey-engine/config.json` today migrate once. Session-scoped values
+(directory, class, pin, handover) live on the session record (ADR-0095).
+
 ## Consequences
 
 - One place answers "is anything running, and why not": the tray dot, the

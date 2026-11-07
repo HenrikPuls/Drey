@@ -58,6 +58,20 @@ overrides; the owner can change the class on the card. The decision sits
 where the knowledge about the task arises and stays auditable in the run
 record (the model that actually ran, as §4.6 demanded).
 
+**The session is a record of the service (owner addendum, R12).** Kind
+(`run` | `1:1` | `shape` | `free`), persona, harness + model + class, an
+**explicit working directory**, token, state (`queued` | `held` | `running` |
+`released`), ledger links, stream file. A *free* session is created by the
+owner or proposed by Pia as a card and runs through the same pool and
+ledgers; its directory is the owner's choice, the tickets vault itself
+allowed. A run keeps the ticket repo's worktree; a 1:1 starts in the tickets
+repository read-only.
+
+**Configuration in three layers (R13).** Machine (`service.json`: model
+table, cap, providers, keys, paths), vault (`_meta/`: pipeline, personas,
+repos, default persona and worker, permission mode, caps) and session (the
+record). `chain.json` keeps runtime state only, one per tickets vault.
+
 ## Consequences
 
 - `fleet.pool.<provider>.size` becomes a column of the model table; the
