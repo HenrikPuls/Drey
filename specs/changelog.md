@@ -1,3 +1,27 @@
+### Milestone 193 — D-43: e2e engines left by an aborted run are swept
+
+**Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): five tickets engines from the
+2026-11-06 e2e runs were still alive a day later, each with its `drey-e2e-home-*` temp home and lock, and 265 such homes
+lay under `%TEMP%`. Cause: a launch under a fixture-owned home starts the engine the way the app does — detached and
+unref'd, since in production it outlives Drey (ADR-0075) — and only the `electronApp` fixture's teardown ends it. That
+teardown never runs when the worker dies first: a run aborted with Ctrl+C or a task stop, a test whose teardown Playwright
+cuts off at the timeout, a worker crash. The engine knows no parent and has no idle exit, and the suite had no
+`globalSetup` / `globalTeardown`, so nothing ever found what an aborted run left behind. No app code changed.
+
+- **The sweep** (`e2e/fixtures/engine-sweep.ts`, `sweepLeftoverEngines`): every `drey-e2e-home-*` in the temp dir is
+  read; its `engine.lock` is ours only when the pid is a number and the vault lies under a `test-results` segment
+  (`classifyLock`, pure); a live pid is ended only when its command line names `engine-main` too (pid reuse); the home
+  is then removed. A lock that points anywhere else is skipped and named in the log. Never throws.
+- **Wired** as `globalSetup` and `globalTeardown` in `playwright.config.ts` — before the first spec (what the previous
+  run left) and after the last (Playwright still runs it on Ctrl+C). `testIgnore: '**/fixtures/**'` keeps the helper
+  specs out of Playwright's test match.
+- **Specs** (`e2e/fixtures/engine-sweep.spec.ts`, run by `npm run test:plugins` — the `units` project now includes
+  `e2e/fixtures/**/*.spec.ts`, typechecked by `tsconfig.e2e.json`): the lock verdicts, the command-line filter, a temp
+  dir with a dead home, an empty home, a foreign lock and a live non-engine pid (this very test process).
+- Not covered: homes a spec creates under its own prefix (`tickets-fleet-snapshot.spec.ts` uses `dfs-`); those specs
+  stop their engine in `afterAll` and are not part of this sweep.
+- **Roadmap:** D-43 left with this change.
+
 ### Milestone 191 — req-110: the fleet runner exits when it is deactivated or when Drey quits idle
 
 **Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): after closing Drey the runner

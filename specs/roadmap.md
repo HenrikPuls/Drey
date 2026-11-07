@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–191, plus req-98, req-101, req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169, 171–191 and 193 (192 is the 9a frame, on its branch), plus req-98, req-101, req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -121,7 +121,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   `claude/w3-e14-7-cutover-cee921` the same finding is D-36 (`968078bf`); that merge renames it to this id, because D-36 here is the
   Autopilot popover.
 
-(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190.)
+(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.

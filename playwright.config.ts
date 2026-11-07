@@ -14,6 +14,13 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // The engine a launch spawns outlives Drey by design; only the fixture's
+  // teardown ends it, and an aborted or timed-out run never gets there. Both
+  // hooks sweep what earlier runs left behind (`e2e/fixtures/engine-sweep.ts`, D-43).
+  globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
+  // `fixtures/` holds helpers and their vitest specs, never Playwright tests.
+  testIgnore: '**/fixtures/**',
   // The Electron app takes the single-instance lock (electron/main.ts). Each
   // launch gets its own `--user-data-dir`, so the lock does not collide
   // across parallel workers, but keeping it serial makes failures far easier
