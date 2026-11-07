@@ -155,6 +155,16 @@ export interface PluginWidgetContrib {
   /** Header status value (dimmed, right after the title) — recomputed on shell change detection. */
   status?(context: PluginStatusContext): string | null;
   /**
+   * SDK 1.52: `false` means "this panel draws nothing right now" (default
+   * `true`), re-read on the same tick as `status` (a document switch or any
+   * event the shell fans out to plugins). The only consumer is the bottom
+   * dock with this one panel (milestone 199): it then takes no height and
+   * shows no splitter until `shown()` is true again. A side dock ignores it
+   * for now -- the panel's strip icon and header stay -- so do not rely on
+   * the opposite.
+   */
+  shown?(): boolean;
+  /**
    * Builds the panel's own control row into the shared header (right-aligned,
    * shown on hover or focus, e.g. a refresh button). The element is styled by
    * the shell; return cleanup.

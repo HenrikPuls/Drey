@@ -37,7 +37,7 @@
       </main>
 
       @if (!zen.active() && (dock.hasBottom() || dock.dragActive())) {
-        @if (dock.hasBottom() && !dock.noneOpen('bottom')) {
+        @if (dock.hasBottom() && !dock.noneOpen('bottom') && (dock.dragActive() || !dock.bottomShowsNothing())) {
           <div
             class="divider divider-y"
             role="separator"

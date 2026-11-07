@@ -244,9 +244,12 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
 
     // --- Capacity band in the bottom dock: only on the Board tab (board 7e; the Crew tab, 7f, has none)
     await expect(page.locator('.desk-capacity')).toBeHidden();
+    // D-47: the dock's only panel draws nothing here, so the bottom band takes no height at all.
+    await expect(page.locator('app-dock[side="bottom"]')).toBeHidden();
     await openFromMenu('Board');
     const band = page.locator('.desk-capacity').filter({ visible: true });
     await expect(band).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('app-dock[side="bottom"]')).toBeVisible();
     await expect(band.locator('.desk-cap-person').filter({ hasText: 'Tessa' })).toContainText('stuck on T-0126');
     await expect(band.locator('.desk-cap-today')).toHaveText('$4.22 of $19 today');
     await page.screenshot({ path: testInfo.outputPath('desk-capacity.png') });
@@ -254,6 +257,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     // The band rule (E12-15, board 7e): hidden once another tab (a ticket) is the active one.
     await panel.locator('.work-row[data-id="T-0121"]').click();
     await expect(page.locator('.desk-capacity')).toBeHidden({ timeout: 15_000 });
+    await expect(page.locator('app-dock[side="bottom"]')).toBeHidden();
     stopEngine();
   });
 });

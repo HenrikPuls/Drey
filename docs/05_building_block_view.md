@@ -638,7 +638,7 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   a view…" are commands registered in `App`. Plugin **view presets** (SDK
   1.39, `ui.registerViewPreset`, E13-2; SDK 1.50 adds `layout.openTabs` --
   opened through the kind's `restore` on every switch the view does not hold
-  them -- and `setViewBadge`, the dot on the view's tab; SDK 1.51 adds
+  them -- and `setViewBadge`, the dot on the view's tab; SDK 1.52 adds `PluginWidgetContrib.shown`, read by `DockService.bottomShowsNothing` (the one-panel bottom dock takes no height, D-47); SDK 1.51 adds
   `layout.bottomH`, the bottom dock's first height, clamped by `DockService`,
   and asks every route's `DocumentRoute.title`, owned or not) join the list after Notes
   (`registerPreset`, not persisted -- the plugin re-registers at every start;

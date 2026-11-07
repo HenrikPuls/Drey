@@ -320,3 +320,12 @@ back), and the header's chevron -- the fold to the header of milestone 192 --
 is the way to make it small. `HEIGHT.min` went from 140 to 100 so the band
 fits. Side docks are unchanged: their strip also carries the fold-away
 affordance and the drag target, and no board shows one without it.
+
+## Later change — a one-panel bottom dock whose panel draws nothing takes no height (milestone 206, D-47)
+
+The Capacity band shows only with the Board tab, so on the Crew and Persona tabs
+the bottom dock kept its height around an empty panel. SDK 1.52 adds the optional
+`PluginWidgetContrib.shown()`; while the bottom dock's one panel returns `false`,
+`DockService.bottomShowsNothing()` is true and the dock draws nothing (no band,
+no splitter; the panel stays mounted). A side dock ignores `shown` -- its strip
+and header stay.

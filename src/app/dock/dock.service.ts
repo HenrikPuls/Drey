@@ -319,6 +319,21 @@ export class DockService {
     return ids.every((id) => this.closed(id));
   }
 
+  /**
+   * True while the bottom dock's one panel says it draws nothing (SDK 1.52,
+   * `shown() === false`): the dock then takes no height and no splitter, and
+   * is back when the panel shows again. Reads the status tick, so a document
+   * switch re-evaluates it. Side docks ignore `shown`.
+   */
+  bottomShowsNothing(): boolean {
+    const bottom = this.state().dock.bottom;
+    if (bottom.length !== 1) {
+      return false;
+    }
+    this.registry.statusVersion();
+    return this.registry.descriptor(bottom[0])?.shown?.() === false;
+  }
+
   flexOf(id: WidgetId): number {
     return this.state().flexes[id];
   }
