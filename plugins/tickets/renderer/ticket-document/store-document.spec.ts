@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The spec plays the host: these are the modules the host hands a plugin as `api.editor.cm`.
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { foldedRanges, foldEffect, codeFolding } from '@codemirror/language';
+import { foldedRanges, foldEffect, unfoldEffect, codeFolding } from '@codemirror/language';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { EditorState, RangeSet, StateEffect, StateField } from '@codemirror/state';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
@@ -15,6 +15,7 @@ import type { DreyPluginApi, EditorSurfaceContext, FrontmatterViewInput } from '
 import type { BoardSnapshot } from '../../shared/tickets';
 import { createTicketHeader, ticketLogFold } from '../ticket-header';
 import { createTicketDocumentExtension } from './extension';
+import { createTicketStrip } from './strip';
 
 /**
  * D-23: a real store document (`id: t-30`, the flat format, `tickets/t/0000/t-30/ticket.md`,
@@ -73,7 +74,7 @@ const api = {
     cm: {
       state: { StateField, StateEffect, RangeSet },
       view: { Decoration, EditorView, ViewPlugin, WidgetType },
-      language: { foldEffect },
+      language: { foldEffect, unfoldEffect, foldedRanges },
     },
   },
 } as unknown as DreyPluginApi;
@@ -93,9 +94,10 @@ function mount(extension: unknown): EditorView {
 
 describe('the ticket header on a store document', () => {
   function header(invoke: (method: string, payload?: unknown) => Promise<unknown>): HTMLElement {
-    const made = createTicketHeader({ api, snapshot: () => snapshot, invoke, onError: () => undefined });
+    const strip = createTicketStrip({ i18n, snapshot: () => snapshot, rowOf: () => null, invoke, onThread: vi.fn(), onReview: vi.fn() });
+    const made = createTicketHeader({ api, snapshot: () => snapshot, invoke, onError: () => undefined, strip });
     return made.view.render({
-      view: { state: { sliceDoc: () => FRONTMATTER }, dispatch: vi.fn(), focus: vi.fn() },
+      view: { state: { sliceDoc: () => FRONTMATTER, doc: { toString: () => DOCUMENT } }, dispatch: vi.fn(), focus: vi.fn() },
       frontmatter: FRONTMATTER,
       path: PATH,
       vaultId: 'checkout',
@@ -117,20 +119,20 @@ describe('the ticket header on a store document', () => {
 });
 
 describe('the document extension on a store document', () => {
-  it('draws the proof, the cost table and the action bar from `id: t-30`', () => {
+  it('draws the proof from `id: t-30`', () => {
     const extension = createTicketDocumentExtension({
       api,
       snapshot: () => snapshot,
       rowOf: () => null,
       matches: () => true,
-      actions: { accept: vi.fn(), sendBack: vi.fn(), openThread: vi.fn(), openReview: vi.fn() },
+      actions: { openThread: vi.fn() },
+      invoke: async () => ({ ok: false }),
+      openFlow: vi.fn(),
     });
     const view = mount(extension.factory(context));
     expect(view.dom.querySelector('.tickets-doc-proof')).not.toBeNull();
-    expect(view.dom.querySelector('.tickets-doc-cost')).not.toBeNull();
-    const tail = view.dom.querySelector('.tickets-doc-tail');
-    expect(tail).not.toBeNull();
-    expect(tail?.children.length).toBeGreaterThan(1);
+    // An Inbox ticket says its cost on the card; the table starts with the work (7j).
+    expect(view.dom.querySelector('.tickets-doc-cost')).toBeNull();
     view.destroy();
   });
 
@@ -140,11 +142,13 @@ describe('the document extension on a store document', () => {
       snapshot: () => snapshot,
       rowOf: () => null,
       matches: () => true,
-      actions: { accept: vi.fn(), sendBack: vi.fn(), openThread: vi.fn(), openReview: vi.fn() },
+      actions: { openThread: vi.fn() },
+      invoke: async () => ({ ok: false }),
+      openFlow: vi.fn(),
     });
     const other: EditorSurfaceContext = { vaultId: () => 'checkout', path: () => 'tickets/t/0000/t-31/ticket.md' } as unknown as EditorSurfaceContext;
     const view = mount(extension.factory(other));
-    expect(view.dom.querySelector('.tickets-doc-tail')).toBeNull();
+    expect(view.dom.querySelector('.tickets-doc-proof')).toBeNull();
     view.destroy();
   });
 });

@@ -20,7 +20,10 @@ import type { I18n } from '../../../../shared/i18n/types';
 import type { VerificationReport } from '../../../../packages/tickets-engine/src/contracts/verify';
 import type { BoardSnapshot, PipelinePhase, TicketCard } from '../../shared/tickets';
 import { READY_STATE } from '../../shared/pipeline-states';
-import { ideaPhaseIds, isMachinePhase, needKindLabel, statusLineOf, type WorkRow } from '../work-groups';
+import { ideaPhaseIds, isMachinePhase, needKindLabel, type WorkRow } from '../work-groups';
+
+/** The owner's shaping column of the one state list (req-99a). */
+export const SHAPING_STATE = 'shaping';
 
 export const titleCase = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -63,6 +66,20 @@ export function sectionBodyRange(text: string, name: string): TextRange | null {
   return from !== null && to !== null ? { from, to } : null;
 }
 
+/**
+ * The whole `## <name>` section, heading included, to the end of its last
+ * non-blank line: what a widget standing in for the section replaces.
+ */
+export function sectionRange(text: string, name: string): TextRange | null {
+  const body = sectionBodyRange(text, name);
+  if (body === null) {
+    return null;
+  }
+  const before = text.slice(0, body.from);
+  const head = [...before.matchAll(new RegExp(`^##[ \\t]+${name}[ \\t]*\\r?$`, 'gm'))].pop();
+  return head === undefined ? null : { from: head.index, to: body.to };
+}
+
 // --- the proof widget -------------------------------------------------------
 
 export interface ProofCheck {
@@ -92,8 +109,10 @@ export interface ProofView {
   /** `4/4 green.` — the one line over the checks. */
   readonly summary: string;
   readonly allPassed: boolean;
-  /** `Tested on 2026-11-04 by Tessa — Electron 34.2.0 on win32.` */
+  /** `Tested on 2026-11-04 by Tessa, Electron 34.2.0 on win32.` */
   readonly stamp: string;
+  /** Who ran the checks, as the words `Tested by …` use. */
+  readonly tester: string;
   readonly checks: readonly ProofCheck[];
   readonly shots: readonly ProofShot[];
   readonly video: ProofVideo | null;
@@ -107,7 +126,7 @@ export function offsetWords(ms: number): string {
 }
 
 /** The report as the widget draws it. Null criteria and no video still give a view (the stamp alone). */
-export function proofViewOf(report: VerificationReport): ProofView {
+export function proofViewOf(i18n: I18n, report: VerificationReport): ProofView {
   const chapters = (report.videoChapters ?? []).map((chapter) => ({
     atMs: chapter.atMs,
     at: offsetWords(chapter.atMs),
@@ -123,35 +142,38 @@ export function proofViewOf(report: VerificationReport): ProofView {
     .filter((criterion) => criterion.screenshot !== null)
     .map((criterion, index) => ({
       file: criterion.screenshot!,
-      caption: `shot ${index + 1} · ${criterion.command}`,
+      caption: i18n.t('ticket.proof.shot', { n: index + 1, label: criterion.command }),
     }));
   const passed = checks.filter((check) => check.passed).length;
-  const allPassed = checks.length > 0 && passed === checks.length;
+  const total = checks.length;
+  const allPassed = total > 0 && passed === total;
   const summary =
-    checks.length === 0
-      ? 'No criteria were checked.'
+    total === 0
+      ? i18n.t('ticket.proof.none')
       : allPassed
-        ? `${passed}/${checks.length} green.`
-        : `${passed}/${checks.length} green, ${checks.length - passed} failing.`;
+        ? i18n.t('ticket.proof.green', { passed, total })
+        : i18n.t('ticket.proof.failing', { passed, total, failing: total - passed });
   const day = /^\d{4}-\d{2}-\d{2}/.exec(report.testedAt)?.[0] ?? report.testedAt;
-  const who = report.tester.replace(/^verify@.*$/, 'the verify run');
+  const tester = /^verify@/.test(report.tester) ? i18n.t('ticket.proof.verify_run') : report.tester;
   const stamp =
     report.testedAt === ''
       ? ''
-      : `Tested on ${day} by ${who}${report.environment === '' ? '' : ` — ${report.environment}`}.`;
+      : report.environment === ''
+        ? i18n.t('ticket.proof.stamp_short', { day, who: tester })
+        : i18n.t('ticket.proof.stamp', { day, who: tester, environment: report.environment });
   const video: ProofVideo | null =
     report.video !== undefined && report.video !== null
       ? { file: report.video, notKept: null, chapters }
       : report.videoNotKept !== undefined
         ? { file: null, notKept: report.videoNotKept, chapters: [] }
         : null;
-  return { summary, allPassed, stamp, checks, shots, video, findings: report.findings };
+  return { summary, allPassed, stamp, tester, checks, shots, video, findings: report.findings };
 }
 
 /** The ticket text's `## Verification` as a view; null when the ticket has none. */
-export function proofOfText(text: string): ProofView | null {
+export function proofOfText(i18n: I18n, text: string): ProofView | null {
   const report = parseVerificationSection(text);
-  return report === null ? null : proofViewOf(report);
+  return report === null ? null : proofViewOf(i18n, report);
 }
 
 /** `drey-asset://<vault>/asset/<path>` — the URL the editor's own images use. */
@@ -238,42 +260,117 @@ export function chainOf(input: {
 
 export type StatusTone = 'needs' | 'running' | 'blocked' | 'idle';
 
+/** The colour of the status pill: the boards' one colour per state. */
+export type PillTone = 'accent' | 'pink' | 'peach' | 'mint' | 'amber' | 'grey';
+
 export interface TicketStatus {
-  /** The chip: why the owner is needed, `Running`, `Blocked`, or the phase's title. */
+  /** The pill: why the owner is needed, `Running`, `Blocked`, or the phase's title. */
   readonly label: string;
   readonly tone: StatusTone;
-  /** The word for why the owner is wanted when the caps are the generic `Needs you` (`Question`, `Gate red`); '' otherwise. */
+  readonly pill: PillTone;
+  /** The word for why the owner is wanted when the pill is the generic `Needs you` (`Question`, `Gate red`); '' otherwise. */
   readonly kind: string;
-  /** The muted line after it (`checks green`, `waits for your review`); '' when none. */
-  readonly line: string;
 }
 
+const pillOfPhase = (phaseId: string): PillTone =>
+  phaseId === 'prioritized' ? 'accent' : phaseId === SHAPING_STATE ? 'pink' : phaseId === READY_STATE ? 'mint' : 'grey';
+
 /**
- * The status chip of a ticket on the board: the caps the canvas names —
- * `NEEDS YOU`, `PLAN TO ACCEPT`, `READY TO TRY` (the CSS sets the caps) —
- * where the owner is wanted, `Running`, `Blocked`, or the phase's title.
+ * The status pill of a ticket on the board (boards 9a, 7b, 7c, 7j): the phase's
+ * title in its colour, or the word the owner is wanted for. `planToAccept` is a
+ * Shaping ticket whose plan lists parts that are no tickets yet.
  */
-export function statusOf(i18n: I18n, row: WorkRow | null, board: BoardSnapshot, phaseTitle: string): TicketStatus {
+export function statusOf(i18n: I18n, row: WorkRow | null, board: BoardSnapshot, phaseTitle: string, planToAccept = false): TicketStatus {
+  const phaseId = row?.phase.id ?? board.pipeline.find((phase) => phase.title === phaseTitle)?.id ?? '';
+  if (planToAccept) {
+    return { label: i18n.t('ticket.status.plan_to_accept'), tone: 'needs', pill: 'peach', kind: '' };
+  }
   if (row === null) {
-    return { label: phaseTitle, tone: 'idle', kind: '', line: '' };
+    return { label: phaseTitle, tone: 'idle', pill: pillOfPhase(phaseId), kind: '' };
   }
   if (row.need !== null) {
     const kind = needKindLabel(row.need, board);
-    const label =
-      kind === 'Ready to try'
-        ? i18n.t('ticket.status.ready_to_try')
-        : kind === 'Plan to accept'
-          ? i18n.t('ticket.status.plan_to_accept')
-          : i18n.t('ticket.status.needs_you');
-    return { label, tone: 'needs', kind: kind === 'Ready to try' || kind === 'Plan to accept' ? '' : kind, line: statusLineOf(row, board) };
+    if (kind === 'Ready to try') {
+      return { label: i18n.t('ticket.status.ready_to_try'), tone: 'needs', pill: 'mint', kind: '' };
+    }
+    if (kind === 'Plan to accept') {
+      return { label: i18n.t('ticket.status.plan_to_accept'), tone: 'needs', pill: 'peach', kind: '' };
+    }
+    return { label: i18n.t('ticket.status.needs_you'), tone: 'needs', pill: 'peach', kind };
   }
   if (row.run !== null) {
-    return { label: i18n.t('ticket.status.running'), tone: 'running', kind: '', line: phaseTitle };
+    return { label: i18n.t('ticket.status.running'), tone: 'running', pill: 'accent', kind: '' };
   }
   if (row.card.blocked.length > 0) {
-    return { label: i18n.t('ticket.status.blocked'), tone: 'blocked', kind: '', line: `by ${row.card.blocked.join(', ')}` };
+    return { label: i18n.t('ticket.status.blocked'), tone: 'blocked', pill: 'amber', kind: '' };
   }
-  return { label: phaseTitle, tone: 'idle', kind: '', line: '' };
+  return { label: phaseTitle, tone: 'idle', pill: pillOfPhase(phaseId), kind: '' };
+}
+
+// --- the card: which shape, the flow row, the worker -------------------------
+
+/**
+ * Which board a ticket's page follows (owner ruling on Q1, wave 4.3): Inbox and
+ * Prioritized are board 9a (card with Priority / Worker / Flow / Repo, body 16/26
+ * in 660), Shaping and later row 7 (card with Flow / Worker / Cost, body 15/24 in 720).
+ */
+export type PageShape = 'early' | 'flow';
+
+export function pageShapeOf(phaseId: string | null, pipeline: readonly PipelinePhase[]): PageShape {
+  return phaseId === 'prioritized' || (phaseId !== null && phaseId === pipeline[0]?.id) ? 'early' : 'flow';
+}
+
+export interface FlowItem {
+  readonly title: string;
+  readonly state: ChainItem['state'];
+  /** The grey words after the current step: `(with you)`, `(waits for you)`, `(your turn)`. */
+  readonly note: string | null;
+  readonly skipped: boolean;
+}
+
+/**
+ * The card's Flow row: the chain in the words of the boards. A Shaping ticket
+ * leads with its own step `Shape`; a plan to accept has passed it and waits on
+ * the first step; the last owner checkpoint is the `Accept` of decision 26.
+ */
+export function flowItemsOf(i18n: I18n, chain: readonly ChainItem[], phaseId: string, planToAccept: boolean): FlowItem[] {
+  const shaping = phaseId === SHAPING_STATE;
+  const lastCheckpoint = chain.map((step) => step.checkpoint).lastIndexOf(true);
+  const items: FlowItem[] = chain.map((step, index) => ({
+    title: index === lastCheckpoint ? i18n.t('ticket.flow.accept') : step.title,
+    state: planToAccept && index === 0 ? 'current' : step.state,
+    note:
+      planToAccept && index === 0
+        ? i18n.t('ticket.flow.waits_for_you')
+        : step.state === 'current' && step.checkpoint
+          ? i18n.t('ticket.flow.your_turn')
+          : null,
+    skipped: step.skipped,
+  }));
+  if (!shaping) {
+    return items;
+  }
+  const shape: FlowItem = {
+    title: i18n.t('ticket.flow.shape'),
+    state: planToAccept ? 'past' : 'current',
+    note: planToAccept ? null : i18n.t('ticket.flow.with_you'),
+    skipped: false,
+  };
+  return [shape, ...items];
+}
+
+/**
+ * Who the card names as the worker: the persona on the current step, else the
+ * last one that worked, else the first one that will.
+ */
+export function workerOf(chain: readonly ChainItem[]): ChainItem | null {
+  const machine = chain.filter((step) => !step.checkpoint && step.who !== '');
+  return (
+    machine.find((step) => step.state === 'current') ??
+    [...machine].reverse().find((step) => step.state === 'past') ??
+    machine[0] ??
+    null
+  );
 }
 
 export interface CostSummary {

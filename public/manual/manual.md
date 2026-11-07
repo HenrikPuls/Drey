@@ -88,10 +88,12 @@ The frameless window is built from:
   back/forward arrows (see below), and minimize/maximize/close.
 - **Left dock** — Calendar, Files, Templates, Search, Tasks, Open
   windows, Outline, Backlinks, Source control. Every panel can be
-  collapsed to its header, dragged to another dock, or resized against
-  its neighbours.
-- **Centre column** — the tab bar, the meta bar (path, formatting
-  buttons, save, `â‹¯` menu) and the editor.
+  folded to its header with its chevron, dragged to another dock, or
+  resized against its neighbours; right-click a header to move or close
+  it. The icons at the top of a dock open and close panels.
+- **Centre column** — the tab bar, the meta bar (path, *Save* while there
+  is something to save, `</>` for the Markdown source, the `â‹¯` menu)
+  and the editor.
 - **Right dock** — the Assistant panel by default.
 - **Status bar** (bottom, 28 px) — word/character count, a context hint
   while panels are being moved, and the Settings entry.
@@ -126,12 +128,13 @@ it is not remembered across restarts.
 ![The Files panel](img/panel-files.png)
 
 The **Files panel** shows one section per registered vault: a header row
-with the vault's name (the dot marks the active vault) and that vault's
-file tree.
+with the vault's name and that vault's file tree. Its tooltip says which
+vault is the active one.
 
-- **Register more vaults** with *Add vault…* in the panel header. The
-  vault header row's context menu (right-click) offers *Set active*,
-  *Rename*, *Open in File Explorer* and *Remove*.
+- **Register more vaults** with *Add vault…* in a vault header row's
+  context menu (right-click), which also offers *Set active*, *Rename*,
+  *Open in File Explorer*, *Refresh* and *Remove*. The **+** in the panel
+  header (shown on hover) starts a new file in the active vault.
 - The **active vault** is the default target for new daily notes, quick
   capture and chats. Every operation can still address another vault
   explicitly (search scopes, the tasks panel, drag & drop).
@@ -168,7 +171,7 @@ file tree.
 ### Staying in sync
 
 By default Drey does **not** watch the vault folder — external changes
-appear after the **Refresh** button in the Files panel header (or
+appear after **Refresh** in a vault header row's context menu (or
 `vault.refresh` from the command palette). An opt-in watcher that
 reacts to outside changes immediately can be enabled in
 [Settings â†’ Vault](#settings-vault).
@@ -267,8 +270,8 @@ in Settings â†’ *Templates*.
   (the Assistant's prompts) is left out.
 - **Folding** — headings collapse Obsidian-style; the chevron appears on
   hover in the gutter.
-- **Line numbers** — the *Lines* toggle (`Ctrl+G`), an app-wide
-  preference.
+- **Line numbers** — *Line numbers* in the `⋯` menu (`Ctrl+G`), an
+  app-wide preference.
 - **Spell checking** — Hunspell dictionaries (English and German
   bundled), per-language and personal word lists in Settings â†’
   *Spelling*.
@@ -294,9 +297,9 @@ Every save keeps the overwritten text as a restorable version
 
 ![Calendar and today's daily note](img/panel-calendar.png)
 
-- The **Calendar panel**'s header is the month/year picker itself, with
-  a **Today** button (opens today's daily note) and month arrows. Days
-  that have a note carry a dot.
+- The **Calendar panel**'s title is the month/year picker; hovering the
+  header shows the **Today** button (opens today's daily note) and the
+  month arrows. Days that have a note carry a dot.
 - Daily notes live in `daily/YYYY-MM-DD.md` (folder and naming
   configurable in Settings â†’ *Daily notes*).
 - New daily notes are generated from `templates/daily.md`; the file is
@@ -876,11 +879,10 @@ persona — and at its right end the ticket's cost in grey (hover it: *So
 far*). The open ticket's row is marked with an accent bar. Click a row to open the ticket. **What opens depends on the
 run:** the ticket document while no run has happened yet (and once the run
 is over), the **thread** — the worker's page — while the runner is active or
-waiting on a question, a gate or a permission. On top of every one of them
-sits the same **Ticket | Thread | Review** control (identical on the
-document, the thread and the Review tab, only the active button differs):
-click another button to switch. The choice is per ticket and never touches a
-saved view. The thread's header shows the run's light and who is working,
+waiting on a question, a gate or a permission. The ticket's card has
+**Thread** and, once the ticket has passed a step, **Open Review**; the thread
+has a **Ticket | Thread | Review** control on top. The choice is per ticket and
+never touches a saved view. The thread's header shows the run's light and who is working,
 and above its composer sits the **decision bar** (Accept, or Accept → next
 phase on a board with other checkpoints). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
@@ -939,67 +941,74 @@ as `T-00xx.md` in the Inbox (req-72: the repositories are checkboxes —
 the first checked one is the primary, where the fleet tests; the
 others get their own worktrees on the same branch). The ticket file is
 an ordinary note (description, plan, executable acceptance criteria and
-an append-only log). In the editor the ticket opens with a **header**
-instead of the folded frontmatter: the title as the headline, above it
-the id, the phase and, when something is wrong with the file, an issues
-badge. Edit the headline in place (Enter or leaving the field applies
-it, Escape restores it) — the change is an ordinary unsaved edit of the
-file, so Save and Undo work as for any typing. Priority, repositories and
-worker are not in the header any more: set them on the board, the card
-menu or in the frontmatter. The code button at the right
-edits the frontmatter as YAML; its header folds back to the ticket
-header. The **Log** section opens folded the first time a ticket shows
-in a session — the fold marker beside "Log" opens it.
+an append-only log). In the editor the ticket opens with a **card**
+instead of the folded frontmatter: the id, the state once, *Open Review* and
+*Thread*, and a quiet grid. The title is the page's headline unless the text
+opens with its own `#` heading: edit it in place (Enter or leaving the field
+applies it, Escape restores it), an ordinary unsaved edit of the file, so
+Save and Undo work as for any typing. Priority, repositories and worker are
+set on the board, the card menu or in the frontmatter. Under the pointer the
+card shows a code button that edits the frontmatter as YAML; its header folds
+back to the card. The **Log** section opens folded the first time a ticket
+shows in a session: the chevron beside "Log" opens it, and the head says how
+many entries lie in it.
 
-**The ticket as a document.** Under the chip row the header carries a
-**strip**: the status in capitals (*NEEDS YOU*, *PLAN TO ACCEPT*,
-*READY TO TRY*, *Running*, *Blocked*, or its phase), a chip that says why
-you are needed (*Question*, *Gate red* …), the persona doing the current
-step and the step, what the ticket has cost — always with what it is
-(*$1.20 so far*, *$1.84 in total*) — and the **estimate** for the step
-now due beside it: *est. $3.00–5.20 · from 3 runs* (the middle half of
-the similar earlier runs; it needs at least three), or *no estimate yet
-(first run)*. Below it the **chain** shows every step with who does
-it (*Plan Paul, Build Ben …*, a checkpoint is *you*); a step the ticket
-skips is struck, one added for this ticket is marked. A ticket that
-waits on a question shows *Waits for you:* and the question.
+**The ticket as a document.** The card follows the ticket's state. In the
+Inbox and in Prioritized it reads *Priority*, *Worker*, *Flow* with a *Change*
+link and *Repo*. From Shaping on it reads *Flow* (the chain: done steps ticked,
+the current one in bold, *(with you)*, *(waits for you)* or *(your turn)*
+beside it), *Worker* and *Cost*: what the ticket has cost, always with what it
+is (*$1.20 so far*, *$1.84 in total*), and the **estimate** beside it: *est.
+$3.00–5.20 · from 3 runs* (the middle half of the similar earlier runs; it
+needs at least three), or *no estimate yet (first run)*. *Change* appears under
+the pointer there. A ticket that waits on a question shows *Waits for you:* and
+the question; a ticket whose file has a real problem shows an issues badge.
+While the ticket waits at one of your checkpoints the card has the quiet link
+**Decision waiting · go to the card**. There is no Accept or Send back here: you
+decide in one place, the decision card (the Ready card in the ticket's thread;
+on the phone and iPad the card in Mission Control's Work list).
 
 When a verify run has written `## Verification`, the section reads as a
-**Proof** block instead of its Markdown: the verdict (*3/3 green.*), the
-checks with their notes and video times, the screenshots (click one to
-open it), the walkthrough video with a button per chapter that jumps to
-it, and the findings. A walkthrough over 25 MB is not kept; the block
-says so in one line instead of the player (Settings → Engine → Videos,
-*Largest video*; videos are never deleted automatically). Put the caret in the section and the Markdown
-shows again. At the very end the **Cost** table lists every settled run
-of `## Verlauf` (Phase · Model · Tokens · Time · Cost) with a total row;
-a phase of the chain the ticket has still to pass shows *no run yet*.
-Under it the **action bar**: *Thread* (the agent's thread of the ticket) and
-*Open Review*, and, while the ticket waits at one of your checkpoints, the
-quiet link **Decision waiting · go to the card**. There is no Accept or Send
-back here: you decide in one place, the decision card (the Ready card in the
-ticket's thread; on the phone and iPad the card in Mission Control's Work
-list). The link takes you to that card.
+**Proof** block instead of its Markdown: the verdict with who tested it, the
+checks with their notes and video times (click a time to jump there), and a row
+of tiles: the screenshots (click one to open it) and the walkthrough video
+(click it for its controls). The findings follow. A walkthrough over 25 MB is
+not kept; the block says so in one line (Settings → Engine → Videos, *Largest
+video*; videos are never deleted automatically). Put the caret in the section
+and the Markdown shows again. Once the ticket is in the work, `## Verlauf` reads
+as the **Cost** table: every settled run (Phase · Model · Tokens · Time · Cost)
+with a total row; a phase of the chain the ticket has still to pass shows *no
+run yet*.
 
-**The Review tab.** *Open Review* opens a tab **Review · T-0121** with the
-ticket's proof on top (the same block as in the document) and the changes
-of its branch below: one chip per file with its +/− counts, then the
-selected file's lines. Switch between *Changes* and *Whole file*, tick
-*Viewed* when you have read a file (the summary says *3 files · 1 of 3
-viewed*; a file that changed since stays unviewed), *Open in editor* to
-read it in a normal tab at that line and *Git history* for the file's
-history — both need the ticket's worktree to be inside a vault you have
-added; otherwise *Open in editor* opens a copy. Click a **line number** to
-comment on that line, Shift-click a second number for a range, then add
-the comment (Ctrl+Enter). The footer button names how many you wrote:
-**Send back with 2 comments** moves the ticket back to the agent with each
-comment (file, line, text) in its Handover, so the next run reads them (the
-button shows only once you wrote a comment). The Review tab has no Accept
-either: while the ticket waits at one of your checkpoints its footer shows
-the link **Decision waiting · go to the card**.
+**Plan to accept in the ticket.** A Shaping ticket whose plan lists `### Parts`
+shows **Plan to accept**: the list as cards, each with its state, the persona
+that builds it and its estimate, with the *Typical total* on top. Pick a persona
+on a card; drag a card by its grip or use its **⋯** to move it; *Delete part*
+takes a second press; a part that is running is locked. *Change flow* opens the
+Flow tab, *Ask Mission Control to change the split* opens the ticket's
+conversation. You can also edit the Markdown: put the caret in the block. You
+accept on the decision card, the link goes there.
 
-**The Flow tab.** *Change flow* under the chain in a ticket's header
-opens **Flow · T-0121**: the gates the ticket will still pass, each with who
+**The Review tab.** *Open Review* opens a tab **Review · T-0121**: the proof on
+top (the walkthrough, the verdict, chapter buttons, the screenshots), then the
+files of the branch on the left with their +/− counts and the selected file's
+lines on the right. Drag the line under the proof or the one beside the file
+list to give the diff more room; the sizes stay. Switch between *Changes* and
+*Whole file*, tick a file's box when you have read it (the head says *1 of 3
+viewed*; a file that changed since stays unviewed), *Open in editor* to read it
+in a normal tab and *Git history* for the file's history; both need the ticket's
+worktree to be inside a vault you have added; otherwise *Open in editor* opens a
+copy. Click a **line number** to comment on that line, Shift-click a second
+number for a range, then add the comment (Ctrl+Enter). Click a comment's text to
+change it, the bin removes it. **Send back with 2 comments** moves the ticket
+back to the agent with each comment (file, line, text) in its Handover, so the
+next run reads them; while it has no place on the decision card yet, it shows
+when the pointer is on the head of the file list. The Review tab has no Accept
+either: while the ticket waits at one of your checkpoints its head has the link
+**Decision waiting · go to the card**.
+
+**The Flow tab.** *Change* in the ticket's card or *Change flow* in its Parts
+block opens **Flow · T-0121**: the gates the ticket will still pass, each with who
 works it and on which model. Click a gate to open its settings on the right:
 who works it (the pipeline's default or one persona), *Tell me when it is
 done*, *Earlier* / *Later*, *Add a gate after* and *Remove gate* (a standard
@@ -1107,9 +1116,9 @@ tickets on their own; **Paused** — the running step finishes, nothing new
 starts, optionally until a time you set (*Resume at*); **Off** — you start
 every step. It reads the same everywhere: a status-bar item *● Autopilot · On*
 left of today's cost (click it or press `Mod+Alt+P`), the chip in the iPad
-header, the play icon in the phone's app bar (Work, Crew and the chat) and the
-*Autopilot* row of the phone menu. A green dot means On, orange Paused, grey
-Off. On the desktop the item opens a popover above it: the three states, a
+header, the icon in the phone's app bar (Work, Crew and the chat; it draws the
+state: play, two bars, a square) and the *Autopilot* row of the phone menu, which
+leads to Settings. A green dot means On, orange Paused, grey Off. On the desktop the item opens a popover above it: the three states, a
 sentence on what the current one means, and chips for the resume time and
 today's cost. While Paused, click *Resume time* (or *Resume at 18:00*) to type
 a time, Enter takes it; a time already past today means tomorrow, an emptied
@@ -1787,10 +1796,10 @@ automatically.
 - **Docked editor bands** — any pane can be dragged into the left/right
   dock (above the panels) or docked from its tab menu; it persists with
   the session. *View â†’ Reset layout* undocks them.
-- **Panels** — every panel header is a drag grip: move panels between
-  the left, right and bottom docks, resize them with the splitters,
-  collapse them to their 32 px headers. The whole layout persists
-  across restarts.
+- **Panels** — drag a panel by its header between the left, right and
+  bottom docks (or right-click the header), resize them with the
+  splitters, fold them to their headers with the chevron. The whole
+  layout persists across restarts.
 - **Views** — a view is a saved layout: its own docks and panels, split
   panes and open tabs. The title bar shows the views as one segmented
   control (*Notes · Work · …*) with a **Layout ▾** menu beside it;
@@ -2130,7 +2139,7 @@ history store is deliberately outside it).
 - **Quick capture hotkey does nothing** — another program owns
   `Ctrl+Alt+N`; Drey logs a warning to the main-process console.
 - **External file changes don't show up** — the watcher is off by
-  default; press Refresh in the Files panel or enable it in Settings â†’
+  default; use Refresh in the vault row's menu or enable it in Settings â†’
   Vault.
 - **A plugin's panel is missing** — check Settings â†’ *Panels & plugins*
   (changes apply on restart), and the plugin's status line there.

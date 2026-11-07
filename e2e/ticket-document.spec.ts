@@ -186,9 +186,13 @@ test.describe('Ticket document (E13-6)', () => {
     await expect(strip).toBeVisible({ timeout: 15_000 });
     await expect(strip.locator('.tickets-doc-status')).toHaveText('Needs you');
     await expect(strip.locator('.tickets-doc-kind')).toHaveText('Review');
-    await expect(strip.locator('.tickets-doc-cost-fact')).toHaveText('$1.84 in total');
-    await expect(strip.locator('.tickets-doc-step')).toContainText(['Plan', 'Build', 'Review', 'Test', 'Commit']);
-    await expect(strip.locator('.tickets-doc-step').first()).toContainText('Paul');
+    await expect(strip.locator('.tickets-doc-cost-fact')).toContainText('$1.84 in total');
+    await expect(strip.locator('.tickets-doc-step')).toContainText(['Plan', 'Build', 'Review', 'Test', 'Accept']);
+    // req-97: no Accept / Send back on the card, only the link to the decision card.
+    await expect(strip.locator('.tickets-card-top .tickets-doc-btn')).toHaveText(['Open Review', 'Thread']);
+    await expect(strip.locator('.tickets-doc-decision-link')).toHaveText('Decision waiting · go to the card ›');
+    // Boards 9a, 7j: the switch and the second status are gone.
+    await expect(page.locator('app-editor .tickets-faces')).toHaveCount(0);
 
     const proof = page.locator('app-editor .tickets-doc-proof');
     await expect(proof).toBeVisible();
@@ -204,13 +208,8 @@ test.describe('Ticket document (E13-6)', () => {
     });
     const cost = page.locator('app-editor .tickets-doc-cost');
     await expect(cost).toBeVisible();
-    await expect(cost.locator('tbody tr')).toHaveCount(4);
-    await expect(cost.locator('tfoot')).toContainText('$1.84');
-
-    const bar = page.locator('app-editor .tickets-doc-actions');
-    // req-97: no Accept / Send back here, only the link to the decision card.
-    await expect(bar.locator('button')).toHaveText(['Thread', 'Open Review']);
-    await expect(bar.locator('.tickets-doc-decision-link')).toHaveText('Decision waiting · go to the card');
+    await expect(cost.locator('.tickets-doc-table-row:not(.is-head):not(.is-total)')).toHaveCount(4);
+    await expect(cost.locator('.is-total')).toContainText('$1.84');
     await page.screenshot({ path: test.info().outputPath('ticket-document-ready.png') });
 
     // Live Preview rule: the caret in the section shows its Markdown.
@@ -220,8 +219,8 @@ test.describe('Ticket document (E13-6)', () => {
   test('a ticket in a machine phase carries the estimate from the history', async ({ page }) => {
     await openFromFiles(page, '30-build', 'T-0121.md');
     const strip = page.locator('app-editor .tickets-doc-strip');
-    await expect(strip.locator('.tickets-doc-estimate')).toContainText('$0.50', { timeout: 15_000 });
-    await expect(strip.locator('.tickets-doc-cost-fact')).toHaveText('$0.34 so far');
+    await expect(strip.locator('.tickets-doc-cost-fact')).toContainText('$0.50', { timeout: 15_000 });
+    await expect(strip.locator('.tickets-doc-cost-fact')).toContainText('$0.34 so far');
     await page.screenshot({ path: test.info().outputPath('ticket-document-building.png') });
   });
 });

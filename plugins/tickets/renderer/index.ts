@@ -3179,15 +3179,15 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     registerReviewKind(api, {
       ...deskDeps(api),
       rowOf,
-      openSendBack: (ticketId) => openSendBackModal(api, ticketId),
-      openTicketFile: (card) => openTicketCard(api, card),
       archivedCard: (id) => archivedCards.get(id) ?? null,
       storage: () => window.localStorage,
-    }, (ticketId) => faceSwitchFor(api, ticketId, 'review'));
+    });
     const documentExtension = createTicketDocumentExtension({
       api,
       snapshot: () => snapshot,
       rowOf,
+      invoke: invokeBoard,
+      openFlow: (card, part) => openFlowTab(api, card.id, part),
       shape: {
         marks: (id) => shapeMarksOf(planStatus.get(id), new Date()),
         want: (id, text) => {
@@ -3200,10 +3200,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       // D-23: a store's documents open from the checkout vault, not the board's.
       matches: (context) => showsTicketDocument(snapshot, context.vaultId(), context.path()),
       actions: {
-        accept: (card) => void runMutation(`Accepting ${card.id}`, () => invokeBoard('acceptTicket', { id: card.id })),
-        sendBack: (card) => openSendBackModal(api, card.id),
         openThread: (card) => openTicketThread(api, card),
-        openReview: (card) => openReviewTab(api, card),
       },
     });
     repaintDocuments = () => documentExtension.repaint();
@@ -3216,7 +3213,16 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       }
     });
     const header = createTicketHeader({
-      strip: createTicketStrip({ i18n: api.i18n, snapshot: () => snapshot, rowOf, invoke: invokeBoard, openFlow: (card) => openFlowTab(api, card.id) }),
+      strip: createTicketStrip({
+        i18n: api.i18n,
+        snapshot: () => snapshot,
+        rowOf,
+        invoke: invokeBoard,
+        onThread: (card) => openTicketThread(api, card),
+        onReview: (card) => openReviewTab(api, card),
+        openFlow: (card) => openFlowTab(api, card.id),
+        icon: (name, size) => api.ui.icon(name, size),
+      }),
       api,
       snapshot: () => snapshot,
       invoke: invokeBoard,
@@ -3224,7 +3230,6 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         setNote(message, 'error');
         notifyViews();
       },
-      faces: (ticketId) => faceSwitchFor(api, ticketId, 'ticket'),
     });
     let headerVault: string | null = null;
     let unregisterHeader: (() => void) | null = null;

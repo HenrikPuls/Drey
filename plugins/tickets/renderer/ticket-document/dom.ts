@@ -1,12 +1,13 @@
+// i18n: catalog
 /**
- * The ticket document's plain-DOM halves (E13-6): the proof block, the cost
- * table, the action bar and the header strip's two rows. Pure functions of
- * the view models in `model.ts`; every effect (open a picture, accept, send
- * back) arrives as a callback so the module knows no IPC and no editor.
+ * The ticket document's plain-DOM halves (E13-6, boards 9a, 7b, 7j): the card
+ * on top of the document, the proof and the cost by phase. Pure functions of
+ * the view models in `model.ts`; every effect (open a picture, open the
+ * thread) arrives as a callback so the module knows no IPC and no editor.
  */
 import type { I18n } from '../../../../shared/i18n/types';
-import type { ActionBar, ChainItem, CostTableView, ProofView, TicketStatus } from './model';
-import { assetUrl } from './model';
+import type { CostTableView, FlowItem, PageShape, PillTone, ProofView } from './model';
+import { assetUrl, offsetWords } from './model';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const node = document.createElement(tag);
@@ -20,93 +21,103 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 };
 
 export interface ProofDeps {
+  readonly i18n: I18n;
   readonly vaultId: string | null;
   /** Opens a vault file (a screenshot) in the editor. */
   readonly openFile: (path: string) => void;
 }
 
-/** `## Verification` as the owner reads it: the verdict line, the checks, the pictures, the walkthrough. */
+/** A picture of the proof that cannot be read shows its caption alone. */
+function shotImage(deps: ProofDeps, file: string, caption: string): HTMLImageElement {
+  const image = el('img');
+  image.src = assetUrl(deps.vaultId, `tickets/attachments/${file}`);
+  image.alt = caption;
+  image.loading = 'lazy';
+  image.addEventListener('error', () => image.remove());
+  return image;
+}
+
+/** The `PROOF` block of board 7j: verdict, checks, one row of tiles (the pictures and the video). */
 export function proofNode(deps: ProofDeps, proof: ProofView): HTMLElement {
-  const root = el('section', 'tickets-doc-block tickets-doc-proof');
+  const { i18n } = deps;
+  const root = el('section', 'tickets-doc-proof');
   root.contentEditable = 'false';
-  const head = el('div', 'tickets-doc-head');
-  head.append(el('span', 'tickets-doc-kicker', 'Proof'));
-  head.append(el('span', `tickets-doc-verdict ${proof.allPassed ? 'is-green' : 'is-red'}`, proof.summary));
-  root.append(head);
+  root.append(el('div', 'tickets-doc-kicker', i18n.t('ticket.proof.kicker')));
+
+  const verdict = el('div', `tickets-doc-verdict-box ${proof.allPassed ? 'is-green' : 'is-red'}`);
+  verdict.append(el('b', 'tickets-doc-verdict', proof.summary));
   if (proof.stamp !== '') {
-    root.append(el('p', 'tickets-doc-stamp', proof.stamp));
+    verdict.append(document.createTextNode(` ${proof.stamp}`));
+  }
+  root.append(verdict);
+
+  let player: HTMLVideoElement | null = null;
+  const tiles = el('div', 'tickets-doc-shots');
+  for (const shot of proof.shots) {
+    const tile = el('button', 'tickets-doc-shot');
+    tile.type = 'button';
+    tile.title = i18n.t('ticket.proof.open_named', { name: shot.caption });
+    tile.append(shotImage(deps, shot.file, shot.caption), el('span', 'tickets-doc-shot-caption', shot.caption));
+    tile.addEventListener('click', () => deps.openFile(`tickets/attachments/${shot.file}`));
+    tiles.append(tile);
+  }
+  if (proof.video !== null && proof.video.file !== null) {
+    const tile = el('div', 'tickets-doc-shot is-video');
+    player = el('video', 'tickets-doc-player');
+    player.preload = 'metadata';
+    player.src = assetUrl(deps.vaultId, `tickets/videos/${proof.video.file}`);
+    player.setAttribute('aria-label', i18n.t('ticket.proof.walkthrough'));
+    const video = player;
+    const chapters = proof.video.chapters.length;
+    const caption = el('span', 'tickets-doc-shot-caption', i18n.t('ticket.proof.video_chapters', { n: chapters }));
+    video.addEventListener('loadedmetadata', () => {
+      if (Number.isFinite(video.duration)) {
+        caption.textContent = i18n.t('ticket.proof.video_length', { length: offsetWords(video.duration * 1000), n: chapters });
+      }
+    });
+    tile.addEventListener('click', () => {
+      video.controls = true;
+      caption.remove();
+    });
+    tile.append(video, caption);
+    tiles.append(tile);
   }
 
   if (proof.checks.length > 0) {
     const list = el('ul', 'tickets-doc-checks');
     for (const check of proof.checks) {
       const row = el('li', `tickets-doc-check ${check.passed ? 'is-pass' : 'is-fail'}`);
-      row.append(el('span', 'tickets-doc-mark', check.passed ? '✓' : '✗'));
-      const label = el('span', 'tickets-doc-check-label', check.label);
-      row.append(label);
+      row.append(el('span', 'tickets-doc-mark', check.passed ? '✓' : '✗'), el('span', 'tickets-doc-check-label', check.label));
       const meta = [check.note, check.at].filter((part): part is string => part !== null && part !== '').join(' · ');
       if (meta !== '') {
-        row.append(el('span', 'tickets-doc-check-meta', meta));
+        const stamp = el('span', 'tickets-doc-check-meta', meta);
+        const chapter = proof.video?.chapters.find((entry) => entry.label === check.label);
+        if (chapter !== undefined && player !== null) {
+          const video = player;
+          stamp.classList.add('is-jump');
+          stamp.title = i18n.t('ticket.proof.jump', { at: chapter.at });
+          stamp.addEventListener('click', () => {
+            video.currentTime = chapter.atMs / 1000;
+            void video.play().catch(() => undefined);
+          });
+        }
+        row.append(stamp);
       }
       list.append(row);
     }
     root.append(list);
   }
-
-  if (proof.shots.length > 0) {
-    const gallery = el('div', 'tickets-doc-shots');
-    for (const shot of proof.shots) {
-      const path = `tickets/attachments/${shot.file}`;
-      const figure = el('figure', 'tickets-doc-shot');
-      const button = el('button', 'tickets-doc-shot-open');
-      button.type = 'button';
-      button.title = 'Open the picture';
-      button.setAttribute('aria-label', `Open ${shot.caption}`);
-      const image = el('img');
-      image.src = assetUrl(deps.vaultId, path);
-      image.alt = shot.caption;
-      image.loading = 'lazy';
-      button.append(image);
-      button.addEventListener('click', () => deps.openFile(path));
-      figure.append(button, el('figcaption', undefined, shot.caption));
-      gallery.append(figure);
-    }
-    root.append(gallery);
+  if (tiles.childElementCount > 0) {
+    root.append(tiles);
   }
 
-  if (proof.video !== null) {
-    const block = el('div', 'tickets-doc-video');
-    if (proof.video.file === null) {
-      block.append(el('p', 'tickets-doc-note', proof.video.notKept ?? ''));
-    } else {
-      const player = el('video', 'tickets-doc-player');
-      player.controls = true;
-      player.preload = 'metadata';
-      player.src = assetUrl(deps.vaultId, `tickets/videos/${proof.video.file}`);
-      player.setAttribute('aria-label', 'Walkthrough video');
-      block.append(player);
-      if (proof.video.chapters.length > 0) {
-        const chapters = el('div', 'tickets-doc-chapters');
-        for (const chapter of proof.video.chapters) {
-          const button = el('button', 'tickets-doc-chapter');
-          button.type = 'button';
-          button.title = `Jump to ${chapter.at}`;
-          button.append(el('span', 'tickets-doc-chapter-at', chapter.at), document.createTextNode(` ${chapter.label}`));
-          button.addEventListener('click', () => {
-            player.currentTime = chapter.atMs / 1000;
-            void player.play().catch(() => undefined);
-          });
-          chapters.append(button);
-        }
-        block.append(chapters);
-      }
-    }
-    root.append(block);
+  if (proof.video !== null && proof.video.file === null) {
+    root.append(el('p', 'tickets-doc-note', proof.video.notKept ?? ''));
   }
 
   if (proof.findings.length > 0) {
     const findings = el('div', 'tickets-doc-findings');
-    findings.append(el('span', 'tickets-doc-kicker', 'Findings'));
+    findings.append(el('div', 'tickets-doc-kicker', i18n.t('ticket.proof.findings')));
     const list = el('ul');
     for (const finding of proof.findings) {
       list.append(el('li', undefined, finding));
@@ -117,78 +128,72 @@ export function proofNode(deps: ProofDeps, proof: ProofView): HTMLElement {
   return root;
 }
 
+const minutesTotal = (i18n: I18n, table: CostTableView): string => {
+  const known = table.rows.filter((row) => row.minutes !== null);
+  return known.length === 0 ? table.total.time : i18n.t('ticket.cost.minutes', { n: known.reduce((sum, row) => sum + (row.minutes ?? 0), 0) });
+};
+
 /**
- * The cost-by-phase table at the end of the ticket (req-98): Phase · Model ·
- * Tokens · Time · Cost, one row per run, a quiet `no run yet` row for a
- * phase still to pass, the total row under them.
+ * The cost by phase (req-98, board 7j): Phase · Model · Tokens · Time · Cost,
+ * one row per run, a quiet `no run yet` row for a phase still to pass, the
+ * total under them. The kicker says the total.
  */
 export function costNode(i18n: I18n, table: CostTableView): HTMLElement {
-  const root = el('section', 'tickets-doc-block tickets-doc-cost');
+  const root = el('section', 'tickets-doc-cost');
   root.contentEditable = 'false';
-  const head = el('div', 'tickets-doc-head');
-  head.append(el('span', 'tickets-doc-kicker', i18n.t('cost.table.title')));
-  root.append(head);
+  const kicker = el('div', 'tickets-doc-kicker', `${i18n.t('ticket.cost.kicker')} · `);
+  kicker.append(el('span', 'tickets-doc-kicker-amount', table.total.cost));
+  kicker.append(document.createTextNode(` ${i18n.t('cost.in_total')}`));
+  root.append(kicker);
 
-  const grid = el('table', 'tickets-doc-table');
+  const grid = el('div', 'tickets-doc-table');
+  grid.setAttribute('role', 'table');
   grid.setAttribute('aria-label', i18n.t('cost.table.label'));
-  const header = el('tr');
-  for (const [key, numeric] of [
-    ['cost.table.phase', false],
-    ['cost.table.model', false],
-    ['cost.table.tokens', true],
-    ['cost.table.time', true],
-    ['cost.table.cost', true],
+  const head = el('div', 'tickets-doc-table-row is-head');
+  head.setAttribute('role', 'row');
+  for (const [key, cls] of [
+    ['cost.table.phase', ''],
+    ['cost.table.model', ''],
+    ['cost.table.tokens', ''],
+    ['cost.table.time', ''],
+    ['cost.table.cost', 'is-right'],
   ] as const) {
-    const cell = el('th', numeric ? 'is-num' : undefined, i18n.t(key));
-    cell.scope = 'col';
-    header.append(cell);
+    const cell = el('span', cls === '' ? undefined : cls, i18n.t(key));
+    cell.setAttribute('role', 'columnheader');
+    head.append(cell);
   }
-  const thead = el('thead');
-  thead.append(header);
-  const body = el('tbody');
+  grid.append(head);
   for (const row of table.rows) {
-    const tr = el('tr');
+    const line = el('div', `tickets-doc-table-row${row.pending ? ' is-pending' : ''}${row.bad ? ' is-bad' : ''}`);
+    line.setAttribute('role', 'row');
     if (row.pending) {
-      const quiet = el('td', 'is-muted', i18n.t('cost.table.no_run'));
-      quiet.colSpan = 4;
-      tr.append(el('td', undefined, row.phase), quiet);
-      tr.classList.add('is-pending');
+      line.append(el('span', undefined, row.phase), el('span', 'is-muted is-span', i18n.t('cost.table.no_run')));
     } else {
-      tr.append(
-        el('td', undefined, row.phase),
-        el('td', 'is-muted', row.model),
-        el('td', 'is-num', row.tokens),
-        el('td', 'is-num', row.time),
-        el('td', 'is-num', row.cost),
+      line.append(
+        el('span', undefined, row.persona === '' ? row.phase : `${row.phase} · ${row.persona}`),
+        el('span', 'is-muted', row.modelName),
+        el('span', 'is-muted is-mono', row.tokens),
+        el('span', 'is-muted is-mono', row.minutes === null ? row.time : i18n.t('ticket.cost.minutes', { n: row.minutes })),
+        el('span', 'is-muted is-mono is-cost is-right', row.cost),
       );
     }
-    if (row.bad) {
-      tr.classList.add('is-bad');
-    }
-    body.append(tr);
+    grid.append(line);
   }
-  const foot = el('tfoot');
-  const total = el('tr');
+  const total = el('div', 'tickets-doc-table-row is-total');
+  total.setAttribute('role', 'row');
   total.append(
-    el('td', undefined, i18n.t('cost.table.total')),
-    el('td'),
-    el('td', 'is-num', table.total.tokens),
-    el('td', 'is-num', table.total.time),
-    el('td', 'is-num', table.total.cost),
+    el('span', undefined, i18n.t('cost.table.total')),
+    el('span'),
+    el('span', 'is-mono is-cost', table.total.tokens),
+    el('span', 'is-mono is-cost', minutesTotal(i18n, table)),
+    el('span', 'is-muted is-mono is-cost is-right', table.total.cost),
   );
-  foot.append(total);
-  grid.append(thead, body, foot);
+  grid.append(total);
   root.append(grid);
   return root;
 }
 
-export interface ActionBarDeps {
-  readonly icon: (name: string, size?: number) => SVGElement;
-  /** The link's words, from the catalog (`decision.waiting_go_to_card`). */
-  readonly decisionLinkText: string;
-  readonly onThread: () => void;
-  readonly onReview: () => void;
-}
+// --- going to the decision card ------------------------------------------------
 
 /** The DOM event of "Decision waiting · go to the card": `detail.id` names the ticket (req-97). */
 export const GO_TO_DECISION_CARD = 'drey:tickets-go-to-decision-card';
@@ -210,138 +215,227 @@ export function goToDecisionCard(id: string): boolean {
 }
 
 /**
- * The bar under the ticket: Thread and Open Review. While a decision waits
- * it leads with the quiet link "Decision waiting · go to the card" instead of
- * Accept / Send back — the decision is made on the Mission Control card only
- * (req-97, canvas decision 16). With no card on screen the link opens the
- * thread, where the Ready card sits.
+ * The quiet link "Decision waiting · go to the card ›": the decision is made on
+ * the Mission Control card only (req-97, canvas decisions 16, 28). With no card
+ * on screen it runs `fallback` (the thread, where the Ready card sits) first.
  */
-export function actionBarNode(deps: ActionBarDeps, bar: ActionBar): HTMLElement {
-  const root = el('div', 'tickets-doc-actions');
-  root.contentEditable = 'false';
-  const button = (label: string, cls: string, icon: string, run: () => void, title?: string): HTMLButtonElement => {
-    const node = el('button', `tickets-doc-btn ${cls}`);
-    node.type = 'button';
-    node.append(deps.icon(icon, 14), document.createTextNode(label));
-    if (title !== undefined) {
-      node.title = title;
+export function decisionLinkNode(i18n: I18n, id: string, fallback: () => void): HTMLAnchorElement {
+  const link = el('a', 'tickets-doc-decision-link', `${i18n.t('decision.waiting_go_to_card')} ›`);
+  link.href = '#';
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (!goToDecisionCard(id)) {
+      fallback();
+      setTimeout(() => goToDecisionCard(id), 300);
     }
-    node.addEventListener('click', run);
-    return node;
-  };
-  if (bar.decide && bar.ticketId !== null) {
-    const id = bar.ticketId;
-    const link = el('a', 'tickets-doc-decision-link', deps.decisionLinkText);
-    link.href = '#';
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      if (!goToDecisionCard(id)) {
-        deps.onThread();
-        setTimeout(() => goToDecisionCard(id), 300);
-      }
-    });
-    root.append(link);
-  }
-  root.append(el('span', 'tickets-doc-spacer'));
-  root.append(
-    button('Thread', '', 'messages-square', deps.onThread, "The agent's thread for this ticket"),
-    button('Open Review', '', 'external-link', deps.onReview, 'The changes and the result card of this ticket'),
-  );
-  return root;
+  });
+  return link;
 }
 
-// --- the header strip -------------------------------------------------------
+// --- the card -----------------------------------------------------------------
 
-export interface StripData {
-  readonly status: TicketStatus;
-  /** The persona doing (or next doing) the ticket's current step; '' when none. */
-  readonly who: string;
-  /** The word for why the owner is wanted (`Question`, `Gate red`); '' when none or when the caps already say it. */
+export interface CardFacts {
+  readonly shape: PageShape;
+  readonly id: string;
+  readonly pill: { readonly label: string; readonly tone: PillTone };
+  /** The word for why the owner is wanted beside a generic pill; '' when none. */
   readonly kind: string;
-  /** The current step's line (`Step: Build`); '' when the chain names none. */
-  readonly step: string;
-  /** `$1.84 in total` / `$1.20 so far` — a bare amount says what it is; null while nothing readable was spent. */
-  readonly cost: string | null;
-  /** `est. $3.00–5.20 · from 3 runs` or `no estimate yet (first run)`; null when no estimate is asked for. */
-  readonly estimate: string | null;
-  readonly chain: readonly ChainItem[];
-  /** The gate: why the ticket waits on the owner (`Waits for you: …`); '' when it does not. */
+  /** The ticket's validator findings as a badge; null when it has none. */
+  readonly issues: { readonly count: number; readonly worst: string; readonly title: string } | null;
+  readonly flow: readonly FlowItem[];
+  /** 9a: `Normal`. */
+  readonly priority: string;
+  /** Row 7: the persona's name; 9a: the runner. */
+  readonly worker: string;
+  /** 9a: the grey words after the runner (`· default`). */
+  readonly workerNote: string;
+  /** 7b: the persona as a picture; null = the name alone. */
+  readonly avatar: { readonly initials: string; readonly color: string; readonly name: string } | null;
+  readonly repo: string;
+  readonly branch: string;
+  /** `$1.84 in total · est. $1.50–2.40 · from 3 runs`; '' while nothing is known. */
+  readonly cost: string;
+  /** Why the ticket waits on the owner; '' when it does not. */
   readonly gate: string;
-  /** "Change flow" under the chain (E13-11); absent = no link. */
-  readonly onFlow?: () => void;
+  /** A decision waits: the link to the card is shown. */
+  readonly decide: boolean;
+  /** The Review tab's button: only when the ticket has changes to review. */
+  readonly canReview: boolean;
 }
 
-const GLYPH: Record<ChainItem['state'], string> = { past: '✓', current: '●', future: '○' };
+export interface CardActions {
+  readonly i18n: I18n;
+  readonly onThread: () => void;
+  readonly onReview: () => void;
+  readonly onFlow?: () => void;
+  /** The escape to the raw YAML, under the pointer only; absent = no button. */
+  readonly onRaw?: () => void;
+  readonly icon?: (name: string, size?: number) => SVGElement;
+}
 
-/** The status row, the chain and the gate — drawn under the chip row of the ticket header. */
-export function stripNode(data: StripData): HTMLElement {
-  const root = el('div', 'tickets-doc-strip');
+/** The pill of a ticket's state (boards 9a, 7b, 7c, 7j, 7d). */
+export function pillNode(label: string, tone: PillTone, extraClass = ''): HTMLElement {
+  const pill = el('span', `tickets-doc-status is-${tone}${extraClass === '' ? '' : ` ${extraClass}`}`);
+  pill.append(el('span', 'tickets-doc-status-dot'), document.createTextNode(label));
+  return pill;
+}
 
-  const facts = el('div', 'tickets-doc-facts');
-  facts.append(el('span', `tickets-doc-status is-${data.status.tone}`, data.status.label));
-  if (data.kind !== '') {
-    facts.append(el('span', 'tickets-doc-kind', data.kind));
+function buttonNode(label: string, title: string | null, run: () => void): HTMLButtonElement {
+  const button = el('button', 'tickets-doc-btn', label);
+  button.type = 'button';
+  if (title !== null) {
+    button.title = title;
   }
-  if (data.who !== '') {
-    facts.append(el('span', 'tickets-doc-who', data.who));
-  }
-  if (data.step !== '') {
-    facts.append(el('span', 'tickets-doc-step-now', data.step));
-  }
-  if (data.status.line !== '') {
-    facts.append(el('span', 'tickets-doc-line', data.status.line));
-  }
-  if (data.cost !== null) {
-    facts.append(el('span', 'tickets-doc-sep', '·'), el('span', 'tickets-doc-cost-fact', data.cost));
-  }
-  if (data.estimate !== null) {
-    facts.append(el('span', 'tickets-doc-sep', '·'), el('span', 'tickets-doc-estimate', data.estimate));
-  }
-  root.append(facts);
+  button.addEventListener('click', run);
+  return button;
+}
 
-  if (data.chain.length > 0) {
-    const chain = el('ol', 'tickets-doc-chain');
-    chain.setAttribute('aria-label', 'Chain');
-    for (const step of data.chain) {
-      const item = el('li', `tickets-doc-step is-${step.state}${step.checkpoint ? ' is-checkpoint' : ''}${step.skipped ? ' is-skipped' : ''}`);
-      item.append(el('span', 'tickets-doc-step-mark', step.checkpoint && step.state !== 'past' ? '◆' : GLYPH[step.state]));
-      item.append(el('span', 'tickets-doc-step-title', step.title));
-      if (step.who !== '') {
-        item.append(el('span', 'tickets-doc-step-who', step.who));
-      }
-      if (step.inserted) {
-        item.title = 'Added for this ticket';
-      }
-      chain.append(item);
+function changeLink(actions: CardActions): HTMLElement | null {
+  if (actions.onFlow === undefined) {
+    return null;
+  }
+  const change = el('button', 'tickets-doc-flow', actions.i18n.t('ticket.card.change'));
+  change.type = 'button';
+  change.title = actions.i18n.t('ticket.card.change_hint');
+  change.addEventListener('click', actions.onFlow);
+  return change;
+}
+
+/** Row 7's Flow row: `✓ Shape · Plan (waits for you) · Build`. */
+function flowRow(items: readonly FlowItem[]): HTMLElement {
+  const row = el('ol', 'tickets-doc-chain');
+  items.forEach((item, index) => {
+    if (index > 0) {
+      row.append(el('li', 'tickets-doc-sep', '·'));
     }
-    root.append(chain);
-    if (data.onFlow !== undefined) {
-      const change = el('button', 'tickets-doc-flow', 'Change flow');
-      change.type = 'button';
-      change.title = 'Open the flow editor for this ticket';
-      change.addEventListener('click', data.onFlow);
-      root.append(change);
+    const step = el('li', `tickets-doc-step is-${item.state}${item.skipped ? ' is-skipped' : ''}`);
+    step.append(el('span', 'tickets-doc-step-title', item.state === 'past' ? `✓ ${item.title}` : item.title));
+    row.append(step);
+    if (item.note !== null) {
+      row.append(el('li', 'tickets-doc-step-note', item.note));
+    }
+  });
+  return row;
+}
+
+/** The persona as a round picture with its initials (the portrait itself is board 7k's). */
+export function avatarNode(initials: string, color: string, title: string, size: number): HTMLElement {
+  const avatar = el('span', 'tickets-doc-avatar', initials);
+  avatar.title = title;
+  avatar.style.setProperty('--avatar-size', `${size}px`);
+  avatar.style.setProperty('--persona-color', color);
+  return avatar;
+}
+
+/** The ticket card: id, the state once, the actions and one quiet grid (boards 9a, 7b, 7c, 7j). */
+export function cardNode(actions: CardActions, facts: CardFacts): HTMLElement {
+  const { i18n } = actions;
+  const root = el('section', `tickets-doc-strip tickets-card is-${facts.shape}`);
+  root.setAttribute('aria-label', i18n.t('ticket.card.label'));
+
+  const top = el('div', 'tickets-card-top');
+  top.append(el('span', 'tickets-head-id', facts.id));
+  const pill = pillNode(facts.pill.label, facts.pill.tone, 'tickets-head-phase');
+  pill.title = i18n.t('ticket.card.phase_hint');
+  top.append(pill);
+  if (facts.kind !== '') {
+    top.append(el('span', 'tickets-doc-kind', facts.kind));
+  }
+  if (facts.issues !== null) {
+    const badge = el('span', `tickets-issues tickets-issues-${facts.issues.worst}`, String(facts.issues.count));
+    badge.title = facts.issues.title;
+    top.append(badge);
+  }
+  if (facts.decide) {
+    top.append(decisionLinkNode(i18n, facts.id, actions.onThread));
+  }
+  top.append(el('span', 'tickets-card-spacer'));
+  if (actions.onRaw !== undefined && actions.icon !== undefined) {
+    const raw = el('button', 'icon-btn tickets-head-raw');
+    raw.type = 'button';
+    raw.title = i18n.t('ticket.card.raw');
+    raw.setAttribute('aria-label', raw.title);
+    raw.append(actions.icon('code', 14));
+    raw.addEventListener('click', actions.onRaw);
+    top.append(raw);
+  }
+  if (facts.canReview) {
+    top.append(buttonNode(i18n.t('ticket.card.open_review'), i18n.t('ticket.card.open_review_hint'), actions.onReview));
+  }
+  top.append(buttonNode(i18n.t('ticket.card.thread'), i18n.t('ticket.card.thread_hint'), actions.onThread));
+  root.append(top);
+
+  const grid = el('div', 'tickets-card-grid');
+  const label = (text: string): HTMLElement => el('span', 'tickets-card-label', text);
+  if (facts.shape === 'early') {
+    const flow = el('span', 'tickets-card-value');
+    flow.append(document.createTextNode(facts.flow.map((item) => item.title).join(' → ')));
+    const change = changeLink(actions);
+    if (change !== null) {
+      flow.append(' ', change);
+    }
+    const worker = el('span', 'tickets-card-value is-control', facts.worker);
+    if (facts.workerNote !== '') {
+      worker.append(' ', el('span', 'tickets-card-muted', facts.workerNote));
+    }
+    const repo = el('span', 'tickets-card-value', facts.repo);
+    if (facts.branch !== '') {
+      repo.append(' ', el('span', 'tickets-card-branch', facts.branch));
+    }
+    grid.append(
+      label(i18n.t('ticket.card.priority')),
+      el('span', 'tickets-card-value is-control', facts.priority),
+      label(i18n.t('ticket.card.worker')),
+      worker,
+      label(i18n.t('ticket.card.flow')),
+      flow,
+      label(i18n.t('ticket.card.repo')),
+      repo,
+    );
+  } else {
+    const flow = flowRow(facts.flow);
+    flow.classList.add('tickets-card-wide');
+    const change = changeLink(actions);
+    if (change !== null) {
+      change.classList.add('is-hover-only');
+      const item = el('li');
+      item.append(change);
+      flow.append(item);
+    }
+    grid.append(label(i18n.t('ticket.card.flow')), flow);
+    grid.append(label(i18n.t('ticket.card.worker')));
+    const worker = el('span', 'tickets-card-value tickets-card-wide');
+    if (facts.avatar !== null) {
+      worker.append(avatarNode(facts.avatar.initials, facts.avatar.color, facts.avatar.name, 24));
+    } else {
+      worker.textContent = facts.worker;
+    }
+    grid.append(worker);
+    if (facts.cost !== '') {
+      grid.append(label(i18n.t('ticket.card.cost')), el('span', 'tickets-card-muted tickets-card-wide tickets-doc-cost-fact', facts.cost));
     }
   }
+  root.append(grid);
 
-  if (data.gate !== '') {
-    root.append(el('p', 'tickets-doc-gate', data.gate));
+  if (facts.gate !== '') {
+    root.append(el('p', 'tickets-doc-gate', facts.gate));
   }
   return root;
 }
 
 /**
- * The two marks under the `## Plan` heading (E13-9): who changed the plan
- * last. Paul's line is quiet; the owner's carries the accent, because it
- * is the one that asks something (it goes with the next message).
+ * The note under a marked block of the plan (E13-9, board 7b): who changed it
+ * last. A bar of the same colour runs down the lines it belongs to.
  */
 export function shapeMarksNode(marks: { readonly paul: string | null; readonly you: string | null; readonly youDetail: string | null }): HTMLElement {
   const root = el('div', 'tickets-doc-shape-marks');
   root.contentEditable = 'false';
   if (marks.paul !== null) {
+    root.classList.add('is-paul');
     root.append(el('span', 'tickets-doc-shape-mark is-paul', marks.paul));
   }
   if (marks.you !== null) {
+    root.classList.add('is-you');
     const you = el('span', 'tickets-doc-shape-mark is-you', marks.you);
     if (marks.youDetail !== null) {
       you.title = marks.youDetail;

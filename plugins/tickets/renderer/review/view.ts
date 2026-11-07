@@ -1,40 +1,45 @@
+// i18n: catalog
 /**
- * The Review tab's body (E13-7, board 7d): the proof of the ticket above,
- * the files of its branch below as numbered patch rows (Changes or Whole
- * file), viewed marks per file, line and range comments that leave with a
- * send-back as the Handover's structured feedback, and the two decisions
- * in the footer. Plain DOM over `ReviewDeps`; the module knows no module
- * state of `index.ts`.
+ * The Review tab's body (E13-7, board 7d): head, the proof band, then the file
+ * list and the diff (Changes or Whole file), side by side under a splitter
+ * (E12-19). Viewed marks per file; line and range comments leave with a
+ * send-back as the Handover's structured feedback. The decision is the Mission
+ * Control card's (canvas decision 28): the tab links to it and hands it the
+ * comments through two document events (`events.ts`). Plain DOM over `ReviewDeps`.
  */
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { ReviewComment } from '../../../../packages/tickets-engine/src/core/review-feedback';
 import type { TicketDiff, TicketFileReply } from '../../../../packages/tickets-engine/src/core/worktree-changes';
+import { parseVerlaufEntries } from '../../../../packages/tickets-engine/src/core/verlauf';
 import type { RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
 import type { BoardSnapshot, MutationResult, TicketCard } from '../../shared/tickets';
-import { goToDecisionCard, proofNode } from '../ticket-document/dom';
-import { actionBarOf, proofOfText, type ProofView } from '../ticket-document/model';
+import { decisionLinkNode, pillNode } from '../ticket-document/dom';
+import { actionBarOf, assetUrl, offsetWords, proofOfText, titleCase, type ProofView } from '../ticket-document/model';
 import type { WorkRow } from '../work-groups';
+import { REVIEW_SEND_BACK, announceReviewComments, type ReviewSendBackDetail } from './events';
 import {
   EMPTY_MARKS,
-  checksLineOf,
+  clampSplit,
   commentEnd,
   commentsOfFile,
-  fileName,
   filesOf,
-  filesSummaryOf,
+  goalOfText,
   loadMarks,
+  loadSplit,
   pruneMarks,
   rangeOf,
   saveMarks,
+  saveSplit,
   statOf,
   withComment,
   withoutComment,
   type MarkStorage,
   type ReviewFile,
   type ReviewMarks,
+  type ReviewSplit,
 } from './model';
 import { vaultFileOf } from './open-file';
-import { commentLabelOf, patchRowsOf, sendBackLabelOf, wholeFileRowsOf, type PatchRow } from './patch';
+import { patchRowsOf, wholeFileRowsOf, type PatchRow } from './patch';
 
 export interface ReviewDeps {
   readonly api: DreyPluginApi;
@@ -44,10 +49,6 @@ export interface ReviewDeps {
   subscribe(listener: () => void): () => void;
   mutate(label: string, run: () => Promise<unknown>): Promise<MutationResult>;
   rowOf(card: TicketCard): WorkRow | null;
-  /** The plain send-back dialog (a note, no comments). */
-  openSendBack(ticketId: string): void;
-  /** The ticket's own file in the editor. */
-  openTicketFile(card: TicketCard): void;
   /** The card of an archived ticket opened from the Done group (E13-21); absent = none. */
   archivedCard?(ticketId: string): TicketCard | null;
   storage(): MarkStorage | null;
@@ -76,11 +77,13 @@ interface Composer {
 type ViewMode = 'changes' | 'whole';
 
 export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: string): () => void {
+  const { i18n } = deps.api;
   const root = el('div', 'tickets-review');
   host.replaceChildren(root);
 
   let disposed = false;
   let proof: ProofView | null = null;
+  let ticketText = '';
   let files: ReviewFile[] = [];
   let truncated = false;
   let loaded = false;
@@ -92,6 +95,7 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
   let anchor: { file: string; line: number } | null = null;
   let note: { text: string; error: boolean } | null = null;
   let busy = false;
+  let split: ReviewSplit = loadSplit(deps.storage());
   /** Whole-file texts already fetched, by path; a failed fetch keeps its message. */
   const wholeFiles = new Map<string, TicketFileReply | 'loading'>();
 
@@ -103,119 +107,283 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
   const setMarks = (next: ReviewMarks): void => {
     marks = next;
     saveMarks(deps.storage(), ticketId, marks);
+    announceReviewComments(ticketId, marks.comments.length);
   };
 
   // --- structure --------------------------------------------------------------
 
   const head = el('div', 'tickets-review-head');
   const proofHost = el('div', 'tickets-review-proof');
-  const filesBar = el('div', 'tickets-review-files');
+  const filesRow = el('div', 'tickets-review-work');
+  const list = el('div', 'tickets-review-list');
   const filePane = el('div', 'tickets-review-pane');
-  const footer = el('div', 'tickets-review-footer');
-  const scroller = el('div', 'tickets-review-scroll');
-  scroller.append(head, proofHost, filesBar, filePane);
-  root.append(scroller, footer);
 
   const icon = (name: string, size = 14): SVGElement => deps.api.ui.icon(name, size);
 
-  const button = (label: string, cls: string, glyph: string | null, title: string, run: () => void): HTMLButtonElement => {
-    const node = el('button', `tickets-review-btn ${cls}`.trim());
+  const button = (label: string, cls: string, title: string, run: () => void): HTMLButtonElement => {
+    const node = el('button', `tickets-review-btn ${cls}`.trim(), label);
     node.type = 'button';
     node.title = title;
-    if (glyph !== null) {
-      node.append(icon(glyph));
-    }
-    if (label !== '') {
-      node.append(document.createTextNode(label));
-    } else {
-      node.setAttribute('aria-label', title);
-    }
     node.addEventListener('click', run);
     return node;
   };
 
-  // --- head and proof -----------------------------------------------------------
+  /** A line the pointer drags (E12-19); arrow keys move it too. Its size is kept per machine. */
+  const splitter = (axis: 'proof' | 'list', label: string): HTMLElement => {
+    const handle = el('div', `tickets-review-split is-${axis}`);
+    handle.setAttribute('role', 'separator');
+    handle.setAttribute('aria-orientation', axis === 'proof' ? 'horizontal' : 'vertical');
+    handle.setAttribute('aria-label', label);
+    handle.tabIndex = 0;
+    const set = (value: number): void => {
+      split = { ...split, [axis]: clampSplit(axis, value) };
+      applySplit();
+      saveSplit(deps.storage(), split);
+    };
+    const current = (): number => (axis === 'proof' ? proofHost.getBoundingClientRect().height : list.getBoundingClientRect().width);
+    handle.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      const start = axis === 'proof' ? event.clientY : event.clientX;
+      const from = current();
+      handle.setPointerCapture(event.pointerId);
+      const move = (next: PointerEvent): void => set(from + (axis === 'proof' ? next.clientY : next.clientX) - start);
+      const up = (): void => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+    });
+    handle.addEventListener('keydown', (event) => {
+      const step = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 16 : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -16 : 0;
+      if (step !== 0) {
+        event.preventDefault();
+        set(current() + step);
+      }
+    });
+    return handle;
+  };
+
+  const applySplit = (): void => {
+    proofHost.style.height = split.proof === null ? '' : `${split.proof}px`;
+    list.style.width = `${split.list}px`;
+  };
+
+  filesRow.append(list, splitter('list', i18n.t('review.resize_files')), filePane);
+  root.append(head, proofHost, splitter('proof', i18n.t('review.resize_proof')), filesRow);
+  applySplit();
+
+  // --- head ---------------------------------------------------------------------
+
+  /** Who built what the tab shows: the Log of runs names them. */
+  const builderOf = (): string => {
+    const entries = parseVerlaufEntries(ticketText);
+    const built = [...entries].reverse().find((entry) => entry.phase === 'build' && (entry.persona ?? '') !== '') ?? [...entries].reverse().find((entry) => (entry.persona ?? '') !== '');
+    return built?.persona === undefined || built.persona === null ? '' : titleCase(built.persona);
+  };
 
   const paintHead = (): void => {
     head.replaceChildren();
     const current = card();
-    head.append(el('span', 'tickets-review-id', ticketId));
-    head.append(el('span', 'tickets-review-title', current?.meta.title ?? ''));
-    if (current !== null) {
-      head.append(el('span', 'tickets-review-spacer'));
-      head.append(button('Ticket', '', 'file-text', 'Open the ticket file', () => deps.openTicketFile(current)));
+    const snapshot = deps.snapshot();
+    const row = el('div', 'tickets-review-head-row');
+    row.append(el('span', 'tickets-review-id', ticketId), el('b', 'tickets-review-title', current?.meta.title ?? ''));
+    if (current !== null && snapshot !== null && actionBarOf(deps.rowOf(current), snapshot).decide) {
+      row.append(pillNode(i18n.t('review.needs_review'), 'peach', 'is-review'), decisionLinkNode(i18n, ticketId, () => undefined));
+    }
+    head.append(row);
+    const who = builderOf();
+    const goal = goalOfText(ticketText);
+    if (who !== '') {
+      const line = goal === '' ? i18n.t('review.sub_plain', { who }) : i18n.t('review.sub', { goal, who });
+      const sub = el('div', 'tickets-review-sub', line);
+      sub.title = line;
+      head.append(sub);
     }
   };
+
+  // --- the proof band -------------------------------------------------------------
 
   const paintProof = (): void => {
     proofHost.replaceChildren();
     if (proof === null) {
       if (loaded) {
-        proofHost.append(el('p', 'tickets-review-empty', 'This ticket carries no Verification section.'));
+        proofHost.append(el('p', 'tickets-review-empty', i18n.t('review.no_verification')));
       }
       return;
     }
     const vaultId = deps.snapshot()?.vaultId ?? null;
-    proofHost.append(
-      proofNode(
-        {
-          vaultId,
-          openFile: (path) => void deps.api.documents.open(path, undefined, vaultId === null ? undefined : { vaultId }),
-        },
-        proof,
-      ),
+    const video = proof.video?.file ?? null;
+    let player: HTMLVideoElement | null = null;
+    if (video !== null) {
+      const tile = el('div', 'tickets-review-video');
+      player = el('video', 'tickets-review-player');
+      const running = player;
+      running.preload = 'metadata';
+      running.src = assetUrl(vaultId, `tickets/videos/${video}`);
+      running.setAttribute('aria-label', i18n.t('ticket.proof.walkthrough'));
+      const duration = el('span', 'tickets-review-video-time');
+      running.addEventListener('loadedmetadata', () => {
+        if (Number.isFinite(running.duration)) {
+          duration.textContent = offsetWords(running.duration * 1000);
+        }
+      });
+      const play = el('button', 'tickets-review-play');
+      play.type = 'button';
+      play.title = i18n.t('review.play');
+      play.setAttribute('aria-label', play.title);
+      play.append(icon('play', 28));
+      play.addEventListener('click', () => {
+        running.controls = true;
+        play.remove();
+        void running.play().catch(() => undefined);
+      });
+      tile.append(running, play, duration);
+      proofHost.append(tile);
+    }
+
+    const body = el('div', 'tickets-review-proof-body');
+    const title = el('div', 'tickets-review-subhead');
+    title.append(el('span', 'tickets-review-subhead-title', i18n.t('review.proof')));
+    const chapters = proof.video?.chapters ?? [];
+    title.append(
+      el('span', 'tickets-review-subhead-note', video === null ? i18n.t('review.tested_by', { who: proof.tester }) : i18n.t('review.walkthrough', { who: proof.tester, n: chapters.length })),
     );
+    body.append(title);
+
+    const passed = proof.checks.filter((check) => check.passed).length;
+    const verdict = el('div', `tickets-review-verdict ${proof.allPassed ? 'is-green' : 'is-red'}`);
+    const fact = (ok: boolean, build: (node: HTMLElement) => void, hint?: string): void => {
+      const node = el('span', 'tickets-review-fact');
+      if (hint !== undefined) {
+        node.title = hint;
+      }
+      const mark = el('span', `tickets-review-fact-mark ${ok ? 'is-ok' : 'is-bad'}`);
+      mark.append(icon(ok ? 'check' : 'x', 14));
+      node.append(mark);
+      build(node);
+      verdict.append(node);
+    };
+    fact(proof.allPassed, (node) => {
+      node.append(el('b', 'tickets-review-count', `${passed}/${proof!.checks.length}`), document.createTextNode(i18n.t('review.checks')));
+    }, proof.stamp);
+    fact(true, (node) => node.append(document.createTextNode(i18n.t('review.tested_by', { who: proof!.tester }))), proof.stamp);
+    let spent = 0;
+    for (const entry of parseVerlaufEntries(ticketText)) {
+      if (typeof entry.cost === 'number' && Number.isFinite(entry.cost) && entry.cost > 0) {
+        spent += entry.cost;
+      }
+    }
+    if (spent > 0) {
+      const cost = el('span', 'tickets-review-cost', `${i18n.t('review.cost')} `);
+      cost.append(el('span', 'tickets-review-cost-amount', i18n.formatCurrency(spent)));
+      verdict.append(cost);
+    }
+    body.append(verdict);
+
+    if (chapters.length > 0) {
+      const strip = el('div', 'tickets-review-chapters');
+      chapters.forEach((chapter, index) => {
+        const chip = el('button', `tickets-review-chapter${index === 0 ? ' is-first' : ''}`, `${chapter.at} ${chapter.label}`);
+        chip.type = 'button';
+        chip.title = i18n.t('ticket.proof.jump', { at: chapter.at });
+        chip.addEventListener('click', () => {
+          if (player !== null) {
+            player.currentTime = chapter.atMs / 1000;
+            player.controls = true;
+            void player.play().catch(() => undefined);
+          }
+        });
+        strip.append(chip);
+      });
+      body.append(strip);
+    }
+
+    if (proof.shots.length > 0) {
+      const thumbs = el('div', 'tickets-review-thumbs');
+      for (const shot of proof.shots) {
+        const path = `tickets/attachments/${shot.file}`;
+        const thumb = el('button', 'tickets-review-thumb');
+        thumb.type = 'button';
+        thumb.title = i18n.t('ticket.proof.open_named', { name: shot.caption });
+        const image = el('img');
+        image.src = assetUrl(vaultId, path);
+        image.alt = shot.caption;
+        image.loading = 'lazy';
+        image.addEventListener('error', () => image.remove());
+        thumb.append(image, el('span', 'tickets-review-thumb-caption', shot.caption));
+        thumb.addEventListener('click', () => void deps.api.documents.open(path, undefined, vaultId === null ? undefined : { vaultId }));
+        thumbs.append(thumb);
+      }
+      body.append(thumbs);
+    }
+    proofHost.append(body);
   };
 
-  // --- files ------------------------------------------------------------------
+  // --- the file list --------------------------------------------------------------
 
   const viewedSet = (): ReadonlySet<string> => new Set(marks.viewed);
 
-  const paintFilesBar = (): void => {
-    filesBar.replaceChildren();
-    if (!loaded || files.length === 0) {
-      return;
-    }
+  const paintList = (): void => {
+    list.replaceChildren();
     const viewed = viewedSet();
-    const summary = el('div', 'tickets-review-summary', filesSummaryOf(files, viewed));
-    if (truncated) {
-      summary.append(el('span', 'tickets-review-trunc', ' · the list is cut for size'));
+    const subhead = el('div', 'tickets-review-subhead has-line');
+    subhead.append(el('span', 'tickets-review-subhead-title', i18n.t('review.files')));
+    const seen = files.filter((file) => viewed.has(file.key)).length;
+    if (loaded && files.length > 0) {
+      const count = el('span', 'tickets-review-subhead-note tickets-review-summary', i18n.t('review.files_viewed', { seen, total: files.length }));
+      if (truncated) {
+        count.title = i18n.t('review.cut_for_size');
+      }
+      subhead.append(count);
     }
-    filesBar.append(summary);
-    const chips = el('div', 'tickets-review-chips');
+    // Interim until 4.8 draws the Send back option on the decision card (build plan row 4.8).
+    const current = card();
+    const snapshot = deps.snapshot();
+    if (marks.comments.length > 0 && current !== null && snapshot !== null && actionBarOf(deps.rowOf(current), snapshot).decide) {
+      const back = button(i18n.t('decision.send_back_with_comments', { n: marks.comments.length }), 'tickets-review-sendback', i18n.t('review.send_back_hint'), () => void sendBackWithComments());
+      back.disabled = busy;
+      subhead.append(back);
+    }
+    list.append(subhead);
+    const rows = el('div', 'tickets-review-list-rows');
     for (const file of files) {
-      const chip = el('button', 'tickets-review-chip');
-      chip.type = 'button';
-      chip.title = file.path;
-      if (file.path === selected) {
-        chip.classList.add('is-selected');
-      }
-      if (viewed.has(file.key)) {
-        chip.classList.add('is-viewed');
-      }
-      chip.append(
-        el('span', 'tickets-review-chip-mark', viewed.has(file.key) ? '✓' : file.status),
-        el('span', 'tickets-review-chip-name', file.path),
-        el('span', 'tickets-review-chip-stat', statOf(file)),
-      );
-      const count = marks.comments.filter((comment) => comment.file === file.path).length;
-      if (count > 0) {
-        chip.append(el('span', 'tickets-review-chip-comments', String(count)));
-      }
-      chip.addEventListener('click', () => {
+      const row = el('div', `tickets-review-file${file.path === selected ? ' is-selected' : ''}`);
+      row.title = file.path;
+      const box = el('input', 'tickets-review-viewed');
+      box.type = 'checkbox';
+      box.checked = viewed.has(file.key);
+      box.setAttribute('aria-label', i18n.t('review.mark_viewed', { path: file.path }));
+      box.addEventListener('click', (event) => event.stopPropagation());
+      box.addEventListener('change', () => {
+        setMarks({
+          ...marks,
+          viewed: box.checked ? [...new Set([...marks.viewed, file.key])] : marks.viewed.filter((key) => key !== file.key),
+        });
+        paintList();
+      });
+      const name = el('div', 'tickets-review-file-text');
+      name.append(el('div', 'tickets-review-file-path', file.path), el('div', 'tickets-review-file-stat', statOf(file)));
+      row.append(box, name);
+      row.addEventListener('click', () => {
         selected = file.path;
         composer = null;
-        paintFilesBar();
+        paintList();
         paintPane();
       });
-      chips.append(chip);
+      rows.append(row);
     }
-    filesBar.append(chips);
+    list.append(rows);
+    if (note !== null) {
+      list.append(el('div', `tickets-review-note${note.error ? ' is-error' : ''}`, note.text));
+    }
   };
 
   const rowsOf = (file: ReviewFile): PatchRow[] | 'loading' | string => {
     if (mode === 'changes') {
-      return patchRowsOf(file.patch).filter((row) => row.kind !== 'meta');
+      // The first hunk's `@@` line says nothing the numbers don't; later ones mark the jump.
+      const rows = patchRowsOf(file.patch).filter((row) => row.kind !== 'meta');
+      return rows[0]?.kind === 'hunk' ? rows.slice(1) : rows;
     }
     const whole = wholeFiles.get(file.path);
     if (whole === undefined) {
@@ -250,7 +418,7 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     const reply = (await deps.invoke('reviewFile', { id: ticketId, path: file.path })) as TicketFileReply;
     if (reply.ok) {
       deps.api.documents.openScratch(file.path, reply.text);
-      setNote('Opened a copy of the file from the ticket branch. Register its folder as a vault to edit it in place.', false);
+      setNote(i18n.t('review.copy_opened'), false);
     } else {
       setNote(reply.error, true);
     }
@@ -259,7 +427,7 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
   const showHistory = async (file: ReviewFile): Promise<void> => {
     const target = vaultFileOf(await deps.api.vault.listVaults(), worktreeOf(), file.path);
     if (target === null) {
-      setNote('Git history needs the file in a registered vault that is a Git repository.', true);
+      setNote(i18n.t('review.git_needs_vault'), true);
       return;
     }
     await deps.api.documents.open(target.path, undefined, { vaultId: target.vaultId });
@@ -292,18 +460,26 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     }
     setMarks({ ...marks, comments: next });
     composer = null;
-    paintAll();
+    paintList();
+    paintPane();
+  };
+
+  const whereOf = (comment: { line: number; endLine: number | null }): string =>
+    comment.endLine === null ? i18n.t('review.comment_line', { line: comment.line }) : i18n.t('review.comment_lines', { line: comment.line, end: comment.endLine });
+
+  const commentHead = (comment: { line: number; endLine: number | null }): HTMLElement => {
+    const row = el('div', 'tickets-review-comment-head');
+    row.append(el('b', undefined, i18n.t('review.comment_you')), el('span', 'tickets-review-comment-where', whereOf(comment)));
+    return row;
   };
 
   const composerNode = (open: Composer): HTMLElement => {
     const box = el('div', 'tickets-review-composer');
-    box.append(
-      el('div', 'tickets-review-comment-head', `${commentLabelOf(open)} · goes with Send back`),
-    );
+    box.append(commentHead(open));
     const input = el('textarea', 'tickets-review-input');
     input.rows = 2;
     input.value = open.text;
-    input.setAttribute('aria-label', 'Comment');
+    input.setAttribute('aria-label', i18n.t('review.comment_label'));
     input.addEventListener('input', () => {
       composer = composer === null ? null : { ...composer, text: input.value };
     });
@@ -318,8 +494,8 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     });
     const actions = el('div', 'tickets-review-comment-actions');
     actions.append(
-      button('Add comment', 'is-primary', null, 'Keep the comment for the send-back (Ctrl+Enter)', saveComment),
-      button('Cancel', '', null, 'Discard this comment', () => {
+      button(i18n.t('review.comment_add'), 'is-primary', i18n.t('review.comment_add_hint'), saveComment),
+      button(i18n.t('review.comment_cancel'), '', i18n.t('review.comment_cancel_hint'), () => {
         composer = null;
         paintPane();
       }),
@@ -331,90 +507,86 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
 
   const commentNode = (comment: ReviewComment, index: number): HTMLElement => {
     const box = el('div', 'tickets-review-comment');
-    box.append(el('div', 'tickets-review-comment-head', `You on ${commentLabelOf(comment).toLowerCase()} · goes with Send back`));
-    box.append(el('div', 'tickets-review-comment-text', comment.text));
-    const actions = el('div', 'tickets-review-comment-actions');
-    actions.append(
-      button('Edit', '', null, 'Change this comment', () => {
-        composer = { file: comment.file, line: comment.line, endLine: comment.endLine, index, text: comment.text };
-        paintPane();
-      }),
-      button('Remove', '', null, 'Drop this comment', () => {
-        setMarks({ ...marks, comments: withoutComment(marks.comments, index) });
-        paintAll();
-      }),
-    );
-    box.append(actions);
+    const top = commentHead(comment);
+    const remove = el('button', 'tickets-review-comment-delete');
+    remove.type = 'button';
+    remove.title = i18n.t('review.comment_delete');
+    remove.setAttribute('aria-label', remove.title);
+    remove.append(icon('trash-2', 13));
+    remove.addEventListener('click', () => {
+      setMarks({ ...marks, comments: withoutComment(marks.comments, index) });
+      paintList();
+      paintPane();
+    });
+    top.append(el('span', 'tickets-review-spacer'), remove);
+    box.append(top);
+    const text = el('div', 'tickets-review-comment-text', comment.text);
+    text.title = i18n.t('review.comment_edit');
+    text.addEventListener('click', () => {
+      composer = { file: comment.file, line: comment.line, endLine: comment.endLine, index, text: comment.text };
+      paintPane();
+    });
+    box.append(text);
     return box;
   };
 
   const paintPane = (): void => {
     filePane.replaceChildren();
     if (!loaded) {
-      filePane.append(el('p', 'tickets-review-empty', loadError ?? 'Loading the changes…'));
+      filePane.append(el('p', 'tickets-review-empty', loadError ?? i18n.t('review.loading_changes')));
       return;
     }
     const file = files.find((entry) => entry.path === selected) ?? null;
     if (file === null) {
-      filePane.append(
-        el('p', 'tickets-review-empty', loadError ?? 'The ticket branch has no changes yet — nothing to review in the code.'),
-      );
+      filePane.append(el('p', 'tickets-review-empty', loadError ?? i18n.t('review.no_changes')));
       return;
     }
 
     const bar = el('div', 'tickets-review-filebar');
-    bar.append(el('span', 'tickets-review-filepath', file.path));
+    const path = el('span', 'tickets-review-filepath', file.path);
+    path.title = file.path;
+    bar.append(path, el('span', 'tickets-review-spacer'));
     const seg = el('div', 'tickets-review-seg');
-    for (const [id, label] of [['changes', 'Changes'], ['whole', 'Whole file']] as const) {
-      const choice = button(label, mode === id ? 'is-on' : '', null, id === 'changes' ? 'Only the changed lines' : 'The whole file with the changes in place', () => {
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', i18n.t('review.view_label'));
+    for (const id of ['changes', 'whole'] as const) {
+      const choice = el('button', `tickets-review-seg-btn${mode === id ? ' is-on' : ''}`, i18n.t(id === 'changes' ? 'review.changes' : 'review.whole_file'));
+      choice.type = 'button';
+      choice.title = i18n.t(id === 'changes' ? 'review.changes_hint' : 'review.whole_file_hint');
+      choice.setAttribute('aria-pressed', String(mode === id));
+      choice.addEventListener('click', () => {
         mode = id;
         composer = null;
         paintPane();
       });
-      choice.setAttribute('aria-pressed', String(mode === id));
       seg.append(choice);
     }
-    bar.append(seg);
     bar.append(
-      button('Open in editor', '', 'external-link', 'Open this file in an editor tab', () => void openInEditor(file, null)),
-      button('Git history', '', 'history', "This file's Git history", () => void showHistory(file)),
+      seg,
+      button(i18n.t('review.open_in_editor'), '', i18n.t('review.open_in_editor_hint'), () => void openInEditor(file, null)),
+      button(i18n.t('review.git_history'), '', i18n.t('review.git_history_hint'), () => void showHistory(file)),
     );
-    const viewed = viewedSet();
-    const label = el('label', 'tickets-review-viewed');
-    const box = el('input');
-    box.type = 'checkbox';
-    box.checked = viewed.has(file.key);
-    box.addEventListener('change', () => {
-      setMarks({
-        ...marks,
-        viewed: box.checked ? [...new Set([...marks.viewed, file.key])] : marks.viewed.filter((key) => key !== file.key),
-      });
-      paintFilesBar();
-      paintFooter();
-      label.classList.toggle('is-on', box.checked);
-    });
-    label.classList.toggle('is-on', box.checked);
-    label.append(box, document.createTextNode('Viewed'));
-    bar.append(label);
     filePane.append(bar);
 
+    const scroll = el('div', 'tickets-review-diff');
+    filePane.append(scroll);
     if (file.binary) {
-      filePane.append(el('p', 'tickets-review-empty', 'A binary file — there are no lines to show.'));
+      scroll.append(el('p', 'tickets-review-empty', i18n.t('review.binary')));
       return;
     }
     const rows = rowsOf(file);
     if (rows === 'loading') {
-      filePane.append(el('p', 'tickets-review-empty', 'Loading the file…'));
+      scroll.append(el('p', 'tickets-review-empty', i18n.t('review.loading_file')));
       return;
     }
     if (typeof rows === 'string') {
-      filePane.append(el('p', 'tickets-review-empty is-error', rows));
+      scroll.append(el('p', 'tickets-review-empty is-error', rows));
       return;
     }
     if (mode === 'whole') {
       const reply = wholeFiles.get(file.path);
       if (reply !== undefined && reply !== 'loading' && reply.ok && reply.truncated) {
-        filePane.append(el('p', 'tickets-review-trunc', 'The file is long; only its beginning is shown.'));
+        scroll.append(el('p', 'tickets-review-empty', i18n.t('review.file_long')));
       }
     }
 
@@ -434,8 +606,8 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
         const add = el('button', 'tickets-review-add');
         add.type = 'button';
         add.textContent = String(row.newNo);
-        add.title = 'Comment on this line (Shift-click extends a range)';
-        add.setAttribute('aria-label', `Comment on line ${row.newNo}`);
+        add.title = i18n.t('review.comment_line_hint');
+        add.setAttribute('aria-label', i18n.t('review.comment_on_line', { n: row.newNo }));
         const at = row.newNo;
         add.addEventListener('click', (event) => {
           const span = event.shiftKey && anchor !== null && anchor.file === file.path ? rangeOf(anchor.line, at) : { line: at, endLine: null };
@@ -467,35 +639,35 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
         }
       }
     }
-    filePane.append(table);
+    scroll.append(table);
 
     const stray = fileComments.filter(({ index }) => !placed.has(index) && composer?.index !== index);
     if (stray.length > 0) {
       const box = el('div', 'tickets-review-stray');
-      box.append(el('div', 'tickets-review-kicker', 'Comments on lines outside this view'));
+      box.append(el('div', 'tickets-review-kicker', i18n.t('review.comments_outside')));
       for (const { comment, index } of stray) {
         box.append(commentNode(comment, index));
       }
-      filePane.append(box);
+      scroll.append(box);
     }
   };
 
-  // --- footer -------------------------------------------------------------------
+  // --- sending back -----------------------------------------------------------------
 
   const setNote = (text: string, error: boolean): void => {
     note = { text, error };
-    paintFooter();
+    paintList();
   };
 
   /** Send back with the line comments; the one Accept lives on the decision card (req-97). */
   const sendBackWithComments = async (): Promise<void> => {
-    const current = card();
-    if (current === null || busy || marks.comments.length === 0) {
+    const ticket = card();
+    if (ticket === null || busy || marks.comments.length === 0) {
       return;
     }
     busy = true;
     note = null;
-    paintFooter();
+    paintList();
     const result = await deps.mutate(`Sending ${ticketId} back`, () =>
       deps.invoke('sendBack', { id: ticketId, note: '', comments: marks.comments }),
     );
@@ -503,63 +675,47 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     if (result.ok) {
       setMarks(EMPTY_MARKS);
       composer = null;
-      note = { text: 'Sent back — the comments are in the ticket’s Handover.', error: false };
+      note = { text: i18n.t('review.sent_back'), error: false };
       paintAll();
     } else {
-      setNote(result.error ?? 'The change was refused.', true);
+      setNote(result.error ?? i18n.t('review.refused'), true);
     }
   };
 
-  const paintFooter = (): void => {
-    footer.replaceChildren();
-    const current = card();
-    const snapshot = deps.snapshot();
-    const left = el('div', 'tickets-review-checks', checksLineOf(proof));
-    footer.append(left);
-    if (note !== null) {
-      footer.append(el('div', `tickets-review-note${note.error ? ' is-error' : ''}`, note.text));
-    }
-    footer.append(el('span', 'tickets-review-spacer'));
-    if (current === null || snapshot === null) {
-      return;
-    }
-    const bar = actionBarOf(deps.rowOf(current), snapshot);
-    if (!bar.decide) {
-      footer.append(el('span', 'tickets-review-muted', 'Not waiting for your decision'));
-      return;
-    }
-    const link = el('a', 'tickets-review-decision-link', deps.api.i18n.t('decision.waiting_go_to_card'));
-    link.href = '#';
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      goToDecisionCard(ticketId);
-    });
-    footer.append(link);
-    const count = marks.comments.length;
-    if (count > 0) {
-      const back = button(sendBackLabelOf(count), '', 'corner-down-left', 'Send the ticket back with your comments as feedback', () => void sendBackWithComments());
-      back.disabled = busy;
-      footer.append(back);
+  const onSendBack = (event: Event): void => {
+    const detail = (event as CustomEvent<ReviewSendBackDetail>).detail;
+    if (detail.id === ticketId) {
+      detail.handled = true;
+      void sendBackWithComments();
     }
   };
+  document.addEventListener(REVIEW_SEND_BACK, onSendBack);
 
   const paintAll = (): void => {
     paintHead();
     paintProof();
-    paintFilesBar();
+    paintList();
     paintPane();
-    paintFooter();
   };
 
   // --- load ---------------------------------------------------------------------
 
+  /** The ticket's text: a store ticket's document lies in the checkout, its card's path names no file (D-23). */
+  const readTicket = async (current: TicketCard): Promise<string> => {
+    const located = (await deps.invoke('ticketDocument', { id: ticketId })) as { ok?: boolean; document?: { vaultId: string; path: string } | null } | null;
+    if (located?.ok === true && located.document != null) {
+      return (await deps.api.vault.readFile(located.document.path, { vaultId: located.document.vaultId })).content;
+    }
+    const vaultId = deps.snapshot()?.vaultId ?? null;
+    return vaultId === null ? '' : (await deps.api.vault.readFile(current.path, { vaultId })).content;
+  };
+
   const load = async (): Promise<void> => {
     const current = card();
-    const vaultId = deps.snapshot()?.vaultId ?? null;
     try {
-      if (current !== null && vaultId !== null) {
-        const text = (await deps.api.vault.readFile(current.path, { vaultId })).content;
-        proof = proofOfText(text);
+      if (current !== null) {
+        ticketText = await readTicket(current);
+        proof = proofOfText(i18n, ticketText);
       }
       const diff = (await deps.invoke('reviewDiff', { id: ticketId })) as TicketDiff;
       files = filesOf(diff);
@@ -575,6 +731,7 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     loaded = true;
     if (!disposed) {
       paintAll();
+      announceReviewComments(ticketId, marks.comments.length);
     }
   };
 
@@ -583,12 +740,12 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
   const off = deps.subscribe(() => {
     if (!disposed) {
       paintHead();
-      paintFooter();
     }
   });
   return () => {
     disposed = true;
     off();
+    document.removeEventListener(REVIEW_SEND_BACK, onSendBack);
     root.remove();
   };
 }

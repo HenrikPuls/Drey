@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BoardSnapshot } from '../../shared/tickets';
-import { agoWords, isPlanStatus, planHeadingEnd, shapeMarksOf, shapeTargetOf, type PlanStatusLike } from './shape';
+import { agoWords, isPlanStatus, markGroupsOf, planHeadingEnd, shapeMarksOf, shapeTargetOf, type PlanStatusLike } from './shape';
 
 const NOW = new Date('2026-11-04T12:00:00Z');
 
@@ -77,7 +77,7 @@ describe('shapeMarksOf', () => {
   });
 
   it("marks Paul's last edit with its age", () => {
-    expect(shapeMarksOf(status({}), NOW)).toEqual({ paul: 'Paul edited this · 2 min ago', you: null, youDetail: null });
+    expect(shapeMarksOf(status({}), NOW)).toMatchObject({ paul: 'Paul edited this · 2 min ago', you: null, youDetail: null });
   });
 
   it('marks the owner’s edits that ride along with the next message', () => {
@@ -89,6 +89,7 @@ describe('shapeMarksOf', () => {
       paul: null,
       you: 'You edited this · rides along with your next message',
       youDetail: '1 edit · +1 −0',
+      lines: [{ no: 1, text: 'Goal!', by: 'you' }],
     });
   });
 
@@ -124,5 +125,40 @@ describe('planHeadingEnd', () => {
   it('handles CRLF files', () => {
     const text = '## Description\r\nx\r\n## Plan\r\nGoal\r\n';
     expect(planHeadingEnd(text)).toBe(text.indexOf('## Plan') + '## Plan'.length);
+  });
+});
+
+describe('markGroupsOf', () => {
+  const text = '## Plan\n\n### Decisions\n\n- one\n- two\n- three\n\n## Log\n';
+  const at = (needle: string): number => text.indexOf(needle);
+
+  it('places a run of lines by one hand, the note under its last line', () => {
+    const groups = markGroupsOf(text, {
+      lines: [
+        { no: 4, text: '- one', by: 'model' },
+        { no: 5, text: '- two', by: 'model' },
+        { no: 6, text: '- three', by: 'you' },
+      ],
+    });
+    expect(groups).toEqual([
+      { by: 'model', lines: [at('- one'), at('- two')], end: at('- two') + 5 },
+      { by: 'you', lines: [at('- three')], end: at('- three') + 7 },
+    ]);
+  });
+
+  it('takes blank lines into a block, one note for all of it', () => {
+    const plan = '## Plan\n\n### Goal\n\nA.\n';
+    const groups = markGroupsOf(plan, { lines: [{ no: 2, text: '### Goal', by: 'model' }, { no: 4, text: 'A.', by: 'model' }] });
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.end).toBe(plan.indexOf('A.') + 2);
+  });
+
+  it('finds a line that moved by its text and drops one that is gone', () => {
+    expect(markGroupsOf(text, { lines: [{ no: 1, text: '- two', by: 'you' }] })[0]?.lines).toEqual([at('- two')]);
+    expect(markGroupsOf(text, { lines: [{ no: 4, text: '- gone', by: 'you' }] })).toEqual([]);
+  });
+
+  it('has nothing to place without a Plan', () => {
+    expect(markGroupsOf('## Log\n', { lines: [{ no: 1, text: 'x', by: 'you' }] })).toEqual([]);
   });
 });

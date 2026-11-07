@@ -5,7 +5,7 @@ import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
-import { parseFlowDraft, parseFlowEdit, parseFlowSave, type Parsed } from '../core/commands';
+import { parseFlowDraft, parseFlowEdit, parseFlowSave, type Parsed, parsePlanPartsEdit } from '../core/commands';
 import { TicketsGit } from '../core/tickets-git';
 import type { ChatBridge } from '../contracts/chat';
 import { NOTES_VAULT_KEY } from '../contracts/notes';
@@ -309,6 +309,8 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     const cmd = parse(payload);
     return cmd.ok ? run(cmd.value) : Promise.resolve(cmd);
   };
+  // The Parts block in the ticket (E13-10): the list edit the phone makes, same parser.
+  table.set('planPartsEdit', flowWrite(parsePlanPartsEdit, (cmd) => remotePort.planPartsEdit(cmd, remoteActorOf('Drey'))));
   table.set('flowEdit', flowWrite(parseFlowEdit, (cmd) => remotePort.flowEdit(cmd)));
   table.set('flowDraft', flowWrite(parseFlowDraft, (cmd) => remotePort.flowDraft(cmd)));
   table.set('flowSave', flowWrite(parseFlowSave, (cmd) => remotePort.flowSave(cmd, remoteActorOf('Drey'))));

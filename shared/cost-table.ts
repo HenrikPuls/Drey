@@ -26,6 +26,10 @@ export interface CostTableRow {
   readonly tokens: string;
   /** `9 min`; '' when unknown. */
   readonly time: string;
+  /** The desktop's words apart (board 7j): the persona beside the phase, the model alone, the minutes; ''/null when unknown. */
+  readonly persona: string;
+  readonly modelName: string;
+  readonly minutes: number | null;
   /** `$0.30`; `—` for a run that recorded no cost; '' for a phase without a run. */
   readonly cost: string;
   /** True for a phase of the chain that has no run yet: the row reads `no run yet`. */
@@ -115,6 +119,9 @@ export function costTableOf(
     return {
       phase: entry.phase === null ? '—' : phaseTitle(entry.phase),
       model,
+      persona: entry.persona === null ? '' : titleCase(entry.persona),
+      modelName: entry.model ?? '',
+      minutes: mins,
       tokens: entry.tokens,
       time,
       cost: knownCost(entry.cost) ? i18n.formatCurrency(entry.cost) : '—',
@@ -127,7 +134,7 @@ export function costTableOf(
     if (phase.checkpoint === true || phase.skipped === true || ran.has(phase.id.trim().toLowerCase())) {
       continue;
     }
-    rows.push({ phase: phase.title, model: '', tokens: '', time: '', cost: '', pending: true, bad: false, meta: '' });
+    rows.push({ phase: phase.title, model: '', persona: '', modelName: '', minutes: null, tokens: '', time: '', cost: '', pending: true, bad: false, meta: '' });
   }
   return {
     rows,

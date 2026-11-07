@@ -24,12 +24,7 @@ export function openReviewTab(api: DreyPluginApi, card: TicketCard): void {
   api.documents.addDoc(REVIEW_KIND, reviewKeyOf(card.id), reviewTitleOf(card.id));
 }
 
-export function registerReviewKind(
-  api: DreyPluginApi,
-  deps: ReviewDeps,
-  /** The Ticket | Thread | Review control on top of the tab (E13-20). */
-  faces?: (ticketId: string) => HTMLElement,
-): Unsubscribe {
+export function registerReviewKind(api: DreyPluginApi, deps: ReviewDeps): Unsubscribe {
   return api.ui.registerDocKind({
     kind: REVIEW_KIND,
     icon: 'git-merge',
@@ -49,11 +44,7 @@ export function registerReviewKind(
         host.textContent = 'This tab shows no ticket.';
         return () => undefined;
       }
-      const body = document.createElement('div');
-      body.className = 'tickets-review-body';
-      host.classList.add('tickets-faces-host');
-      host.replaceChildren(...(faces === undefined ? [] : [faces(ticketId)]), body);
-      return mountReview(deps, body, ticketId);
+      return mountReview(deps, host, ticketId);
     },
     statusText: (path) => {
       const ticketId = ticketIdOfKey(path);

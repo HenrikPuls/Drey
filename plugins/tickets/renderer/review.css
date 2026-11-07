@@ -1,88 +1,503 @@
 /*
- * The Review tab (E13-7, board 7d): proof above, the branch's files below,
- * decisions in a footer that stays put. Flat, sentence-case sans, theme
- * tokens only (ADR-0057); every class is scoped under `tickets-review`.
+ * The Review tab (E13-7, board 7d): head, proof band, then the file list beside
+ * the diff, the two lines between them draggable (E12-19). No footer: the decision
+ * is the Mission Control card's. Theme tokens only (ADR-0057); every class is
+ * scoped under `tickets-review`.
  */
 .tickets-review {
-  --review-add: color-mix(in srgb, #4caf7a 16%, transparent);
-  --review-del: color-mix(in srgb, #e5534b 16%, transparent);
-  --review-pick: color-mix(in srgb, var(--accent) 18%, transparent);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  color: var(--text-2);
+  background: var(--bg-editor);
+  color: var(--text-primary);
   font-family: var(--font-sans, inherit);
-  font-size: 12.5px;
-}
-
-.tickets-review-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 14px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.tickets-review-scroll > * {
-  flex: none;
-}
-
-.tickets-review-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.tickets-review-id {
-  color: var(--text-4);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.tickets-review-title {
-  color: var(--text-heading);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .tickets-review-spacer {
-  flex: 1;
+  flex: 1 1 0;
 }
 
-.tickets-review-empty,
-.tickets-review-trunc,
-.tickets-review-muted {
+.tickets-review-empty {
   margin: 0;
+  padding: 12px;
   color: var(--text-4);
 }
 
 .tickets-review-empty.is-error,
 .tickets-review-note.is-error {
-  color: #e5534b;
+  color: var(--status-deleted);
 }
 
-.tickets-review-btn {
+/* the head */
+.tickets-review-head {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  gap: 2px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tickets-review-head-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tickets-review-id {
+  flex: none;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.tickets-review-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-doc-status.is-review .tickets-doc-status-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.tickets-review-sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the proof band */
+.tickets-review-proof {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.tickets-review-video {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: content-box;
+  width: 220px;
+  height: 124px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-editor);
+  overflow: hidden;
+}
+
+.tickets-review-player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tickets-review-play {
+  position: relative;
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tickets-review-video-time {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+.tickets-review-proof-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tickets-review-subhead {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px;
+}
+
+.tickets-review-subhead.has-line {
+  box-sizing: content-box;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tickets-review-subhead-title {
+  font-weight: 600;
+}
+
+.tickets-review-subhead-note {
+  margin-left: 4px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-review-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 6px 12px;
+  border: 1px solid var(--accent-mint);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--accent-mint) 12%, transparent);
+}
+
+.tickets-review-verdict.is-red {
+  border-color: var(--status-deleted);
+  background: color-mix(in srgb, var(--status-deleted) 12%, transparent);
+}
+
+.tickets-review-fact {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
+  white-space: nowrap;
+}
+
+.tickets-review-fact-mark {
+  display: inline-flex;
+  color: var(--status-added);
+}
+
+.tickets-review-fact-mark.is-bad {
+  color: var(--status-deleted);
+}
+
+.tickets-review-count {
+  color: var(--status-added);
+}
+
+.is-red .tickets-review-count {
+  color: var(--status-deleted);
+}
+
+.tickets-review-cost {
+  margin-left: auto;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.tickets-review-cost-amount {
+  font-family: var(--font-mono);
+}
+
+.tickets-review-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tickets-review-chapter {
+  padding: 0 6px;
+  border: 1px solid var(--text-4);
+  border-radius: var(--radius-chip);
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-4);
   font: inherit;
   font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tickets-review-chapter.is-first {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.tickets-review-thumbs {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.tickets-review-thumb {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  flex: none;
+  box-sizing: content-box;
+  width: 120px;
+  height: 64px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-editor);
+  color: var(--text-4);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.tickets-review-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tickets-review-thumb-caption {
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the draggable lines (E12-19) */
+.tickets-review-split {
+  flex: none;
+  background: var(--border);
+}
+
+.tickets-review-split.is-proof {
+  height: 1px;
+  cursor: row-resize;
+}
+
+.tickets-review-split.is-list {
+  width: 1px;
+  cursor: col-resize;
+}
+
+.tickets-review-split::before {
+  content: '';
+  display: block;
+  position: relative;
+}
+
+.tickets-review-split.is-proof::before {
+  top: -3px;
+  height: 7px;
+}
+
+.tickets-review-split.is-list::before {
+  left: -3px;
+  width: 7px;
+  height: 100%;
+}
+
+.tickets-review-split:hover,
+.tickets-review-split:focus-visible {
+  outline: none;
+  background: var(--accent);
+}
+
+/* the file list */
+.tickets-review-work {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.tickets-review-list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tickets-review-list-rows {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tickets-review-sendback {
+  display: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.tickets-review-subhead:hover .tickets-review-sendback,
+.tickets-review-sendback:focus-visible {
+  display: inline-flex;
+}
+
+.tickets-review-subhead:hover .tickets-review-summary {
+  display: none;
+}
+
+.tickets-review-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.tickets-review-file:hover {
+  background: var(--hover-bg);
+}
+
+.tickets-review-file.is-selected {
+  background: var(--active-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tickets-review-viewed {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  flex: none;
+  box-sizing: content-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tickets-review-viewed:checked {
+  border-color: var(--status-added);
+  background: var(--status-added);
+}
+
+.tickets-review-viewed:checked::before {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border-bottom: 2.5px solid var(--accent-contrast);
+  border-left: 2.5px solid var(--accent-contrast);
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.tickets-review-file-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.tickets-review-file-path {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-review-file-stat {
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+.tickets-review-note {
+  flex: none;
+  padding: 6px 12px;
+  color: var(--text-4);
+}
+
+/* the diff */
+.tickets-review-pane {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tickets-review-filebar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  box-sizing: content-box;
+}
+
+.tickets-review-filepath {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-review-seg {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--bg-editor);
+}
+
+.tickets-review-seg-btn {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tickets-review-seg-btn.is-on {
+  background: var(--active-bg);
+  color: var(--accent);
+}
+
+.tickets-review-btn {
+  flex: none;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .tickets-review-btn:hover:not(:disabled),
 .tickets-review-btn:focus-visible {
-  background: var(--hover-bg);
-  color: var(--text-primary);
+  background: var(--active-bg);
 }
 
 .tickets-review-btn:disabled {
@@ -93,185 +508,66 @@
 .tickets-review-btn.is-primary {
   border-color: transparent;
   background: var(--accent);
-  color: var(--on-accent);
+  color: var(--accent-contrast);
 }
 
-.tickets-review-btn.is-primary:hover:not(:disabled),
-.tickets-review-btn.is-primary:focus-visible {
-  background: var(--accent-hover);
-  color: var(--on-accent);
+.tickets-review-diff {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 6px 0;
+  overflow: auto;
+  container-type: inline-size;
+  /* The bars of a long line show under the pointer only: the board's pane has none. */
+  scrollbar-color: transparent transparent;
 }
 
-.tickets-review-btn.is-on {
-  background: var(--accent-surface);
-  color: var(--accent-text);
-}
-
-/* files */
-.tickets-review-summary {
-  margin-bottom: 6px;
-  color: var(--text-3);
-  font-weight: 600;
-}
-
-.tickets-review-trunc {
-  font-weight: 400;
-}
-
-.tickets-review-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tickets-review-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 100%;
-  padding: 4px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: var(--bg-input);
-  color: var(--text-2);
-  font: inherit;
-  cursor: pointer;
-}
-
-.tickets-review-chip:hover,
-.tickets-review-chip:focus-visible {
-  background: var(--hover-bg);
-}
-
-.tickets-review-chip.is-selected {
-  border-color: var(--accent-edge);
-  color: var(--text-primary);
-}
-
-.tickets-review-chip.is-viewed .tickets-review-chip-name {
-  color: var(--text-5);
-}
-
-.tickets-review-chip-mark {
-  color: var(--text-4);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.tickets-review-chip.is-viewed .tickets-review-chip-mark {
-  color: #4caf7a;
-}
-
-.tickets-review-chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.tickets-review-chip-stat {
-  color: var(--text-4);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.tickets-review-chip-comments {
-  min-width: 16px;
-  padding: 0 5px;
-  border-radius: var(--radius-chip);
-  background: var(--accent-surface);
-  color: var(--accent-text);
-  text-align: center;
-  font-size: 12px;
-}
-
-/* the file pane */
-.tickets-review-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tickets-review-filebar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tickets-review-filepath {
-  flex: 1;
-  min-width: 160px;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.tickets-review-seg {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.tickets-review-viewed {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-3);
-  cursor: pointer;
-}
-
-.tickets-review-viewed.is-on {
-  color: var(--text-primary);
+.tickets-review-diff:hover {
+  scrollbar-color: auto;
 }
 
 .tickets-review-table {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: var(--bg-editor);
+  min-width: max-content;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.55;
-  overflow-x: auto;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .tickets-review-row {
   display: grid;
-  grid-template-columns: 44px 52px 16px minmax(0, 1fr);
+  grid-template-columns: 48px 48px 16px minmax(0, 1fr);
   min-width: max-content;
-  width: 100%;
 }
 
 .tickets-review-row.is-add {
-  background: var(--review-add);
+  background: color-mix(in srgb, var(--status-added) 16%, transparent);
 }
 
 .tickets-review-row.is-del {
-  background: var(--review-del);
+  background: color-mix(in srgb, var(--status-deleted) 16%, transparent);
 }
 
 .tickets-review-row.is-hunk {
-  background: var(--bg-input);
   color: var(--text-4);
 }
 
 .tickets-review-row.is-picked {
-  background: var(--review-pick);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .tickets-review-no {
-  padding: 0 8px 0 0;
+  box-sizing: border-box;
+  padding-right: 8px;
+  color: var(--text-4);
   text-align: right;
-  color: var(--text-faint);
   user-select: none;
 }
 
 .tickets-review-add {
   width: 100%;
-  padding: 0 8px 0 0;
+  padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-6);
+  color: var(--text-4);
   font: inherit;
   text-align: right;
   cursor: pointer;
@@ -279,45 +575,71 @@
 
 .tickets-review-add:hover,
 .tickets-review-add:focus-visible {
-  background: var(--accent);
-  color: var(--on-accent);
+  color: var(--accent);
 }
 
 .tickets-review-sign {
   color: var(--text-4);
-  text-align: center;
 }
 
 .tickets-review-code {
   padding-right: 12px;
-  white-space: pre;
   color: var(--text-primary);
+  white-space: pre;
 }
 
 /* comments */
 .tickets-review-comment,
 .tickets-review-composer {
-  margin: 4px 12px 6px 112px;
-  padding: 8px 10px;
-  border: 1px solid var(--accent-edge);
+  /* It keeps to the pane however long the code beside it runs. */
+  position: sticky;
+  left: 96px;
+  box-sizing: border-box;
+  width: calc(100cqw - 112px);
+  margin: 6px 16px 6px 96px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
   border-radius: var(--radius-control);
-  background: var(--bg-input);
+  background: var(--active-bg);
   font-family: var(--font-sans, inherit);
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 19px;
   min-width: 0;
 }
 
-.tickets-review-comment-head,
+.tickets-review-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.tickets-review-comment-where,
 .tickets-review-kicker {
-  margin-bottom: 4px;
-  color: var(--accent-fg);
-  font-size: 12px;
+  color: var(--text-4);
+}
+
+.tickets-review-comment-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+.tickets-review-comment-delete:hover {
+  color: var(--text-primary);
 }
 
 .tickets-review-comment-text {
-  color: var(--text-primary);
   white-space: pre-wrap;
+  cursor: text;
 }
 
 .tickets-review-comment-actions {
@@ -330,7 +652,7 @@
   box-sizing: border-box;
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--field-border);
   border-radius: var(--radius-control);
   background: var(--bg-editor);
   color: var(--text-primary);
@@ -341,26 +663,11 @@
 .tickets-review-stray {
   display: flex;
   flex-direction: column;
+  padding: 8px 12px;
 }
 
 .tickets-review-stray .tickets-review-comment {
+  position: static;
+  width: auto;
   margin-left: 0;
-}
-
-/* footer */
-.tickets-review-footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 18px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-bar);
-}
-
-.tickets-review-checks {
-  color: var(--text-3);
-}
-
-.tickets-review-note {
-  color: var(--text-3);
 }

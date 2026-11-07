@@ -1,214 +1,246 @@
-/* The ticket as a document (E13-6): the header strip, the proof widget, the
-   cost table and the action bar. Vertical spacing is padding, never margin:
-   CodeMirror measures a block widget without its margin, so a margin would
-   drift the gutter and the click positions below it (see ticket-header.css). */
+/* The ticket as a document (E13-6, boards 9a, 7b, 7c, 7j): the page's type and
+   width per state, the proof, the cost by phase and the plan marks. The card is
+   in ticket-header.css, the Parts block at the end of this file. Vertical spacing
+   is padding, never margin: CodeMirror measures a block widget and a line without
+   their margin, so a margin would drift the gutter and the click positions below
+   them (see ticket-header.css). */
 
-/* --- the strip, under the chip row ------------------------------------- */
+/* --- the page, per state (owner ruling, wave 4.3): 9a for Inbox and Prioritized,
+   row 7 for Shaping and later. The user's editor zoom still scales the type. --- */
 
-.tickets-doc-strip {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 0 4px;
-  font-family: var(--font-sans);
-  font-size: 0.8rem;
-  color: var(--text-3);
+.cm-editor.tickets-doc-editor .cm-gutters {
+  /* The fold gutter takes no room: the column centres in the whole pane. */
+  margin-right: -18px;
 }
 
-.tickets-doc-facts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+.cm-editor.tickets-doc-editor .cm-scroller {
+  /* The boards centre the column in the whole pane, scrollbar or not. */
+  scrollbar-gutter: stable both-edges;
 }
 
-.tickets-doc-status {
-  padding: 0 7px;
-  border-radius: var(--radius-chip);
-  border: 1px solid var(--border-strong);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
+.cm-editor.tickets-doc-editor .cm-content {
+  box-sizing: border-box;
+  margin: 0 auto;
 }
 
-.tickets-doc-status.is-needs {
-  border-color: var(--accent-edge);
-  background: var(--accent-surface);
-  color: var(--accent-text);
+.cm-editor.tickets-doc-editor .cm-line {
+  padding-left: 0;
+  padding-right: 0;
 }
 
-.tickets-doc-status.is-running {
-  border-color: color-mix(in srgb, var(--status-added) 45%, transparent);
-  color: var(--status-added);
+.cm-editor.tickets-doc-editor.is-flow .cm-scroller {
+  font-size: calc(15px * var(--drey-editor-scale, 1));
+  line-height: calc(24px * var(--drey-editor-scale, 1));
 }
 
-.tickets-doc-status.is-blocked {
-  border-color: color-mix(in srgb, var(--status-modified) 45%, transparent);
-  color: var(--status-modified);
+.cm-editor.tickets-doc-editor.is-flow .cm-content {
+  max-width: 720px;
+  padding: 20px 0 24px;
 }
 
-.tickets-doc-who {
-  color: var(--text-2);
-  font-weight: 600;
+.cm-editor.tickets-doc-editor.is-early .cm-scroller {
+  font-size: calc(16px * var(--drey-editor-scale, 1));
+  line-height: calc(26px * var(--drey-editor-scale, 1));
 }
 
-.tickets-doc-line,
-.tickets-doc-sep,
-.tickets-doc-estimate {
-  color: var(--text-4);
+.cm-editor.tickets-doc-editor.is-early .cm-content {
+  max-width: 660px;
+  padding: 24px 32px 40px;
 }
 
-.tickets-doc-cost-fact {
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.tickets-doc-estimate {
-  cursor: help;
-}
-
-.tickets-doc-chain {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tickets-doc-step {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  color: var(--text-5);
-}
-
-.tickets-doc-step.is-past {
-  color: var(--text-3);
-}
-
-.tickets-doc-step.is-current {
+.cm-editor.tickets-doc-editor .tickets-doc-h1,
+.cm-editor.tickets-doc-editor .tickets-doc-h1 span,
+.cm-editor.tickets-doc-editor .tickets-doc-h2,
+.cm-editor.tickets-doc-editor .tickets-doc-h2 span {
   color: var(--text-primary);
+  letter-spacing: normal;
+}
+
+.cm-editor.tickets-doc-editor.is-flow .tickets-doc-h1,
+.cm-editor.tickets-doc-editor.is-flow .tickets-doc-h1 span {
+  font-size: calc(26px * var(--drey-editor-scale, 1));
+  line-height: calc(32px * var(--drey-editor-scale, 1));
+  font-weight: 700;
+}
+
+.cm-editor.tickets-doc-editor.is-flow .tickets-doc-h1 {
+  padding-bottom: 0;
+}
+
+.cm-editor.tickets-doc-editor.is-early .tickets-doc-h1,
+.cm-editor.tickets-doc-editor.is-early .tickets-doc-h1 span {
+  font-size: calc(30px * var(--drey-editor-scale, 1));
+  line-height: calc(38px * var(--drey-editor-scale, 1));
+  font-weight: 700;
+}
+
+.cm-editor.tickets-doc-editor.is-early .tickets-doc-h1 {
+  padding-top: 24px;
+}
+
+.cm-editor.tickets-doc-editor.is-flow .tickets-doc-h2,
+.cm-editor.tickets-doc-editor.is-flow .tickets-doc-h2 span {
+  font-size: calc(18px * var(--drey-editor-scale, 1));
+  line-height: calc(24px * var(--drey-editor-scale, 1));
+  font-weight: 700;
+}
+
+.cm-editor.tickets-doc-editor.is-flow .tickets-doc-h2 {
+  padding-top: 18px;
+  padding-bottom: 6px;
+}
+
+.cm-editor.tickets-doc-editor.is-early .tickets-doc-h2,
+.cm-editor.tickets-doc-editor.is-early .tickets-doc-h2 span {
+  font-size: calc(20px * var(--drey-editor-scale, 1));
+  line-height: calc(28px * var(--drey-editor-scale, 1));
   font-weight: 600;
 }
 
-.tickets-doc-step.is-skipped .tickets-doc-step-title {
-  text-decoration: line-through;
+.cm-editor.tickets-doc-editor.is-early .tickets-doc-h2 {
+  padding-top: 24px;
+  padding-bottom: 8px;
 }
 
-.tickets-doc-step-mark {
-  font-size: 0.75rem;
+/* A blank line around a heading is the heading's own spacing; between two
+   paragraphs it is the board's 12 px. It opens again under the caret. */
+.cm-editor.tickets-doc-editor .tickets-doc-collapsed {
+  height: 0;
+  overflow: hidden;
+  line-height: 0;
+  font-size: 0;
 }
 
-.tickets-doc-step.is-past .tickets-doc-step-mark {
-  color: var(--status-added);
+.cm-editor.tickets-doc-editor .tickets-doc-gap {
+  height: 12px;
+  overflow: hidden;
+  line-height: 12px;
+  font-size: 0;
 }
 
-.tickets-doc-step.is-current .tickets-doc-step-mark,
-.tickets-doc-step.is-checkpoint:not(.is-past) .tickets-doc-step-mark {
-  color: var(--accent-fg);
+/* The task checkbox of the boards: 16, radius 4, field border. */
+.cm-editor.tickets-doc-editor .lp-task input {
+  width: 16px;
+  height: 16px;
+  margin: 0 12px 0 -4px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-chip);
+  vertical-align: -3px;
 }
 
-.tickets-doc-step-who {
-  color: var(--text-4);
-  font-weight: 400;
+/* The Log's head (board 9a). */
+.cm-editor.tickets-doc-editor .tickets-doc-log,
+.cm-editor.tickets-doc-editor .tickets-doc-log span {
+  color: var(--text-primary);
+  font-size: calc(20px * var(--drey-editor-scale, 1));
+  line-height: calc(32px * var(--drey-editor-scale, 1));
+  font-weight: 600;
 }
 
-.tickets-doc-flow {
-  align-self: flex-start;
+.cm-editor.tickets-doc-editor .tickets-doc-log {
+  padding-top: 24px;
+}
+
+.cm-editor.tickets-doc-editor .tickets-doc-log .cm-foldPlaceholder {
+  display: none;
+}
+
+.cm-editor.tickets-doc-editor .cm-foldGutter span[title='Unfold line'] {
+  opacity: 0;
+}
+
+.tickets-doc-log-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
   padding: 0;
-  font: inherit;
-  color: var(--accent-text);
-  cursor: pointer;
-  background: none;
   border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  vertical-align: -2px;
+  cursor: pointer;
 }
 
-.tickets-doc-flow:hover {
-  text-decoration: underline;
-}
-
-.tickets-doc-gate {
-  margin: 0;
-  color: var(--accent-text);
+.cm-editor.tickets-doc-editor .tickets-doc-log span.tickets-doc-log-count {
+  margin-left: 8px;
+  color: var(--text-4);
+  font-size: 14px;
+  font-weight: 400;
 }
 
 /* --- the blocks inside the document ------------------------------------ */
 
 .tickets-doc-host {
-  padding: 8px 2px 8px 6px;
   font-family: var(--font-sans);
   cursor: default;
 }
 
-.tickets-doc-block {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: var(--bg-input);
-  padding: 12px 14px;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--text-2);
-}
-
-.tickets-doc-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
 .tickets-doc-kicker {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  padding: 18px 0 6px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 24px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.tickets-doc-kicker-amount {
   color: var(--text-4);
+}
+
+.tickets-doc-proof,
+.tickets-doc-cost {
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--text-primary);
+}
+
+.tickets-doc-verdict-box {
+  padding: 10px 14px;
+  border: 1px solid var(--accent-mint);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--accent-mint) 12%, transparent);
+}
+
+.tickets-doc-verdict-box.is-red {
+  border-color: var(--status-deleted);
+  background: color-mix(in srgb, var(--status-deleted) 12%, transparent);
 }
 
 .tickets-doc-verdict {
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.tickets-doc-verdict.is-green {
+.tickets-doc-verdict-box.is-green .tickets-doc-verdict {
   color: var(--status-added);
 }
 
-.tickets-doc-verdict.is-red {
+.tickets-doc-verdict-box.is-red .tickets-doc-verdict {
   color: var(--status-deleted);
 }
 
-.tickets-doc-total {
-  color: var(--text-heading);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.tickets-doc-stamp {
-  margin: 4px 0 0;
-  color: var(--text-4);
-  font-size: 0.78rem;
-}
-
 .tickets-doc-checks {
-  margin: 8px 0 0;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 0 0;
   list-style: none;
 }
 
 .tickets-doc-check {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 2px 0;
+  gap: 10px;
 }
 
 .tickets-doc-check .tickets-doc-mark {
-  width: 1em;
   flex: none;
-  font-weight: 700;
+  font-family: var(--font-mono);
 }
 
 .tickets-doc-check.is-pass .tickets-doc-mark {
@@ -225,244 +257,332 @@
 }
 
 .tickets-doc-check-meta {
-  margin-left: auto;
   flex: none;
   color: var(--text-4);
-  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tickets-doc-check-meta.is-jump {
+  cursor: pointer;
+}
+
+.tickets-doc-check-meta.is-jump:hover {
+  color: var(--text-primary);
 }
 
 .tickets-doc-shots {
   display: flex;
-  flex-wrap: wrap;
   gap: 10px;
   padding-top: 10px;
 }
 
 .tickets-doc-shot {
-  width: 190px;
-  margin: 0;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: content-box;
+  height: 120px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--active-bg);
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  overflow: hidden;
 }
 
-.tickets-doc-shot-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: var(--bg-editor);
-  overflow: hidden;
+button.tickets-doc-shot {
   cursor: zoom-in;
 }
 
-.tickets-doc-shot img {
-  display: block;
+.tickets-doc-shot img,
+.tickets-doc-player {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 120px;
+  height: 100%;
   object-fit: cover;
 }
 
-.tickets-doc-shot figcaption {
-  padding-top: 3px;
-  color: var(--text-4);
-  font-size: 0.75rem;
-  overflow-wrap: anywhere;
+.tickets-doc-shot-caption {
+  position: relative;
+  pointer-events: none;
 }
 
-.tickets-doc-video {
-  padding-top: 10px;
-}
-
-.tickets-doc-player {
-  display: block;
-  width: 100%;
-  max-width: 560px;
-  border-radius: var(--radius-control);
-  background: #000;
-}
-
-.tickets-doc-chapters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  padding-top: 6px;
-}
-
-.tickets-doc-chapter {
-  padding: 1px 8px;
-  border: 1px solid var(--border-strong);
+.tickets-doc-shot img + .tickets-doc-shot-caption {
+  padding: 0 4px;
   border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 0.76rem;
-  cursor: pointer;
-}
-
-.tickets-doc-chapter:hover,
-.tickets-doc-chapter:focus-visible {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-.tickets-doc-chapter-at {
-  font-family: var(--font-mono);
-  color: var(--accent-fg);
+  background: var(--active-bg);
 }
 
 .tickets-doc-note {
   margin: 0;
-  color: var(--text-4);
-}
-
-.tickets-doc-findings {
   padding-top: 10px;
+  color: var(--text-4);
 }
 
 .tickets-doc-findings ul {
-  margin: 2px 0 0;
+  margin: 0;
   padding-left: 18px;
 }
 
-/* --- the cost table ----------------------------------------------------- */
+/* --- the cost by phase (board 7j) --------------------------------------- */
 
-.tickets-doc-table {
-  width: 100%;
-  margin-top: 8px;
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
+.tickets-doc-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 64px 56px 64px;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--active-bg);
+  font-size: 14px;
+  line-height: 20px;
 }
 
-.tickets-doc-table th,
-.tickets-doc-table td {
-  padding: 3px 10px 3px 0;
-  text-align: left;
-  font-weight: 400;
-}
-
-.tickets-doc-table th {
+.tickets-doc-table-row.is-head {
+  padding: 4px 0;
+  border-bottom-color: var(--border);
   color: var(--text-4);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--border-strong);
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.tickets-doc-table .is-num {
-  text-align: right;
-  padding-right: 0;
-  padding-left: 10px;
-}
-
-.tickets-doc-table .is-muted {
-  color: var(--text-4);
-}
-
-.tickets-doc-table tr.is-bad td {
-  color: var(--status-deleted);
-}
-
-.tickets-doc-table tfoot td {
-  border-top: 1px solid var(--border-strong);
-  color: var(--text-heading);
+.tickets-doc-table-row.is-total {
+  padding: 6px 0;
+  border-bottom: 0;
   font-weight: 600;
 }
 
-/* --- the action bar ----------------------------------------------------- */
+.tickets-doc-table-row .is-right {
+  text-align: right;
+}
 
-.tickets-doc-tail {
+.tickets-doc-table-row .is-muted,
+.tickets-doc-table-row.is-pending {
+  color: var(--text-4);
+}
+
+.tickets-doc-table-row .is-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tickets-doc-table-row .is-mono.is-cost {
+  font-size: 13px;
+}
+
+.tickets-doc-table-row .is-span {
+  grid-column: span 4;
+}
+
+.tickets-doc-table-row.is-bad span {
+  color: var(--status-deleted);
+}
+
+/* --- the plan's marks (E13-9, board 7b) --------------------------------- */
+
+.cm-editor.tickets-doc-editor .tickets-doc-marked {
+  margin-left: -15px;
+  padding-left: 12px;
+  box-shadow: inset 3px 0 0 var(--accent-pink);
+}
+
+.cm-editor.tickets-doc-editor .tickets-doc-marked.is-you {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tickets-doc-shape-marks {
+  margin-left: -15px;
+  padding-left: 12px;
+  box-shadow: inset 3px 0 0 var(--accent-pink);
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.tickets-doc-shape-marks.is-you {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tickets-doc-shape-mark + .tickets-doc-shape-mark {
+  margin-left: 14px;
+}
+
+/* --- the Parts block (E13-10, board 7c) ---------------------------------- */
+
+.tickets-parts-host {
+  padding-top: 12px;
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--text-primary);
+}
+
+.tickets-parts {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 8px 2px 18px 6px;
-  font-family: var(--font-sans);
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-dock);
 }
 
-.tickets-doc-tail .tickets-doc-cost {
-  margin: 0;
-}
-
-.tickets-doc-actions {
+.tickets-parts-head,
+.tickets-parts-foot {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
-.tickets-doc-spacer {
-  flex: 1;
+.tickets-parts-title {
+  font-size: 15px;
 }
 
-.tickets-doc-btn {
-  display: inline-flex;
+.tickets-parts-count {
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.tickets-parts-muted,
+.tickets-parts-foot {
+  color: var(--text-4);
+}
+
+.tickets-part {
+  box-sizing: content-box;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border: 1px solid var(--border-strong);
+  gap: 10px;
+  min-height: 56px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--active-bg);
+}
+
+.tickets-part-grip,
+.tickets-part-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 0.82rem;
+  color: var(--text-4);
   cursor: pointer;
 }
 
-.tickets-doc-btn:hover,
-.tickets-doc-btn:focus-visible {
-  background: var(--hover-bg);
+.tickets-part-grip {
+  cursor: grab;
+}
+
+.tickets-part-more {
+  width: 28px;
+  height: 28px;
+}
+
+.tickets-part-grip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tickets-part-grip:hover:not(:disabled),
+.tickets-part-more:hover {
   color: var(--text-primary);
 }
 
-.tickets-doc-btn.is-primary {
-  border-color: transparent;
-  background: var(--accent);
-  color: var(--on-accent);
+.tickets-part-label {
+  flex: none;
+  width: 22px;
+  color: var(--text-4);
 }
 
-.tickets-doc-btn.is-primary:hover,
-.tickets-doc-btn.is-primary:focus-visible {
-  background: var(--accent-hover);
-  color: var(--on-accent);
+.tickets-part-body {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-/* --- shape marks (E13-9) ------------------------------------------------- */
+.tickets-part-title {
+  font-weight: 600;
+}
 
-.tickets-doc-shape-marks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  padding: 0 2px 6px 6px;
-  font-family: var(--font-sans);
+.tickets-part-line {
+  color: var(--text-4);
   font-size: 12px;
 }
 
-.tickets-doc-shape-mark {
+.tickets-part-state {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  width: 84px;
   color: var(--text-4);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
-.tickets-doc-shape-mark.is-you {
-  color: var(--accent-text);
-}
-
-/* --- E12-12: the strip carries the kind chip and the step; the question is read in full --- */
-
-.tickets-doc-kind {
-  padding: 0 6px;
+.tickets-part-persona {
+  display: flex;
+  align-items: center;
+  flex: none;
+  box-sizing: border-box;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  color: var(--text-3);
-  font-size: 0.75rem;
+  border-radius: var(--radius-dialog);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
 }
 
-.tickets-doc-step-now {
+.tickets-part-persona:disabled {
+  cursor: default;
+}
+
+.tickets-part-persona-name {
+  margin-left: 2px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tickets-part-estimate {
+  flex: none;
+  width: 150px;
+  text-align: right;
+}
+
+.tickets-part-basis {
   color: var(--text-4);
 }
 
-.tickets-doc-gate {
-  /* The waiting run's question is not clipped: it wraps in full beside the document. */
-  white-space: normal;
-  overflow-wrap: anywhere;
+.tickets-parts-menu {
+  z-index: 1000;
 }
 
-.tickets-doc-table tr.is-pending td {
+.tickets-parts-link {
+  color: var(--accent);
+}
+
+.tickets-parts-rule {
+  padding-top: 10px;
   color: var(--text-4);
+  font-size: 12px;
+  line-height: 24px;
 }

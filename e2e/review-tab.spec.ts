@@ -240,17 +240,14 @@ test.describe('Review tab (E13-7)', () => {
       fs.writeFileSync(target, gradientPng(320, 200, hue));
     }
     await openFromFiles(page, '60-commit', 'T-0118.md');
-    await page.locator('app-editor .cm-scroller').first().evaluate((node: HTMLElement) => {
-      node.scrollTop = node.scrollHeight;
-    });
-    await page.locator('app-editor .tickets-doc-actions').getByRole('button', { name: 'Open Review' }).click();
+    await page.locator('app-editor .tickets-card').getByRole('button', { name: 'Open Review' }).click();
 
     const review = page.locator('.tickets-review');
     await expect(review).toBeVisible({ timeout: 15_000 });
-    await expect(review.locator('.tickets-doc-verdict')).toHaveText('3/3 green.');
-    await expect(review.locator('.tickets-review-summary')).toHaveText('2 files · 0 of 2 viewed', { timeout: 15_000 });
-    await expect(review.locator('.tickets-review-chip')).toHaveCount(2);
-    await review.locator('.tickets-review-chip', { hasText: 'src/drag.ts' }).click();
+    await expect(review.locator('.tickets-review-count')).toHaveText('3/3');
+    await expect(review.locator('.tickets-review-summary')).toHaveText('0 of 2 viewed', { timeout: 15_000 });
+    await expect(review.locator('.tickets-review-file')).toHaveCount(2);
+    await review.locator('.tickets-review-file', { hasText: 'src/drag.ts' }).click();
     await expect(review.locator('.tickets-review-row.is-add')).not.toHaveCount(0);
     await review.locator('img').first().evaluate(async (image: HTMLImageElement) => image.decode());
     await page.screenshot({ path: test.info().outputPath('review-top.png') });
@@ -266,19 +263,18 @@ test.describe('Review tab (E13-7)', () => {
     await review.getByRole('button', { name: 'Add comment' }).click();
     await expect(review.locator('.tickets-review-comment')).toHaveCount(2);
 
-    await review.locator('.tickets-review-viewed input').check();
-    await expect(review.locator('.tickets-review-summary')).toHaveText('2 files · 1 of 2 viewed');
+    await review.locator('.tickets-review-file.is-selected input').check();
+    await expect(review.locator('.tickets-review-summary')).toHaveText('1 of 2 viewed');
     await review.getByRole('button', { name: 'Whole file' }).click();
     await expect(review.locator('.tickets-review-row.is-context')).not.toHaveCount(0);
     await review.getByRole('button', { name: 'Changes' }).click();
 
-    const send = review.locator('.tickets-review-footer').getByRole('button', { name: 'Send back with 2 comments' });
-    await expect(send).toBeVisible();
+    // No footer (board 7d): until the decision card offers it, Send back shows under the pointer on the Files head.
+    await expect(review.locator('.tickets-review-footer')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('review-comments.png') });
-    await review.locator('.tickets-review-scroll').evaluate((node: HTMLElement) => {
-      node.scrollTop = node.scrollHeight;
-    });
-    await page.screenshot({ path: test.info().outputPath('review-diff.png') });
+    await review.locator('.tickets-review-list .tickets-review-subhead').hover();
+    const send = review.getByRole('button', { name: 'Send back with 2 comments' });
+    await expect(send).toBeVisible();
 
     await send.click();
     await expect(review.locator('.tickets-review-note')).toContainText('Sent back', { timeout: 15_000 });

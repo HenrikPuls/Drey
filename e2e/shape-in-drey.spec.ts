@@ -219,7 +219,7 @@ test.describe('Shape in Drey (E13-9)', () => {
     await expect(thread.locator('.relay-chip').first()).toContainText('via Mission Control');
     const editor = page.locator('app-editor .cm-content').first();
     await expect(editor).toContainText('Capture box records audio', { timeout: 30_000 });
-    await expect(page.locator('app-editor .tickets-doc-shape-mark.is-paul')).toContainText('Paul edited this', { timeout: 30_000 });
+    await expect(page.locator('app-editor .tickets-doc-shape-mark.is-paul').first()).toContainText('Paul edited this', { timeout: 30_000 });
     const tray = panel.locator('.target-tray');
     await expect(tray).toContainText('How many parts does this need?');
     await expect(tray.locator('.target-card-btn')).toHaveText(['3 parts', '2 parts', 'Keep it as one']);
@@ -231,7 +231,7 @@ test.describe('Shape in Drey (E13-9)', () => {
     await line.click();
     await page.keyboard.press('End');
     await page.keyboard.type(' (owner: prefer a local socket)');
-    await expect(page.locator('app-editor .tickets-doc-shape-mark.is-you')).toContainText('rides along with your next message', { timeout: 15_000 });
+    await expect(page.locator('app-editor .tickets-doc-shape-mark.is-you').first()).toContainText('rides along with your next message', { timeout: 15_000 });
     await page.locator('app-editor .tickets-doc-shape-marks').first().evaluate((node) => node.scrollIntoView({ block: 'start' }));
     await page.screenshot({ path: testInfo.outputPath('shape-owner-edited.png') });
 

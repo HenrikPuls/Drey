@@ -166,10 +166,10 @@ test('a store document shows the header and widgets of a ticket, and its title e
   await expect(head.locator('.tickets-head-title')).toHaveValue('Alpha: export the vault as a zip', { timeout: 10_000 });
   await expect(head.locator('.tickets-doc-strip-host')).not.toBeEmpty();
 
-  // Point 3: the widgets and the folded Log.
+  // Point 3: the widgets and the folded Log. An Inbox ticket says its cost on the card (9a).
   await expect(editor.locator('.tickets-doc-proof')).toBeVisible();
-  await expect(editor.locator('.tickets-doc-cost')).toBeVisible();
-  await expect(editor.locator('.tickets-doc-tail')).toBeVisible();
+  await expect(editor.locator('.tickets-doc-cost')).toHaveCount(0);
+  await expect(editor.locator('.cm-content')).not.toContainText('## Verlauf');
   await expect(editor.locator('.cm-content')).not.toContainText('a line of the folded log');
 
   // Point 4: the raw block is the `<>` button's escape only, and folds back to the header.
@@ -179,6 +179,14 @@ test('a store document shows the header and widgets of a ticket, and its title e
   await editor.locator('.cm-fm-collapse').click();
   await expect(head).toBeVisible();
   await expect(editor.locator('.cm-fm-line')).toHaveCount(0);
+
+  // Source mode shows the sections raw; Live Preview draws them again.
+  const source = editor.locator('.chrome button.source');
+  await source.click();
+  await expect(editor.locator('.cm-content')).toContainText('## Verlauf', { timeout: 5_000 });
+  await expect(editor.locator('.tickets-doc-proof')).toHaveCount(0);
+  await source.click();
+  await expect(editor.locator('.tickets-doc-proof')).toBeVisible({ timeout: 5_000 });
 
   // The title edit goes into the buffer; the save is the store's `dk put`.
   const title = head.locator('.tickets-head-title');
