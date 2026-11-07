@@ -88,6 +88,8 @@ null, `evaluate(scrollIntoView)` does nothing. The failed desk runs logged
 `isConnected: false`, the passing ones `true`; a chip node replaced by hand gives
 null too. The app was right all along: the scroll position survives every repaint.
 
+(D-40 took the repaints out of a refresh that changes nothing; the first board and the real changes of a start still rebuild, so the rule below stays.)
+
 Fix: read and act through a node that stays (`.head`, `.desk-board`), inside one
 `evaluate`, which is one synchronous state of the DOM. The fixed 800 ms wait for
 "a repaint happened" became a mark on the scrolled columns that the repaint

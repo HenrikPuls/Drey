@@ -4014,6 +4014,33 @@ The paths channel is plugin-only; the gateway's SSE (phone) carries the
 bare `board` signal as before. The watcher stays off; this is the same
 external-change round it would run.
 
+## 6.99 A store's changed files reach Drey's vault views (D-28, milestone 205)
+
+```mermaid
+sequenceDiagram
+    participant W as Any writer (engine, a run's dk, a terminal, dk sync)
+    participant F as StoreChangeFeed
+    participant S as StorePathReporter
+    participant H as ChangeHub
+    participant P as Plugin main (PathAnnouncer)
+    participant R as Renderer (Files tree, tabs)
+
+    W->>W: dk writes the files, moves the ref last
+    W-->>F: own write, watcher event or ref check
+    F->>S: report()
+    S->>S: git diff --name-status lastHead HEAD
+    S->>H: emitPaths {vaultPath: checkout, changed, deleted}
+    H-->>P: SSE data {change: paths, ...}
+    Note over P: every registered vault holding the checkout, its paths under the prefix
+    P->>R: ctx.vault.announceChanges, vault:changed {paths}
+    R-->>R: tree reloads, clean tab reloads, dirty tab marked
+```
+
+The same channel and round as 6.83; only the source of the paths differs. The feed
+still sends the `board` signal at once, and the board's refresh repaints only for a
+board that differs (D-40), so the second round this causes on a store costs a read,
+not a rebuild.
+
 ## 6.84 Talking to a conversation target in the Assistant (E13-5, milestone 138)
 
 ```mermaid

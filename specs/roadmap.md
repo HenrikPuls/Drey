@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–203, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–203 and 205, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,28 +90,9 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-- **D-25 — a store checkout inside a larger vault shows a plain note** (found while fixing D-23, read from the code, not
-  run). `TicketDocuments` allows a checkout that lies inside a registered vault (the document path then carries a prefix),
-  but `ticketIdOfPath` and `idOfDocumentPath` expect the path to start at `tickets/`: such a document gets no header and no
-  widgets, only the `▸ Frontmatter` pill. The vault the checkout prompt adds is the checkout itself, so that route is not
-  affected. Fix: the renderer has to learn the prefix from main, or main hands it the checkout-relative path.
 
 
-- **D-40 — The tickets views repaint twice per board refresh** (M; owner request, outside the list, 2026-11-07; found by D-37).
-  `refreshBoard` (`plugins/tickets/renderer/index.ts`) calls `notifyViews()` for `busy` and again when the board is in, even if nothing
-  changed, and each call rebuilds the Work header's chip and the Board's columns; the engine's first `board-changed` and vault events
-  add more rounds in the first second after a start. From reading the code a real click could get lost in a rebuild and a focused
-  card could lose focus; neither was seen. Done when a refresh that changes nothing rebuilds nothing, proved by a spec.
 
-- **D-27 — a new ticket on a store fails to open** (cut-over smoke, owner, 2026-11-06). After Create:
-  `ENOENT ... E:\projects\drey-tickets\tickets\inbox\T-0092.md`. `plugins/tickets/renderer/index.ts:1014` opens the card's
-  made-up path with `openTicketFile` instead of the store route `openDricketDocument`. The ticket is fine; opening it
-  from the board works.
-- **D-28 — the Files panel misses a store's new files** (same smoke; the cause read from the code, not run). After Create,
-  T-0092 was not in the tree of the checkout vault. The base's `VaultWatcher` follows the active vault only
-  (`electron/app-services.ts:100`), and no path event for the checkout was found: `hub.emitPaths` is fed by
-  `notes.onChanged` (`server/engine.ts:191`). An open document changed by a run or a terminal `dk put` probably goes
-  stale too; to be checked with the fix.
 - **D-29 — a run starts in Inbox and moves the ticket on** (same smoke). T-0092, in Inbox, ran from there (column `inbox`,
   203k tokens in), went gate green and moved to Shaping, though `pipeline.md` says the fleet takes nothing from the
   owner's columns and Building is the one agent column. The owner's words: it never showed as running and stopped by itself.
@@ -121,8 +102,6 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 - **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
   counts only `- [ ] \`command\`` lines; the message should say so.
 
-- **D-33 — "Accepted." stays on the Work card while the ticket waits** (same smoke). `libs/mission-ui/src/work/work.ts:427` keeps the text
-  as local state, so after D-32 the card in Needs you says Accepted and offered the owner no second Accept.
 - **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
   T-0030's `R-20261104T13124-2vrn`, `detached`, its pid gone since before the cut-over.
 
@@ -159,7 +138,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
 
-_Shipped defects:_ D-11 to D-22, the sweep on a dricket store, shipped as milestone 181; D-1, Mission Control chat reaching no model, shipped as
+_Shipped defects:_ D-25, D-27, D-28, D-33 and D-40, the desktop and client store defects, as milestone 205; D-11 to D-22, the sweep on a dricket store, shipped as milestone 181; D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
@@ -901,6 +880,11 @@ rest are kept so they still match `docs/11`.
   own.
 
 ### Follow-ups of shipped milestones (none committed)
+
+- **A store's open ticket gets no outline on its Work row (follow-up of milestone 205, found reading D-27).** `markOpenCard` (`plugins/tickets/renderer/index.ts`) compares the active tab's path with the row's `data-path` in the board's vault, and a store document lives in the checkout under another path, so `.work-row-open` never shows on a store.
+- **A hand edit in a store's checkout reaches no tab until it is committed (follow-up of milestone 205, D-28).** The paths come from the diff of two HEADs, so a change `dk` or git did not commit announces nothing. Everything that writes a store commits, so only an editor pointed at the checkout's files sees it.
+- **A checkout inside a larger vault flags the whole vault as plugin-managed (follow-up of milestone 205, D-25).** `TicketDocuments.refresh` marks every vault that holds the checkout, so Source control refuses that vault's writes, also for its other files. To be weighed with the owner: the mark is one per vault, not one per folder.
+- **A board event during a running refresh is coalesced into it (follow-up of milestone 205, D-40).** `createBoardRefresh` keeps the existing rule that a call during a round waits for that round, so a change landing after the round read the board shows at the next event. Not seen; the store's own announcements follow within seconds.
 
 - **req-135 — Ask about this note on the iPad (follow-up of milestone 198, board 10n; id proposed, the integrator may renumber).** Board 10n draws no Ask, because Mission Control sits beside the note. The composer is there, but nothing names the note any more, which `Ask about this note` did. To decide with the owner where that goes.
 - **req-136 — The chats list on the iPad: search, running now, waiting cards (follow-up of milestone 198, board 10f; id proposed).** The chat's history sheet had a search, the live session's `running now` row and a badge of waiting cards. Board 10f's list draws the sessions by day only, so these three are not on the iPad yet.
