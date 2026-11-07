@@ -1,3 +1,61 @@
+### Milestone 200 — wave row 4.8: the Assistant panel body matches boards 9a, 7a, 7c and 7d; the decision card with Send back with N comments
+
+**Not yet manually verified by the owner.** Row 4.8 `desk-assistant`: the Assistant's body — target row, thread, decision card, composer,
+icon row — is the plugin's own surface (owner decision 4 of the 9a measure sheet); the header, strip and frame are milestone 192's.
+Milestone numbers 197–199 are the other wave-4 rows'.
+
+- **Target row** (9a): history icon, the Talk-to group with the *active* segment named (`Model` / `Mission Control` / `1:1`),
+  the conversation title, `+`. Board glyphs for the icons (`dom.ts`).
+- **Thread, no rail** (9a, 7a): the owner's words are a bubble on the right (accent wash, 16/16/4/16 radius, max 320 / 304), the
+  answer is plain text under one grey meta line — `glm-5.3-flash · 22:11 · 20 s` with the `vault context · N sections` chip at its
+  right end (a turn without a recorded model shows the time and duration only); on a target the line reads `Paul via Mission Control`.
+  A user turn's attachments are outlined chips under the bubble. Card actions (restart, copy, insert) stay hover-only.
+- **The decision card** (7a, 7c; new `decision-card.ts`): replaces the chip tray. The question (bold runs rendered), radio rows with
+  `recommended` marked and selected first, `Or write your own answer below` and **`Send “<choice>”`** — a click on a row only selects,
+  Send sends it as the next message. An open question is shown once: its message leaves the thread while the card stands.
+- **Send back with N comments** (7d; hand-off of milestone 196): the card also carries the Review tab's decision, `Your review of
+  T-0121: what next?` with *Send back with 2 comments* (recommended, selected). It listens to `drey:tickets-review-comments`
+  and, on Send, asks the tab with `drey:tickets-review-send-back` (the event names are copied, a plugin never imports another
+  plugin); it is offered on every target, the Model's too. **One hunk outside the Assistant:** the Review tab's interim hover-only
+  *Send back* on the Files head is gone (`plugins/tickets/renderer/review/view.ts`, its CSS in `review.css` and the three tests
+  of `review/view.spec.ts` that clicked it now ask through the event).
+- **Composer** (9a, 7a): radius-16 box on `--bg-editor` with `--field-border`, the file chip `T-0017.md ×`, mic and send round at 30 px,
+  placeholder `Ask anything…` / `Message Mission Control…`, icon row attach · allow edits · vault · web at 30×30 (28 high on a target,
+  as 7x draws it) and the model name with a chevron — on a target the target's name instead. The prompts button stays but shows
+  only while the row is hovered or focused (the boards draw no book).
+- **Strings:** `assistant.*` in the i18n catalog (ADR-0091); `decision-card.ts` carries `// i18n: catalog`.
+- **Specs:** `decision-card.spec.ts` (selection, Send, the Review option, its removal), `review/view.spec.ts` (send back through the
+  event), e2e `shape-in-drey` and `review-tab` (radio + Send; the card in the Assistant sends the ticket back), `assistant`
+  (Settings is a tab since 197: the two specs that clicked its overlay close now close the tab). `e2e/fidelity-desk-assistant.spec.ts`
+  is the opt-in capture (`DREY_FIDELITY_SHOTS=1`).
+- **Roadmap:** the Assistant rows of 9a and 7d are done; req-138 and req-139 (found by this row) and req-140 to req-142 (new) carry what
+  is not built.
+
+**Fidelity:** boards `DeskClean` (9a), `DeskWork` (7a), `DeskPlan` (7c), `DeskReview` (7d), right dock only; screenshots
+`test-results/fidelity/<Board>.Assistant.png`, with `<Board>.Assistant.{side,overlay,swipe,diff}.png` from `boards/compare.html`,
+`<Board>.pair.png` (crop, board | build | difference) and `<Board>.{board,app}.txt` (the geometry of every text and control, relative to
+the Talk-to group, board HTML against the app); built app, 1440×900, scale factor 1, Anthrazit, dock 420 (9a) and 380 (row 7).
+Token map: #222326 `--bg-bar`, #18191b `--bg-editor`, #2c2d31 `--hover-bg` / `--active-bg`, #3b3d42 `--border`, #747980 `--field-border`,
+#b3b7bc `--text-4`, #f4f5f6 `--text-primary`, accent wash `--accent-surface`, #8ecbef `--accent`, #101113 `--accent-contrast`.
+Fixed: every measure of the measure sheet — the geometry files agree to the pixel for the target row, bubble, attachment chip, model
+line and chip, answer paragraphs, composer box, chip, input row, icon row, the decision card's rows and Send button. Open: none. Justified:
+
+| Region | Board | Build | Justification |
+|---|---|---|---|
+| Everything below the dock strip | 4 px higher | 4 px lower (strip 37 px) | owner decision 2026-11-07, milestone 192 (`decisions.md`) |
+| Bubble, answer, title, file names, model and time, ids | German sample text, `T-0121`, `$1.20` | English fixture text | data instead of sample content |
+| 7a/7c/7d option descriptions (`one undo step…`) | a grey second line per option | none | feature not yet built — req-138 |
+| 7a step rows `✓ T-0121 · step 1…`, `4 min ago · Ben waits…` | under the answer | none | feature not yet built — req-139 |
+| 7c step rows `✓ Shape · decisions locked` | under the answer | none | feature not yet built — req-129 |
+| 7d `Accept` option | second row of the card | none | feature not yet built — req-140 |
+| 7a–7d chip `T-0121.md ×` / `Review T-0121 ×` | label without a verb, removable | `T-0121.md attached`, no × (the label is the tickets provider's, the chip is not the owner's to drop) | feature not yet built — req-141 |
+| 7a–7d icon row on a target | attach, allow edits, vault, web | attach, vault (a toggle that does nothing on a target is not drawn) | feature not yet built — req-142 |
+| 9a vs 7x conversation title | 20 px tall at y+6 on 9a, 18 px at y+7 on 7x | 9a's | the boards disagree by 1 px; 9a is the frame's board |
+| Bubble wash | 14 % accent | `--accent-surface`, 15 % | a token in place of a hex |
+| 7d thread (Ralf, Tessa relays), chat title `Review T-0121` | two relays | the mock model's lines | data instead of sample content |
+| Prompts button | not drawn | invisible until the row is hovered or focused | the feature stays reachable; hover-only per the frame rule (ADR-0019) |
+| Text | canvas export's rendering | Electron's: same font and size, no CSS difference found | text rasterization (owner decision 2026-11-07) |
+
 ### Milestone 199 — req-126: the frame follow-ups of wave 4.2 — no icon strip on a one-panel bottom dock, a badge on a view tab, a view's own tabs (SDK 1.50)
 
 **Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): wave 4.2 could not draw three
