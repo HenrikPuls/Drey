@@ -274,16 +274,17 @@ shows its header) and from the "click-to-collapse" later change above.
 The tab bar and the strips sit side by side under the titlebar; since the
 strip shipped, the tab bar uses the same 32px `--panel-head-h` so their
 bottom borders read as one line (ADR-0057 later change) — the "titlebar
-and tab bar 36px" grid note above is historical. (Board 9a ended the shared
-line, see the next section.)
+and tab bar 36px" grid note above is historical. (Board 9a's heights are in
+the next section; the shared line stays.)
 
 ## Later change — board 9a: fold to the header, a menu on it (milestone 192, req-104)
 
 The owner's board 9a changes three things this record decided.
 
-- **Heights.** Title bar and strips 41, tab bar 37, meta bar 37, panel header
-  28, status bar 29, each the whole bar with its line. The tab bar and the
-  strips no longer share a bottom line; each has its own token.
+- **Heights.** Title bar 41, strips and tab bar 37, meta bar 37, panel header
+  28, status bar 29, each the whole bar with its line. The board ends the
+  strips 4 px below the tab bar; the owner ruled that an error, so they keep
+  one bottom line (`--dock-strip-h` follows `--tab-bar-h`).
 - **Folding came back, beside closing.** The "keeping collapse next to close"
   alternative above was rejected for two near-identical states. The board
   separates them: a *folded* panel (chevron) keeps its header in the stack and

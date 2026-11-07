@@ -113,10 +113,11 @@
   --row-h: 28px; /* every list row */
   /* The frame's bars (board 9a). The app is border-box, so each value is the
      whole bar including its 1px line. The tab bar and the docks' icon strips
-     sit side by side under the titlebar and differ in height on purpose. */
+     sit side by side under the titlebar and share one height, so their
+     bottom lines read as one (owner, 2026-11-07, against the board). */
   --bar-h: 41px; /* titlebar */
-  --dock-strip-h: 41px; /* a dock's icon strip */
   --tab-bar-h: 37px; /* the editor's tab bar */
+  --dock-strip-h: var(--tab-bar-h); /* a dock's icon strip */
   --meta-h: 37px; /* editor meta bar (path + source toggle + more) */
   --panel-head-h: 28px; /* panel headers, the line above comes on top */
   --status-h: 29px; /* status bar */

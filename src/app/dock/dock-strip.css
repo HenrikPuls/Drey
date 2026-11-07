@@ -1,4 +1,4 @@
-/* One row of panel toggles (board 9a): 40px of buttons plus its line. Ten
+/* One row of panel toggles, as tall as the tab bar beside it. Ten
    icons stay on one row at any dock width: the buttons shrink (E12-18)
    instead of wrapping the last one onto a second row. */
 :host {
