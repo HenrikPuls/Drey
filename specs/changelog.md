@@ -1,11 +1,12 @@
 ### Milestone 192 — req-104: the desktop frame matches board 9a
 
 **Not yet manually verified by the owner.** Wave 4.0 (`9a-frame`). Owner decisions of 2026-11-07, all four as recommended: 9a wins for the whole
-frame over row 7, the real app icon stays, the header menu has no "detach" yet, the Assistant body goes to wave row 4.8.
+frame over row 7, the real app icon stays, the header menu has no "detach" yet, the Assistant body goes to wave row 4.8. A fifth after the first report: the strips and the tab
+bar end on one line, against the board.
 
-- **Bars** (`src/styles.css`; the board is content-box, the app border-box, so each token is the whole bar with its line): title bar and dock strips
-  41 (`--bar-h`, new `--dock-strip-h`), tab bar 37 (new `--tab-bar-h`), meta bar 37, panel header 28, status bar 29. **The tab bar and the strips no
-  longer end on one line** (y 77 and y 81, as on the board). New `--chrome-btn` 30 for the frame's icon buttons; meta, tab and path type up to 13 / 14 / 13.
+- **Bars** (`src/styles.css`; the board is content-box, the app border-box, so each token is the whole bar with its line): title bar
+  41 (`--bar-h`), tab bar and dock strips 37 (new `--tab-bar-h`, `--dock-strip-h`), meta bar 37, panel header 28, status bar 29. **The tab bar and the strips
+  end on one line at y 77**; the board offsets them by 4 px (y 81 in the docks), which the owner ruled a board error. New `--chrome-btn` 30 for the frame's icon buttons; meta, tab and path type up to 13 / 14 / 13.
 - **Title bar.** App icon 22 px, 30 px toggles and arrows, menu 14 px at 28 px height, window controls with 14 px icons, one view-switcher group holding the
   views and Layout, the changed dot in peach.
 - **Panel header** (`PanelFrame`, `DockService`). Fold chevron, title, the count right after it, controls on hover or focus only, no grip. **New state
@@ -28,13 +29,14 @@ frame over row 7, the real app icon stays, the header menu has no "detach" yet, 
 - **Roadmap:** req-104 left; req-111 (detach a panel) entered. ADR-0019 and ADR-0057 carry the later change, the frame rule for every panel is in ADR-0019.
 
 **Fidelity:** board `DeskClean` (9a), screenshot `test-results/fidelity/DeskClean.png`, hover state `DeskClean.files-hover.png`, compare captures
-`DeskClean.{overlay,swipe,diff}.png`; built app, 1440×900, scale factor 1, theme Anthrazit. Measured: title bar 0–41, strip 41–82, first header 82–110, tab bar
+`DeskClean.{overlay,swipe,diff}.png`; built app, 1440×900, scale factor 1, theme Anthrazit. Measured: title bar 0–41, strip 41–78, first header 78–106, tab bar
 41–78, meta 78–115, status 871–900, docks 300 + 1 and 420 + 1. Fixed in the build: every bar height, title bar spacing, switcher group, strip, header, tabs, meta, status,
 calendar, Files rows. Open: none. Justified:
 
 | Region | Board | Build | Justification |
 |---|---|---|---|
 | Title bar, logo | "D" tile | the real app icon, 22 px, radius 4 | owner decision 2026-11-07 |
+| Docks below the title bar | strip 41 (line at y 81), so all panels 4 px lower | strip 37 (line at y 77, one with the tab bar) | owner decision 2026-11-07 (`decisions.md`): the board's offset is an error |
 | Title bar | no "Capture by voice" | the plugin's action | belongs to 4.2 (tickets plugin contribution) |
 | View switcher | Notes · Work · Crew | Notes · Work; Layout sits one tab further left | belongs to 4.2 (the preset) |
 | Left strip | a ticket glyph; a three-node Source control glyph | a layers glyph; a branch glyph | plugin-named icons: Tickets belongs to 4.2, Source control has no wave owner, handed to the integrator |

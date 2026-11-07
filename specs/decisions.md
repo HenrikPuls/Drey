@@ -8,6 +8,11 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **Board 9a's 4 px offset between the dock strips and the tab bar** (owner, 2026-11-07; milestone 192, req-104).
+  `DeskClean` ends the strips at y 81 and the tab bar at y 77. The owner: the board is wrong here, the two read as
+  one continuous line. Both are 37 px; the tab bar, meta bar and editor stay on the board's position, the dock
+  contents sit 4 px higher than drawn.
+
 - **The Autopilot board's radii 12 and 6 in the build** (owner, 2026-11-07; milestone 189, D-36).
   `Autopilot.png` draws the popover at 12 and the segments and Stop at 6. The design-scale guard
   (`shared/design-scale.spec.ts`, 4 / 8 / 16) stays: the tickets plugin uses dialog 16 and control 8, and

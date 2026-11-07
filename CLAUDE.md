@@ -609,7 +609,7 @@ introduced silently.
     Outline/Backlinks/Source control are provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and **opened or closed from the dock's icon
-    strip** — a 41px row at the top of each dock with one icon toggle
+    strip** — a 37px row at the top of each dock with one icon toggle
     per panel living there (milestone 69, ADR-0019 later change). A
     closed panel shows only as its icon (no header row; status value in
     the tooltip); the icon is draggable like the header. Closing a side
@@ -641,7 +641,9 @@ introduced silently.
     Explorer / Refresh / Remove); drag & drop of files/folders within and across
     vaults (req-23).
   - **Centre column**: a 37px tab bar for open documents (`--tab-bar-h`,
-    full-height tabs, the X on the active one and on hover), a 37px meta bar
+    the dock icon strips' height, so their bottom borders form one line under
+    the titlebar; full-height tabs, the X on the active one and on hover), a
+    37px meta bar
     (path · the formatting strip while pinned · Save while dirty · `</>` · `⋯`),
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; ADR-0008/0009), then the bottom dock band. Capture is the
