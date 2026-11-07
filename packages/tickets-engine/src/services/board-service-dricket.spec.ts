@@ -372,7 +372,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     }
   });
 
-  it('a client asking for a run from an owner's column is refused before the runner hears of it (D-29)', async () => {
+  it("a client asking for a run from an owner's column is refused before the runner hears of it (D-29)", async () => {
     const created = await service.createTicket({ title: 'Stays put', priority: 'normal', repo: null, description: 'Body.' });
     const id = (created as unknown as { id: string }).id;
     const started: RunRequest[] = [];
