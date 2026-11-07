@@ -1030,7 +1030,7 @@ tickets/_meta/personas/
   | `models.pool` | allowed models; the order is the fallback order on rate-limits/outages | `[models.default]` |
   | `models.router` | `off \| budget \| escalate-on-fail` — a router only ever picks inside the pool | `off` |
   | `color` | `#rrggbb`, the chips and avatars | `#a78bfa` |
-  | `skills` | reusable skill files under `_meta/skills/` the persona carries | `[]` |
+  | `skills` | names of skill files the persona carries: `<name>.md` or `<name>/SKILL.md`, in the persona's own `skills/` folder, else `_meta/skills/`. A run's brief carries their text as `## Skills` (D-46) | `[]` |
   | `budget` | USD per day — the Crew card shows the day's costs against it | unset (null) |
 
 - `prompt.md` — the longform persona prompt, free Markdown. When a
@@ -1419,7 +1419,9 @@ board's tickets come from a dricket store (`docs/design/dricket/`) instead of
 `tickets/<phase>/*.md`. `pipeline.md`, `repos.md` and the ledger still come
 from the tickets vault. A store ticket is folded into the layout above by
 `packages/tickets-engine/src/store/store-board.ts`; the card's `path` stays
-the virtual `tickets/<phase>/<id>.md` (there is no such file).
+the virtual `tickets/<phase>/<id>.md` (there is no such file). A worker edits a
+working copy beside the worktrees instead, `_worktrees/<id>.ticket.md`; the runner takes
+its changed chapters back inside the claim (D-30, [FLEET.md](../plugins/tickets/FLEET.md)).
 
 | dricket | Ticket key here | Note |
 |---|---|---|

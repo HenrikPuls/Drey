@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–203, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–204, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -112,39 +112,14 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   (`electron/app-services.ts:100`), and no path event for the checkout was found: `hub.emitPaths` is fed by
   `notes.onChanged` (`server/engine.ts:191`). An open document changed by a run or a terminal `dk put` probably goes
   stale too; to be checked with the fix.
-- **D-29 — a run starts in Inbox and moves the ticket on** (same smoke). T-0092, in Inbox, ran from there (column `inbox`,
-  203k tokens in), went gate green and moved to Shaping, though `pipeline.md` says the fleet takes nothing from the
-  owner's columns and Building is the one agent column. The owner's words: it never showed as running and stopped by itself.
-- **D-30 — a run leaves a legacy ticket file on a store board** (same smoke; who writes it is open). During that run
-  `tickets/10-inbox/T-0092.md` appeared untracked in the meta vault, in the legacy format
-  (`entered-inbox: 2026-11-06T20:54:42Z`), though the ticket lives in the store. Left in place for the fix to look at.
-- **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
-  counts only `- [ ] \`command\`` lines; the message should say so.
 
 - **D-33 — "Accepted." stays on the Work card while the ticket waits** (same smoke). `libs/mission-ui/src/work/work.ts:427` keeps the text
   as local state, so after D-32 the card in Needs you says Accepted and offered the owner no second Accept.
-- **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
-  T-0030's `R-20261104T13124-2vrn`, `detached`, its pid gone since before the cut-over.
-
-- **D-42 — the runner still commits to the legacy vault after the cut-over** (cut-over smoke, 2026-11-06). On its start at 20:53:20Z the
-  runner removed T-0030's stale `run:` stamp from `tickets/10-inbox/T-0030.md`, added "the runner restarted" to its Log and committed
-  that to the meta vault (`b5b60c3`), though T-0030 lives in the store. Its run `R-20261104T13124-2vrn` from before the freeze is the
-  one D-34 counts. Possibly the same route as D-30; not checked. Harmless for the store, but the legacy tree should stop changing.
-
-- **D-41 — a Prioritized ticket starts on its own with the Autopilot off; the owner put the fix off on 2026-11-07, Prioritized was emptied instead** (cut-over smoke, 2026-11-06; owner: "it was
-  pulled in automatically", he started none of them; the source is not found). T-0091 started three times on the real board, each time around
-  the owner's work on T-0092: 20:53:40Z, 18 s after T-0092's run, master on; 21:00:56Z and 21:39:11Z after `autopilot: off` (20:57:45Z in
-  `runner.log`), 38 s before an Accept. Together 3.7M tokens in, eight uncommitted files, each stopped by hand. The runner logs "explicit fresh
-  start" twice and "explicit resume with a native compact first", so a client sent a handover mode; `engine.log` has no `remote` line for
-  them, which points away from Mission Control's route and at Drey's `fleetStart` or another path. Runs carry `column=prioritized` while the
-  ticket's stage is building. Also check: does one action target the wrong ticket (T-0091 is the first of Prioritized)?
 
 
 - **D-47 — An empty band stays under a tab whose Capacity panel is hidden** (S; owner request, outside the list, 2026-11-07; found by wave 4.9 on the Persona and Crew tabs). The Capacity panel shows only with the Board tab (milestone 194); on every other tab it hides its body, but the bottom dock keeps its height, so an empty band sits under the editor. Done when a bottom dock whose only panel draws nothing takes no height (the frame: `Dock` / `DockService`, the one-panel rule of milestone 199), proved by a spec and the 7k / 7f screenshots.
 
 - **D-49 — `e2e/work-panel.spec.ts:104` failed 4 of 4 on the integration checkout at d24d09b5, not reproduced anywhere else** (S; owner request, outside the list, 2026-11-07). After one pushed `fleet-changed`, `toHaveCount(3)` passed and a line later the question row (T-0104) was gone or behind the review row — something replaced the pushed runs. req-146 ran the same test 16 of 16 green on a fresh build of the same commit and found no second `fleet-changed` in a main-process trace; the test now re-pushes its state every 100 ms, so it no longer shows the cause. Open: what replaced the runs on that checkout (a `fleetStatus` reply or `fleet` signal from a live engine adopted from the owner's home? the checkout is the owner's integration folder, not a temp home). Done when the overwrite is explained or ruled out with the one-push test on that checkout.
-
-- **D-46 — `persona.skills` never reaches a run** (M; owner request, outside the list, 2026-11-07; found by wave 4.9 reading the engine). The persona record carries `skills`, the boards (7k, 5d, 10i) say the skills ride along, and the runner never loads them into a run's prompt or workspace. Done when a run of a persona with skills has them in its prompt/workspace, proved by an engine spec; the 7k Skills sentence stays a "feature not yet built — D-46" row until then.
 
 - **D-44 — `tickets-remote.spec.ts` "keeps the ticket detail scroll across live redraws" (iPad) is flaky** (S; owner request,
   outside the list, 2026-11-07; found by the e2e run after the 9a merge). Fails 20–50 % of runs on every commit from 7156413b
@@ -631,10 +606,7 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   a built app on a scratch store, the checkout vault flagged managed).
 - **E14-5c — What E14-5b left** (milestone 160 shipped the chain on a store, `chainRefusal` lifted,
   `## Verlauf` inside the claim, R-31 as a write-back, needs-input release + re-claim, leftover claims).
-  Open: (1) the **worker's own ticket chapters** (`## Handover`, the plan's acceptance criteria) have no
-  door on a store - the instruction names a ticket path the worker cannot edit there; a run-scoped
-  copy of the ticket that the runner `put`s back inside the claim (`RunLease.patchInClaim`) is the shape;
-  (2) a **"release leftover claims" button** in Drey / Mission Control (the runner route
+  The worker's own ticket chapters on a store shipped with milestone 204 (D-30). Open: (2) a **"release leftover claims" button** in Drey / Mission Control (the runner route
   `POST /claims/release-leftovers`, `FleetPort.releaseLeftoverClaims` and the plugin invoke
   `chainReleaseLeftovers` exist; the chain also runs it once per store before its first dispatch);
   (3) a **re-claim after a wait** lands in dk's first claim stage - unchecked for a ticket that waited in
@@ -919,7 +891,7 @@ rest are kept so they still match `docs/11`.
 - **req-142 — Persona permissions ("Allowed to", board 7k)** (owner request, outside the list, 2026-11-07; found by wave 4.9 against board 7k; built later, not in wave 4). The page's permission block (what a persona may do: write the vault, run commands, reach the network, spend above a cap) has no field in the persona record and nothing in the runner reads one; needs the record field (ticket-schema), the runner enforcing it per run, the block on 7k / 5d / 10i.
 - **req-143 — The persona's full prompt preview and its token count at the start of a run (board 7k)** (owner request, outside the list, 2026-11-07; found by wave 4.9 against board 7k; built later, not in wave 4). The page shows the assembled prompt (blocks + memory + skills) and "N tokens at start"; needs an engine route that assembles the prompt the runner would send and counts it with the provider's tokenizer, and the preview panel.
 - **req-144 — A persona's one-line description for the crew list (board 7k "One line for the crew list", 7f's card line 3)** (owner request, outside the list, 2026-11-07; found by wave 4.9; built later, not in wave 4). The persona record has no short description; the Crew cards and the page draw the role instead. Needs the record field (ticket-schema, `personaPatch`), the field on the page, the line on the cards (desk, iPad, phone).
-- **req-137 — Persona skills: the skills folder listing and the upload button (board 7k)** (owner request, outside the list, 2026-11-07; found by wave 4.9 against board 7k; built later, not in wave 4). The page lists the persona's skills with an upload; the engine has no listing route for `tickets/_meta/personas/<id>/skills/` and no upload; needs both and the row. Depends on D-46.
+- **req-137 — Persona skills: the skills folder listing and the upload button (board 7k)** (owner request, outside the list, 2026-11-07; found by wave 4.9 against board 7k; built later, not in wave 4). The page lists the persona's skills with an upload; the engine has no listing route for `tickets/_meta/personas/<id>/skills/` and no upload; needs both and the row. D-46 shipped the reading (milestone 204): `persona.skills` names, nearest first `personas/<id>/skills/`, then `_meta/skills/`.
 - **req-147 — Settings: a recurring resume time for the Autopilot, and full-row search hits (boards 7g, 10t; O9)** (owner request, outside the list, 2026-11-07; found by wave 4.7, milestone 202; built later). The board's "Resume paused autopilot at 18:00 every day" is a one-shot time today; the settings search lists hits by name only where the board shows the whole row. Needs the recurring rule in the Autopilot record and the runner honouring it, and the search drawing the hit's row.
 - **req-148 — Queued and waiting runs in the fleet report (boards 10i, 5d; O11)** (owner request, outside the list, 2026-11-07; found by wave 4.7, milestone 202; built later). The Crew cards draw "queued" and "waits for a slot"; the fleet report knows live runs only. Needs the dispatcher's queue in the report and the clients drawing the state.
 - **req-150 — The status bar's running summary (board 10t; O4)** (owner request, outside the list, 2026-11-07; id by ruling O4, milestone 203; built later). Board 10t draws `2 running · 1 stuck · 1 queued` left of the Autopilot item. The order and the unframed items hold since milestone 203; this item is the summary itself, over the fleet's runs, its `queued` from req-148.

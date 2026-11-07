@@ -3242,6 +3242,12 @@ sequenceDiagram
     R->>G: clear the run map (one commit) — at most one live run
 ```
 
+Every start names who asks (`origin`, D-41: logged by the engine and the runner, kept on the
+record, refused without one) and may only come out of an agent column; the owner's dialog
+and Accept's commit step are the exceptions (D-29, `composeRunRequest`). On a store the claim comes first,
+the worker edits a working copy, and the runner takes its changed chapters back inside the claim before the
+gate or the release (D-30, [FLEET.md](../plugins/tickets/FLEET.md)).
+
 The runner is a plain Node process (spawned detached under
 `ELECTRON_RUN_AS_NODE` by the engine's `FleetClient` from the packaged bundle),
 so it survives Drey closing and restarting (the engine does too); the client re-adopts it through

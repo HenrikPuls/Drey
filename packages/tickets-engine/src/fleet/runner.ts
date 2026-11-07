@@ -17,7 +17,7 @@
  * the engine asks (`POST /retire-if-idle`, sent once Drey is gone) and
  * after the idle span without a write. A live run always keeps it.
  *
- * Usage: node runner.js --root <abs-path-to-fleet-root> [--idle-ms <n>]
+ * Usage: node runner.js --root <abs-path-to-fleet-root> [--idle-ms <n>] [--store-backed]
  */
 import * as crypto from 'node:crypto';
 import * as fsSync from 'node:fs';

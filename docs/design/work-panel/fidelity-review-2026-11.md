@@ -161,7 +161,7 @@ Rows that hold on every board of a device are listed once under *all*.
 | 7j | Meta `T-0118 · $1.84` | Shown | None | justified: base chrome (milestone 192) |
 | 7j | Counts, thumbnails | 4/4, labels | 3/3, fixture's | justified: data instead of sample content |
 | 7k | Upload, Allowed to, tokens, Add skill, one line | Shown | Absent | justified: feature not yet built — E13-19, req-142, req-143, req-137, req-144 |
-| 7k | Skills sentence | Shown | Absent | justified: feature not yet built — D-46 |
+| 7k | Skills sentence | Shown | Absent | justified: feature not yet built — req-137 (the engine half, D-46, shipped with milestone 204) |
 | 7k | Paths, save state | `personas/ben.md`, committed | `personas/ben/…`, `Saved` | justified: data; E13-19 |
 | 10t | Desktop bar | `2 running · 1 stuck · 1 queued` | None | fixed by req-146: 10t's order, no frames; the running summary is req-150 |
 | 10t | Desktop dot | Grey off, peach paused | None off, orange paused | justified: feature not yet built — req-134 |
