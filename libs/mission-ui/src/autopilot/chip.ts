@@ -27,6 +27,7 @@ export class AutopilotChip {
   protected readonly tone = computed(() => autopilotToneOf(this.view()?.state ?? 'off'));
   protected readonly title = computed(() => this.i18n.t('autopilot.title'));
   private readonly stateWord = computed(() => this.i18n.t(`autopilot.state.${this.view()?.state ?? 'off'}`));
+  protected readonly word = this.stateWord;
   protected readonly text = computed(() => this.i18n.t('status.autopilot', { state: this.stateWord() }));
   protected readonly label = computed(() => this.i18n.t('autopilot.aria', { state: this.stateWord() }));
 

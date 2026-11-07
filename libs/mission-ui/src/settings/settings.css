@@ -486,7 +486,7 @@
 }
 
 /* The phone's list and Appearance (boards 10g, 10h); only phone markup carries ph-. */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   :host,
   .ph-settings {
     display: flex;

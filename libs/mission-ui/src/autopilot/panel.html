@@ -37,47 +37,40 @@
       }
     </div>
   } @else {
-  <div class="rows" role="radiogroup" [attr.aria-label]="'autopilot.title' | t">
-    @for (kind of kinds; track kind) {
-      <button
-        type="button"
-        class="row"
-        role="radio"
-        [attr.data-state]="kind"
-        [attr.aria-checked]="current.state === kind"
-        [class.on]="current.state === kind"
-        [disabled]="disabled()"
-        (click)="pick(kind)"
-      >
-        <span class="dot" [attr.data-tone]="tone(kind)" aria-hidden="true"></span>
-        <span class="grow">{{ 'autopilot.state.' + kind | t }}</span>
-      </button>
-      @if (kind === 'paused' && current.state === 'paused') {
-        <div class="resume">
-          <label class="resume-label" for="mc-autopilot-resume">
-            {{ resumeText() ?? ('autopilot.resume_time' | t) }}
-          </label>
-          <input
-            id="mc-autopilot-resume"
-            class="time"
-            type="time"
-            [value]="resumeValue()"
-            [disabled]="disabled()"
-            [attr.aria-label]="'autopilot.resume_time' | t"
-            (change)="onTime($event)"
-          />
-        </div>
+    <div class="pd-head">
+      <b class="pd-title">{{ 'autopilot.title' | t }}</b>
+      <span class="pd-chord">{{ 'autopilot.chord' | t }}</span>
+    </div>
+    <div class="pd-seg" role="radiogroup" [attr.aria-label]="'autopilot.title' | t">
+      @for (kind of kinds; track kind) {
+        <button type="button" class="pd-segbtn row" role="radio" [attr.data-state]="kind" [attr.aria-checked]="current.state === kind" [class.on]="current.state === kind" [disabled]="disabled()" (click)="pick(kind)">
+          <mc-ph-icon [name]="glyph(kind)" [size]="16" />
+          {{ 'autopilot.state.' + kind | t }}
+        </button>
       }
+    </div>
+    <span class="pd-sentence">{{ 'autopilot.sentence.' + current.state | t }}</span>
+    <div class="pd-chips">
+      @if (current.state === 'paused') {
+        <label class="pd-chip pd-resume">
+          <span>{{ resumeText() ?? ('autopilot.resume_time' | t) }}</span>
+          <input id="mc-autopilot-resume" class="time" type="time" [value]="resumeValue()" [disabled]="disabled()" [attr.aria-label]="'autopilot.resume_time' | t" (change)="onTime($event)" />
+        </label>
+      }
+      @if (todayText(); as today) {
+        <span class="pd-chip">{{ today }}</span>
+      }
+    </div>
+    <div class="pd-rule"></div>
+    <button type="button" class="pd-stop row stop" [class.armed]="armed()" [disabled]="disabled()" (click)="stop()">
+      <mc-ph-icon name="stop" [size]="16" />
+      {{ (armed() ? 'autopilot.stop_all.confirm' : 'autopilot.stop_all') | t }}
+    </button>
+    @if (disabled()) {
+      <p class="note">{{ 'autopilot.refused.read_only' | t }}</p>
     }
-  </div>
-  <button type="button" class="row stop" [class.armed]="armed()" [disabled]="disabled()" (click)="stop()">
-    {{ (armed() ? 'autopilot.stop_all.confirm' : 'autopilot.stop_all') | t }}
-  </button>
-  @if (disabled()) {
-    <p class="note">{{ 'autopilot.refused.read_only' | t }}</p>
-  }
-  @if (error(); as words) {
-    <p class="note err" role="alert">{{ words }}</p>
-  }
+    @if (error(); as words) {
+      <p class="note err" role="alert">{{ words }}</p>
+    }
   }
 }

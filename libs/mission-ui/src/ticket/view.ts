@@ -24,8 +24,11 @@ import { AppBar } from '../app-bar/app-bar';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { AnswerCard } from '../phone/answer-card';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
-import { flowLineOf, partRowsOf, withoutPartsChapter, type PhonePartRow } from './phone-face';
+import { padSignal, touchFaceSignal } from '../phone/phone';
+import { PhoneAvatar } from '../phone/avatar';
+import { Panes } from '../shell/panes';
+import { PadCards, type PadCard } from '../shell/pad-card';
+import { flowLineOf, partRowsOf, withoutEmptyHeadings, withoutPartsChapter, type PhonePartRow } from './phone-face';
 import { CostTable } from '../cost/cost-table';
 import { costTableOf } from '../cost/cost-table.model';
 import { McI18n } from '../i18n/i18n.service';
@@ -129,9 +132,9 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
 @Component({
   selector: 'mc-ticket',
   templateUrl: './view.html',
-  styleUrls: ['../seg.css', '../phone/kit.css', './view.css', './phone.css'],
+  styleUrls: ['../seg.css', '../phone/kit.css', './view.css', './phone.css', './pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar, CostTable, AnswerCard, McI18nPipe, PhoneIcon],
+  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar, CostTable, AnswerCard, McI18nPipe, PhoneIcon, PhoneAvatar],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
@@ -170,7 +173,126 @@ export class TicketView {
 
   // --- the phone's ticket face (boards 10d, 10o) ----------------------------------
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
+  private readonly panes = inject(Panes);
+  private readonly padCards = inject(PadCards);
+
+  /** The ticket's persona as a picture (the iPad's Worker row, 10e). */
+  protected readonly workerColor = computed(() => {
+    const name = this.workerName();
+    return this.work?.personas.find((persona) => persona.title === name)?.color ?? 'var(--text-2)';
+  });
+
+  /** Thread on the iPad is the ticket's conversation in the centre (board 10f). */
+  protected onThread(): void {
+    const open = this.vm.openPadThread;
+    if (this.pad() && open !== undefined) {
+      open.call(this.vm, this.id());
+    } else {
+      this.openThread();
+    }
+  }
+
+  /** The Shaping face on the iPad (5b): the ticket's bar over the right pane, one pill. */
+  protected readonly shapeFace = computed(() => this.pad() && this.phaseTitle().trim().toLowerCase() === 'shaping');
+
+  /** The link to the card in the Assistant (10e, 10q, 10s); null = nothing waits. */
+  protected readonly decisionLink = computed<string | null>(() => {
+    if (!this.pad() || !this.needsYou()) {
+      return null;
+    }
+    if (!this.panes.right() || this.panes.orientation() === 'portrait') {
+      return this.i18n.t('ticket.pad.decision_closed');
+    }
+    if (this.questionNeed() !== null) {
+      const name = this.workerName();
+      return name === null ? this.i18n.t('ticket.pad.decision_question_anon') : this.i18n.t('ticket.pad.decision_question', { name });
+    }
+    return this.i18n.t('ticket.pad.decision_ready');
+  });
+
+  protected goToCard(): void {
+    this.panes.setRight(true);
+  }
+
+  /** The Ready row of a proof's video, as its tile says. */
+  protected readonly videoTile = computed(() => {
+    const report = this.proof();
+    const last = report?.chapters[report.chapters.length - 1];
+    return report?.video === null || report?.video === undefined ? null : this.i18n.t('ticket.pad.video', { time: this.clock(last?.atSec ?? 0) });
+  });
+
+  /** The strip's Cost on the iPad: the total off the cost table. */
+  protected readonly proofCost = computed(() => this.costTable()?.total.cost ?? null);
+
+  /** What the Assistant draws for this ticket on the iPad: its question, else its decision (Q9). */
+  private readonly publishCard = effect(() => {
+    if (!this.pad() || this.isEmpty() || this.editing()) {
+      untracked(() => this.padCards.card.set(null));
+      return;
+    }
+    const question = this.questionCard();
+    if (question !== null && !this.readOnly()) {
+      const card: PadCard = {
+        question: question.question,
+        why: this.questionNeed()?.shaped?.why ?? null,
+        options: question.options,
+        selected: this.threadQSelected,
+        busy: this.threadQPending,
+        error: this.threadQError,
+        done: this.answerSentLine,
+        pick: (index) => this.threadQSelect(index),
+        send: () => void this.threadQSend(),
+      };
+      untracked(() => this.padCards.card.set(card));
+      return;
+    }
+    const need = this.decisionNeed();
+    if (need === null) {
+      untracked(() => this.padCards.card.set(null));
+      return;
+    }
+    const name = this.workerName();
+    const card: PadCard = {
+      question: this.i18n.t('ticket.pad.accept_q', { id: this.id() }),
+      why: null,
+      options: [
+        { label: this.i18n.t('ticket.pad.accept_merge'), consequence: this.i18n.t('ticket.pad.accept_merge_line'), recommended: true },
+        { label: this.i18n.t('ticket.pad.send_note'), consequence: name === null ? this.i18n.t('ticket.pad.send_note_line_anon') : this.i18n.t('ticket.pad.send_note_line', { name }), recommended: false },
+      ],
+      selected: this.decisionPick,
+      busy: this.decisionBusy,
+      error: this.decisionError,
+      done: this.decisionDone,
+      noteOpen: this.decisionNoteOpen,
+      note: this.note,
+      noteLabel: this.i18n.t('ticket.phone.sendback_why'),
+      setNote: (text) => this.note.set(text),
+      pick: (index) => this.decisionPick.set(index),
+      send: () => {
+        if (this.decisionPick() === 1) {
+          if (this.note().trim() === '') {
+            this.decisionError.set(this.i18n.t('ticket.phone.sendback_why'));
+            return;
+          }
+          void this.decisionSendBack(need);
+        } else if (this.decisionPick() === 0) {
+          void this.decisionAccept(need);
+        }
+      },
+    };
+    untracked(() => this.padCards.card.set(card));
+  });
+  private readonly decisionPick = signal<number | null>(null);
+  private readonly decisionNoteOpen = computed(() => this.decisionPick() === 1);
+  private readonly answerSentLine = computed(() => (this.threadQDone() ? this.i18n.t('ticket.phone.answer_sent', { name: this.threadPersonaLabel() }) : null));
+
+  /** Review takes the right pane's room (board 5h, Q3). */
+  private readonly coverRight = effect(() => {
+    const covered = this.pad() && !this.isEmpty() && this.mode() === 'proof';
+    untracked(() => this.panes.covered.set(covered));
+  });
   /** The ⋯ sheet: everything the phone's face does not draw (Review, edit, chain). */
   protected readonly moreOpen = signal(false);
 
@@ -227,7 +349,10 @@ export class TicketView {
   }
 
   /** The body without the Parts chapter: the Parts rows draw that. */
-  protected readonly phoneBody = computed(() => withoutPartsChapter(this.bodyText()));
+  protected readonly phoneBody = computed(() => {
+    const body = withoutPartsChapter(this.bodyText());
+    return this.pad() ? withoutEmptyHeadings(body) : body;
+  });
 
   /** The titles of the phases still to run; a done or manual column has no row on the phone (10d). */
   protected readonly phoneOpenPhases = computed<readonly string[]>(() => {
@@ -428,6 +553,7 @@ export class TicketView {
     // The phone's face is the ticket: its question and decision are on it (board 10d).
     untracked(() => this.mode.set(this.phone() ? 'ticket' : defaultFaceOf(this.runActive())));
     this.moreOpen.set(false);
+    this.decisionPick.set(null);
     this.decisionDone.set(null);
     this.decisionError.set(null);
     // A run face opens with the `<id>:` prefix the thread's composer always carries.

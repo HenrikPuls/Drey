@@ -4,7 +4,7 @@ import { AppBar } from '../app-bar/app-bar';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { AnswerCard } from '../phone/answer-card';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { touchFaceSignal } from '../phone/phone';
 import { MC_WORK_STATE, questionCardOf, questionNeedOf, type QuestionCardVm } from '../work/work.model';
 import { planChaptersOf, planSectionOf } from './plan.model';
 import { costSoFarText, estimateText as estimateRangeText } from '../../../../shared/cost-text';
@@ -50,7 +50,7 @@ export class PlanApprove {
 
   // --- the phone's plan to accept (board 10j) ----------------------------------
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
   protected readonly goal = signal<string | null>(null);
   protected readonly reply = signal('');
   protected readonly qSelected = signal<number | null>(null);

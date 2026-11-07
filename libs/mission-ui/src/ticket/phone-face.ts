@@ -115,3 +115,25 @@ export function withoutPartsChapter(body: string): string {
   }
   return kept.join('\n').trim();
 }
+
+/** The iPad's body (10e): a heading left with nothing under it (the Plan above its Parts) goes too. */
+export function withoutEmptyHeadings(body: string): string {
+  const lines = body.split('\n');
+  const kept: string[] = [];
+  const levelOf = (line: string): number => /^(#{1,6})\s/.exec(line)?.[1]!.length ?? 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const level = levelOf(lines[i]!);
+    if (level > 0) {
+      let next = i + 1;
+      while (next < lines.length && lines[next]!.trim() === '') {
+        next += 1;
+      }
+      const after = next < lines.length ? levelOf(lines[next]!) : 1;
+      if (next >= lines.length || (after > 0 && after <= level)) {
+        continue;
+      }
+    }
+    kept.push(lines[i]!);
+  }
+  return kept.join('\n').trim();
+}

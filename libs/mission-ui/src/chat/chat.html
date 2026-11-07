@@ -1,11 +1,13 @@
 <div class="chat">
-  <mc-app-bar title="Mission Control" [ownMenu]="true" [autopilot]="true" (menu)="openSessions()">
+  @if (!assistant()) {
+  <mc-app-bar title="Mission Control" [back]="barBack()" [ownMenu]="!pad()" [autopilot]="!pad()" (menu)="openSessions()" (backed)="threadBack.emit()">
     <button bar-end type="button" class="hbtn" (click)="newChat()" aria-label="New chat" title="New chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />
       </svg>
     </button>
   </mc-app-bar>
+  }
 
   @if (shape(); as sh) {
     <div class="shapectx" aria-label="Shape session">
@@ -97,7 +99,7 @@
               </div>
             } @else {
               <div class="msg mission">
-                <span class="ph-meta">{{ 'chat.phone.meta' | t: { time: timeOf(item.message.at) } }}</span>
+                <span class="ph-meta">{{ metaOf(item.message.at) }}</span>
                 @if (shape()) {
                   <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
                 }
@@ -183,7 +185,7 @@
         }
       }
       @if (phone()) {
-        @if (linkedTicket(); as link) {
+        @if (!assistant() && linkedTicket(); as link) {
           <button type="button" class="ph-linkcard" (click)="openLinked(link.id)">
             <span class="ph-linkcard-body">
               <span>{{ link.title }}</span>
@@ -192,7 +194,9 @@
             <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
           </button>
         }
-        @if (linkedCard(); as card) {
+        @if (assistant()) {
+          <ng-container [ngTemplateOutlet]="padCardBlock" />
+        } @else if (linkedCard(); as card) {
           @if (!linkedDone()) {
             <mc-answer-card
               [question]="card.question"
@@ -247,8 +251,10 @@
       }
     </div>
   } @else {
-    <div class="body">
-      @if (viewMode() === 'composer') {
+    <div class="body" [class.pd-cardbody]="assistant()">
+      @if (assistant()) {
+        <ng-container [ngTemplateOutlet]="padCardBlock" />
+      } @else if (viewMode() === 'composer') {
         <p class="empty">Earlier chats are in the menu (top left).</p>
       }
     </div>
@@ -336,7 +342,7 @@
         [disabled]="readOnly()"
         (input)="onDraft($event)"
         (keydown)="onComposerKeydown($event)"
-        [placeholder]="phone() ? ('chat.phone.placeholder' | t) : placeholder"
+        [placeholder]="assistant() ? ('chat.pad.placeholder' | t) : phone() ? ('chat.phone.placeholder' | t) : placeholder"
         aria-label="Message to Mission Control"></textarea>
       @if (dictation.supported) {
         <button
@@ -472,6 +478,21 @@
     <input #attachFileInput type="file" accept="image/*,text/*,.md,.txt,.pdf,.csv,.json" multiple hidden (change)="onPicked($event)" />
   }
 </div>
+
+<!-- The open ticket's card in the iPad's Assistant (10e, 10q, 5b, 5c). -->
+<ng-template #padCardBlock>
+  @if (padCard(); as card) {
+    @if (card.done(); as line) {
+      <p class="pd-carddone" role="status">{{ line }}</p>
+    } @else {
+      <mc-answer-card [question]="card.question" [why]="card.why" [options]="card.options" [selected]="card.selected()" [busy]="card.busy()" [error]="card.error()" (pick)="card.pick($event)" (send)="card.send()">
+        @if (card.noteOpen?.()) {
+          <textarea answer-foot class="pd-cardnote" rows="2" [attr.aria-label]="card.noteLabel" [attr.placeholder]="card.noteLabel" [value]="card.note?.() ?? ''" (input)="card.setNote?.($any($event.target).value)"></textarea>
+        }
+      </mc-answer-card>
+    }
+  }
+</ng-template>
 
 <!-- The proposal cards' rich body, shared by the pending, done and dismissed faces. -->
 <ng-template #richBody let-proposal>

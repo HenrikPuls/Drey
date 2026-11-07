@@ -3,7 +3,7 @@ import { AppBar } from '../app-bar/app-bar';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { touchFaceSignal } from '../phone/phone';
 import { todayOfPersonas } from '../work/phone-rows';
 import {
   ChangeDetectionStrategy,
@@ -416,7 +416,7 @@ export class Team {
 
   // --- the phone's Crew (board 10i) ---------------------------------------------
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
   private readonly teamI18n = inject(McI18n);
   /** The stuck run whose Stop was pressed: the question under its tiles. */
   protected readonly stopAsk = signal<string | null>(null);

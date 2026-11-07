@@ -1,0 +1,159 @@
+/* The iPad's ticket face (boards 10e, 10q, 10s, 5b). Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .pd-thead {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    height: 45px;
+    padding: 0 4px 0 20px;
+    font-size: var(--ph-15);
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .pd-wide-bar {
+    position: relative;
+    justify-content: flex-end;
+    width: calc(100% + var(--pd-bar-extra, 0px));
+    height: 53px;
+    padding: 0 4px;
+    font-size: var(--ph-17);
+    border-bottom-color: var(--line);
+  }
+  .pd-wide-bar .pd-tid {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+  }
+  .ph-page {
+    padding: 12px 24px 20px;
+  }
+  .ph-page:has(~ .pd-none),
+  .pd-wide-bar + .ph-page {
+    padding: 12px 20px 20px;
+  }
+  .ph-status {
+    height: 26px;
+    background: var(--panel-2);
+    border: 0;
+  }
+  .pd-worker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+  }
+  .pd-declink {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 62px;
+    padding: 6px 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-decdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    background: var(--warn);
+    border-radius: 50%;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 70%, transparent);
+  }
+  .pd-dectext {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-decgo {
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .pd-proofgroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pd-h2-0 {
+    margin: 0;
+  }
+  .pd-strip {
+    gap: 4px 16px;
+  }
+  .pd-stripcost {
+    margin-left: auto;
+    color: var(--text-2);
+  }
+  .pd-stripamount {
+    font-family: var(--mono);
+    color: var(--text);
+  }
+  .pd-check {
+    min-height: 45px;
+  }
+  .pd-checktitle {
+    flex: 1 1 0;
+  }
+  .pd-tiles {
+    display: flex;
+    gap: 8px;
+  }
+  .pd-tile {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-width: 0;
+    height: 86px;
+    padding: 6px;
+    overflow: hidden;
+    font: inherit;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+    text-align: left;
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-tile img {
+    min-height: 0;
+    object-fit: cover;
+  }
+  .pd-costhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: -6px;
+  }
+  .pd-costword {
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  /* The ⋯ list hangs under its button, not over the whole width. */
+  .ph-sheet-scrim {
+    z-index: 26;
+  }
+  .ph-sheet {
+    top: calc(53px + env(safe-area-inset-top) + 50px);
+    right: auto;
+    bottom: auto;
+    left: calc(50% - 170px);
+    z-index: 27;
+    width: 340px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .ph-grab {
+    display: none;
+  }
+}

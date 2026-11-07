@@ -6,20 +6,37 @@
   display: inline-flex;
   gap: 8px;
   align-items: center;
-  min-height: 44px;
-  padding: 0 12px;
+  height: 44px;
+  margin-right: 4px;
+  padding: 0 14px;
   font: inherit;
-  font-size: calc(13px * var(--mc-text, 1));
-  font-weight: 600;
+  font-size: var(--ph-15);
   color: var(--text);
+  white-space: nowrap;
   cursor: pointer;
   background: transparent;
-  border: 0;
-  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.chip[aria-expanded='true'] {
+  background: var(--panel-2);
+}
+.word {
+  display: none;
+}
+/* Portrait has no room for the name (board 10s). */
+@media (orientation: portrait) {
+  .txt {
+    display: none;
+  }
+  .word {
+    display: inline;
+  }
 }
 .dot {
   width: 10px;
   height: 10px;
+  flex: none;
   background: var(--text-3);
   border-radius: 50%;
 }
@@ -27,16 +44,17 @@
   background: var(--ok);
 }
 .dot[data-tone='attention'] {
-  background: var(--warn);
+  background: var(--accent-peach);
 }
 .pop {
   position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 20;
-  min-width: 260px;
-  padding: 8px;
+  top: calc(100% + 6px);
+  right: 4px;
+  z-index: 30;
+  width: 410px;
+  padding: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius-dialog);
+  border-radius: var(--radius-control);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { AppBar } from '../app-bar/app-bar';
 import { noteWhenOf } from './notes.model';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import { NotesStore } from './notes.store';
@@ -19,11 +19,12 @@ import { hitSnippetOf, parentFolderOf, type NoteEntry, type NoteSearchHit } from
   selector: 'mc-notes',
   imports: [AppBar, McI18nPipe, PhoneIcon],
   templateUrl: './notes.html',
-  styleUrls: ['../phone/kit.css', './notes.css'],
+  styleUrls: ['../phone/kit.css', './notes.css', './notes-pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Notes {
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
   protected readonly store = inject(NotesStore);
   private readonly i18n = inject(McI18n);
 

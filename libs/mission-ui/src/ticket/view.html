@@ -15,20 +15,33 @@
       <!-- ==================== the ticket face ==================== -->
       @case ('ticket') {
         @if (phone()) {
+        @if (pad()) {
+          <div class="pd-thead" [class.pd-wide-bar]="shapeFace()">
+            <b class="pd-tid">{{ id() }}</b>
+            <button type="button" class="ph-iconbtn" [attr.aria-label]="'ticket.phone.more' | t" [attr.title]="'ticket.phone.more' | t" aria-haspopup="dialog" (click)="moreOpen.set(true)">
+              <mc-ph-icon name="more" />
+            </button>
+          </div>
+        } @else {
         <mc-app-bar [title]="id()" [back]="'shell.work' | t" (backed)="vm.onClose()">
           <button bar-end type="button" class="ph-iconbtn" [attr.aria-label]="'ticket.phone.more' | t" [attr.title]="'ticket.phone.more' | t" aria-haspopup="dialog" (click)="moreOpen.set(true)">
             <mc-ph-icon name="more" />
           </button>
         </mc-app-bar>
+        }
         <div class="ph-scroll ph-page" [class.ph-no-safe]="decisionNeed() !== null">
           <div class="ph-headrow">
             <span class="ph-id">{{ id() }}</span>
-            <span class="ph-status">{{ phaseTitle() }}</span>
-            @if (needsYou()) {
+            @if (shapeFace()) {
+              <span class="ph-needs"><span class="ph-needs-dot" aria-hidden="true"></span>{{ phaseTitle() }}</span>
+            } @else {
+              <span class="ph-status">{{ phaseTitle() }}</span>
+            }
+            @if (needsYou() && !shapeFace()) {
               <span class="ph-needs"><span class="ph-needs-dot" aria-hidden="true"></span>{{ 'ticket.phone.needs_you' | t }}</span>
             }
             <span class="ph-spacer"></span>
-            <button type="button" class="ph-thread" (click)="openThread()">{{ 'ticket.phone.thread' | t }}</button>
+            <button type="button" class="ph-thread" (click)="onThread()">{{ 'ticket.phone.thread' | t }}</button>
           </div>
           <h1 class="ph-h1">{{ title() }}</h1>
           <div class="ph-grid">
@@ -51,7 +64,11 @@
             }
             @if (workerName(); as worker) {
               <span class="ph-grey">{{ 'ticket.phone.worker' | t }}</span>
-              <span>{{ worker }}</span>
+              @if (pad()) {
+                <span class="pd-worker"><mc-ph-avatar [name]="worker" [color]="workerColor()" />{{ worker }}</span>
+              } @else {
+                <span>{{ worker }}</span>
+              }
             }
             @if (costLine(); as line) {
               <span class="ph-grey">{{ 'ticket.phone.cost' | t }}</span>
@@ -59,7 +76,15 @@
             }
           </div>
 
-          @if (proofStrip(); as strip) {
+          @if (decisionLink(); as link) {
+            <button type="button" class="pd-declink" (click)="goToCard()">
+              <span class="pd-decdot" aria-hidden="true"></span>
+              <span class="pd-dectext">{{ link }}</span>
+              <span class="pd-decgo">{{ 'ticket.pad.go_to_card' | t }}</span>
+            </button>
+          }
+
+          @if (!pad() && proofStrip(); as strip) {
             <div class="ph-proof">
               <span class="ph-proof-item" [attr.title]="'ticket.phone.proof_checks_title' | t">
                 <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
@@ -80,7 +105,7 @@
             </div>
           }
 
-          @if (questionCard(); as card) {
+          @if (!pad() && questionCard(); as card) {
             @if (!readOnly() && !threadQDone()) {
               <mc-answer-card
                 [question]="card.question"
@@ -121,12 +146,72 @@
             </div>
           }
 
+          @if (pad() && proofStrip(); as strip) {
+            <div class="pd-proofgroup">
+              <h2 class="ph-h2 pd-h2-0">{{ 'ticket.pad.proof' | t }}</h2>
+              <div class="ph-proof pd-strip">
+                <span class="ph-proof-item">
+                  <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                  <span><b class="ph-ok">{{ 'ticket.phone.proof_count' | t: { passed: strip.passed, total: strip.total } }}</b> {{ 'ticket.phone.proof_checks' | t }}</span>
+                </span>
+                @if (strip.testedBy !== '') {
+                  <span class="ph-proof-item">
+                    <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                    {{ 'ticket.phone.proof_tested' | t: { name: strip.testedBy } }}
+                  </span>
+                }
+                @if (strip.reviewer !== '') {
+                  <span class="ph-proof-item">
+                    <mc-ph-icon name="check" [size]="16" [stroke]="2.5" class="ph-ok" />
+                    {{ 'ticket.phone.proof_review' | t: { name: strip.reviewer } }}
+                  </span>
+                }
+                @if (proofCost(); as total) {
+                  <span class="pd-stripcost">{{ 'ticket.pad.proof_cost' | t }} <span class="pd-stripamount">{{ total }}</span></span>
+                }
+              </div>
+              @if (proof(); as report) {
+                <div>
+                  @for (criterion of report.criteria; track criterion.command) {
+                    <div class="ph-line pd-check">
+                      <span class="ph-mark" [attr.data-state]="criterion.passed ? 'done' : 'failed'" aria-hidden="true">{{ criterion.passed ? '✓' : '✗' }}</span>
+                      <span class="ph-line-title pd-checktitle ph-ellipsis">{{ criterion.command }}</span>
+                      @if (checkSub(criterion); as sub) {
+                        <span class="ph-line-small">{{ sub }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+              @if (shots().length > 0 || videoTile() !== null) {
+                <div class="pd-tiles">
+                  @for (shot of shots(); track shot.name) {
+                    <button type="button" class="pd-tile" (click)="openViewer(shot)">
+                      <img [src]="shot.url" [alt]="shot.name" loading="lazy" />
+                      <span>{{ shot.name }}</span>
+                    </button>
+                  }
+                  @if (videoTile(); as video) {
+                    <button type="button" class="pd-tile" (click)="openProof()"><span>{{ video }}</span></button>
+                  }
+                </div>
+              }
+            </div>
+          }
+
           @if (costTable(); as table) {
+            @if (pad()) {
+              <div class="pd-costhead">
+                <h2 class="ph-h2 pd-h2-0">{{ 'cost.table.label' | t }}</h2>
+                <span class="pd-costword">{{ (decisionNeed() !== null && proofStrip() !== null ? 'ticket.pad.cost_total' : 'ticket.pad.cost_so_far') | t }}</span>
+              </div>
+            } @else {
             <h2 class="ph-h2">{{ 'cost.table.label' | t }}</h2>
+            }
             <mc-cost-table [view]="table" [openPhases]="phoneOpenPhases()" [runningPhase]="phoneRunningPhase()" [settled]="decisionNeed() !== null && proofStrip() !== null" />
           }
 
-          @if (proof(); as report) {
+          @if (!pad() && proof(); as report) {
             @if (report.criteria.length > 0) {
               <h2 class="ph-h2">{{ 'ticket.phone.checks' | t }}</h2>
               <div>
@@ -153,7 +238,7 @@
           }
         </div>
 
-        @if (decisionNeed(); as need) {
+        @if (!pad() && decisionNeed(); as need) {
           <div class="ph-decision">
             @if (sendBackOpen()) {
               <label class="ph-decision-text" for="ph-sendback">{{ 'ticket.phone.sendback_why' | t }}</label>

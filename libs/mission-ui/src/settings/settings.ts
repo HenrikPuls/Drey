@@ -12,7 +12,7 @@ import {
 import { MC_AUTOPILOT } from '../autopilot/autopilot-state';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { PhoneIcon, type PhoneIconName } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { touchFaceSignal } from '../phone/phone';
 import { AppBar } from '../app-bar/app-bar';
 import { McI18n } from '../i18n/i18n.service';
 import { deviceListOf } from './device-list';
@@ -85,7 +85,7 @@ export class Settings {
 
   // --- the phone's list and Appearance (boards 10g, 10h) --------------------------
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
   private readonly autopilotState = inject(MC_AUTOPILOT, { optional: true });
   protected readonly query = signal('');
   protected readonly phoneAccents = PHONE_ACCENTS;

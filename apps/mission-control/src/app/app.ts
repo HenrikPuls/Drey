@@ -33,6 +33,7 @@ import { AutopilotChip } from '@mission-ui/autopilot/chip';
 import { ShellHeader, type ShellArea } from '@mission-ui/shell/header';
 import { Menu, type MenuPlace } from '@mission-ui/shell/menu';
 import { Panes } from '@mission-ui/shell/panes';
+import { PadChats } from '@mission-ui/shell/pad-chats';
 import type { SessionMeta } from '@mission-ui/api/dto';
 
 export type { McTab };
@@ -155,6 +156,7 @@ export function tabOfPlace(place: ShellArea | MenuPlace): McTab {
     ShellHeader,
     AutopilotChip,
     Menu,
+    PadChats,
   ],
   providers: [
     {
@@ -243,7 +245,14 @@ export class App {
         untracked(() => this.lastArea.set(area));
       }
     });
-    // On the iPad the chat is the right pane, never the centre: a switch to
+    // Leaving a covering surface drops the Assistant called over it.
+    effect(() => {
+      if (!this.covering()) {
+        untracked(() => this.overlayOpen.set(false));
+      }
+    });
+    // On the iPad the chat is the right pane, never the centre (the one
+    // exception is the Thread state of board 10f, decisions.md): a switch to
     // the chat tab (a promote, "Ask Mission Control") opens that pane and
     // leaves the area where it was.
     effect(() => {
@@ -268,7 +277,7 @@ export class App {
    * chat (desktop tablet only; with the dock it sits right), the shared
    * plan, or the empty pane.
    */
-  protected readonly detail = computed<'ticket' | 'persona' | 'plan' | 'team' | 'settings' | 'chat' | 'note' | 'empty'>(
+  protected readonly detail = computed<'ticket' | 'persona' | 'plan' | 'team' | 'settings' | 'chat' | 'note' | 'thread' | 'empty'>(
     () => {
       if (this.ticketOpen() !== null) {
         return 'ticket';
@@ -279,6 +288,9 @@ export class App {
       const tab = this.wideTab();
       if (tab === 'settings') {
         return 'settings';
+      }
+      if (this.padThread() !== null) {
+        return 'thread';
       }
       if (tab === 'notes' && this.isPad() && this.notes.path() !== null) {
         return 'note';
@@ -332,7 +344,7 @@ export class App {
       case 'desktop':
         return true;
       case 'ipad':
-        return this.panes.left() && this.area() === 'work';
+        return this.panes.left() && this.area() === 'work' && !this.padSettings() && this.padThread() === null;
     }
   });
 
@@ -347,7 +359,7 @@ export class App {
       case 'desktop':
         return false;
       case 'ipad':
-        return this.panes.left() && this.area() === 'notes';
+        return this.panes.left() && this.area() === 'notes' && !this.padSettings();
     }
   });
 
@@ -364,7 +376,7 @@ export class App {
       case 'desktop':
         return this.detail() === 'team';
       case 'ipad':
-        return this.panes.left() && this.area() === 'crew';
+        return this.crewFull();
     }
   });
 
@@ -376,7 +388,7 @@ export class App {
       case 'desktop':
         return this.docked() ? this.showDock() && this.dockTab() === 'chat' : this.tab() === 'chat';
       case 'ipad':
-        return this.panes.right() && this.dockTab() === 'chat';
+        return this.padRight() && this.dockTab() === 'chat';
     }
   });
 
@@ -394,8 +406,45 @@ export class App {
   /** The phone's root screen. */
   protected readonly showMenu = computed(() => this.isPhone() && this.tab() === 'menu');
 
-  /** The iPad's right pane in portrait: an overlay over the centre, closed by its scrim. */
-  protected readonly rightOverlay = computed(() => this.isPad() && this.panes.orientation() === 'portrait');
+  /** The iPad's right pane as an overlay, closed by its scrim: in portrait, and over a surface that covers it. */
+  protected readonly rightOverlay = computed(() => this.isPad() && (this.panes.orientation() === 'portrait' || this.covering()));
+
+  // -- the iPad's surfaces that take the right pane's room (boards 5d, 5f, 5h, 5i, 10f) --
+
+  protected readonly padSettings = computed(() => this.isPad() && this.wideTab() === 'settings');
+  /** The thread in the centre (10f): the ticket it was opened from; null = the chat is the right pane. */
+  protected readonly padThread = this.state.padThread;
+  protected readonly showPadChats = computed(() => this.isPad() && this.panes.left() && this.padThread() !== null && !this.padSettings());
+  /** Crew over the whole width, its persona beside the list. */
+  protected readonly crewFull = computed(() => this.isPad() && this.area() === 'crew' && !this.padSettings());
+  /** The centre itself spans the right pane's column (Review, Flow, the thread). */
+  protected readonly centreCovers = computed(() => this.isPad() && !this.crewFull() && !this.padSettings() && (this.panes.covered() || this.flowOpen() !== null || this.padThread() !== null));
+  private readonly covering = computed(() => this.crewFull() || this.padSettings() || this.centreCovers());
+  /** The Assistant called over a covering surface; a transient state, the saved one stays. */
+  private readonly overlayOpen = signal(false);
+  /** Whether the right pane shows: the saved state, or over a covering surface only when called. */
+  protected readonly padRight = computed(() => (this.covering() ? this.overlayOpen() : this.panes.right()));
+
+  protected onToggleRight(): void {
+    if (this.covering()) {
+      this.overlayOpen.update((open) => !open);
+    } else {
+      this.panes.toggleRight();
+    }
+  }
+
+  protected closePadThread(): void {
+    const ticket = this.padThread();
+    this.padThread.set(null);
+    if (ticket !== null && ticket !== '') {
+      this.state.openTicket(ticket);
+    }
+  }
+
+  /** A chat row in the iPad's chats list: that session in the centre. */
+  protected onPadChat(entry: SessionMeta): void {
+    void this.state.openSession(entry.file);
+  }
 
   // -- navigation -------------------------------------------------------------------
 
@@ -403,6 +452,7 @@ export class App {
   protected goTab(tab: McTab): void {
     this.state.ticketOpen.set(null);
     this.state.personaDetail.set(null);
+    this.state.padThread.set(null);
     this.tab.set(tab);
   }
 
@@ -433,6 +483,9 @@ export class App {
   /** New chat from the phone menu: the chat screen with no session open — the first send starts one. */
   protected onMenuNewChat(): void {
     this.state.closeSession();
+    if (this.isPad() && this.padThread() !== null) {
+      return;
+    }
     this.goTab('chat');
   }
 }

@@ -143,7 +143,7 @@
  * columns with the title centred between them, 17 bold; back in the text
  * colour, chevron stroke 1.75. An Autopilot icon widens the side columns to 100.
  */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   .bar,
   .sub-page {
     grid-template-columns: 96px minmax(0, 1fr) 96px;
@@ -196,5 +196,37 @@
 
   .end {
     gap: 0;
+  }
+}
+
+/* The iPad: the shell's header carries the inset, a pane's bar is 52 + its border (10n, 10f, 5h, 5i). */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .bar,
+  .sub-page {
+    min-height: 53px;
+    padding: 0 4px;
+  }
+  .menu-btn,
+  .own-menu .menu-btn {
+    display: none;
+  }
+  /* A top-level pane has nothing to go back to; the column stays, the title centred (10n). */
+  .menu-back {
+    display: flex;
+    visibility: hidden;
+  }
+  /* Chevron and title sit where the 5h / 5i bars have them. */
+  .sub-page {
+    grid-template-columns: 150px minmax(0, 1fr) 150px;
+    padding: 0 8px;
+  }
+  .no-wide-back,
+  .top-page {
+    grid-template-columns: 96px minmax(0, 1fr) 96px;
+    padding: 0 4px;
+  }
+  .top-page:not(.own-menu) {
+    grid-template-columns: 96px minmax(0, 1fr) 96px;
+    padding-left: 4px;
   }
 }

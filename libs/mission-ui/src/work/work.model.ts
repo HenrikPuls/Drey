@@ -249,6 +249,8 @@ export interface McLiveRunSlice {
  * silent.
  */
 export interface McWorkState {
+  /** The ticket or plan open beside the list: the iPad's marked row (10e). */
+  readonly openTicketId?: string | null;
   /** Today's spend over the crew's budgets (the phone's cost strip); absent = nothing known. */
   readonly today?: { readonly cost: number | null; readonly budget: number | null } | null;
   /** The live runs with the watchdog's flag (the phone's row words). */

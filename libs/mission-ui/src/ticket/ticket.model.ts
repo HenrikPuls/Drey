@@ -1042,6 +1042,8 @@ export interface TicketVm {
    * desk resolves the ticket ids the owner types. Optional like `prefillChat`.
    */
   openChat?(): void;
+  /** The iPad's Thread (board 10f): the ticket's conversation in the centre. */
+  openPadThread?(id: string): void;
   /**
    * The ticket face's 'Shape with Paul' (E10-3): opens the chat on this
    * ticket's shape session. Optional — an adapter without shape sessions

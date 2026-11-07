@@ -30,6 +30,7 @@
       }
     </button>
   }
+  <ng-content select="[answer-foot]" />
   @if (error(); as message) {
     <p class="err" role="alert">{{ message }}</p>
   }

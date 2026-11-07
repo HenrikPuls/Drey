@@ -1,0 +1,53 @@
+/* The iPad's note (10n: View, 10r: edit): a column in the centre, Mission Control is beside it. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .ph-noteview {
+    padding: 14px 28px;
+  }
+  .ph-noteview > * {
+    width: 100%;
+    max-width: 640px;
+    margin-inline: auto;
+  }
+  .ph-askbar {
+    display: none;
+  }
+  .ph-editbar {
+    min-height: 45px;
+    padding: 0 4px;
+    border-bottom-color: var(--panel-2);
+  }
+  .ph-save,
+  .ph-save:disabled {
+    color: var(--accent);
+    background: transparent;
+    opacity: 1;
+  }
+  .ph-editbar-title {
+    font-size: var(--ph-16);
+  }
+  .pd-editpath {
+    flex: none;
+    padding: 14px 24px 0;
+  }
+  .ph-tabs-wrap {
+    padding: 14px 24px 0;
+  }
+  .ph-tabs {
+    display: inline-flex;
+    width: auto;
+  }
+  .ph-tab {
+    flex: none;
+    height: 44px;
+    padding: 0 18px;
+  }
+  .ph-editor {
+    padding: 14px 24px;
+  }
+  .ph-format {
+    justify-content: flex-start;
+    gap: 4px;
+    padding: 4px 16px;
+    margin-bottom: 0;
+  }
+}

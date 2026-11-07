@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { padSignal } from '../phone/phone';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import type { CostTableView } from './cost-table.model';
@@ -18,6 +19,8 @@ import type { CostTableView } from './cost-table.model';
 })
 export class CostTable {
   private readonly i18n = inject(McI18n);
+  /** The iPad's table reads as the boards': `Plan · Paul`, then the model alone (10e). */
+  protected readonly pad = padSignal();
   readonly view = input.required<CostTableView>();
   /** The phone's rows of phases without a run: only these, the ones still to come. */
   readonly openPhases = input<readonly string[] | null>(null);
@@ -35,6 +38,15 @@ export class CostTable {
   protected phoneTitle(row: CostTableView['rows'][number]): string {
     const persona = row.pending ? '' : row.model.split(' · ')[0]!;
     return persona === '' ? row.phase : `${row.phase} · ${persona}`;
+  }
+
+  protected padModel(row: CostTableView['rows'][number]): string {
+    return row.model.split(' · ').slice(1).join(' · ');
+  }
+
+  /** The time as the board's cells write it: `4m`. */
+  protected padTime(time: string): string {
+    return this.shortTime(time);
   }
 
   /** The phone's grey line: the model, the tokens and the time. */

@@ -136,7 +136,7 @@
 }
 
 /* The phone's bar above the keyboard replaces the strip (board 10p). */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   .mdx-strip {
     display: none;
   }
@@ -146,7 +146,7 @@
 }
 
 /* The surface on the phone (boards 10d, 10l, 10p): 17/26, 14 px between blocks, no gutter, boards' task rows. */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   .mdx {
     --drey-editor-scale: calc(var(--mc-scale, 1) * 1.1724);
   }

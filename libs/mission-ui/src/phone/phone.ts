@@ -18,6 +18,34 @@ export function phoneSignal(): Signal<boolean> {
   return phone.asReadonly();
 }
 
+/**
+ * The touch face (row 10, "one mobile system"): the phone and the iPad draw the
+ * boards' pieces, the desktop web (a mouse, decision 13) keeps its wide
+ * templates. Same test as the shell's (width + coarse pointer without hover).
+ */
+export const TOUCH_FACE_QUERY = `${PHONE_QUERY}, (hover: none) and (pointer: coarse)`;
+export const PAD_QUERY = '(min-width: 768px) and (hover: none) and (pointer: coarse)';
+
+function mediaSignal(query: string): Signal<boolean> {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return signal(false);
+  }
+  const list = window.matchMedia(query);
+  const value = signal(list.matches);
+  list.addEventListener('change', (event) => value.set(event.matches));
+  return value.asReadonly();
+}
+
+/** Phone or iPad: the templates the boards draw. False on the desktop web and in a plain unit-test DOM. */
+export function touchFaceSignal(): Signal<boolean> {
+  return mediaSignal(TOUCH_FACE_QUERY);
+}
+
+/** The iPad only: where the touch face differs by size (boards 5b–5i, 10e–10s). */
+export function padSignal(): Signal<boolean> {
+  return mediaSignal(PAD_QUERY);
+}
+
 /** A past day as the phone's rows write it (boards 10b, 10k): `Mon` within the week, else `28 Oct`. */
 export function shortDayOf(
   date: Date,

@@ -1,0 +1,84 @@
+/* The iPad's chat: the Assistant in the right pane (10e), the thread in the centre (10f). */
+.pd-carddone {
+  margin: 0;
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--text-2);
+}
+.pd-cardnote {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--text);
+  resize: none;
+  background: var(--panel);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+}
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .answers,
+  .attach {
+    display: none !important;
+  }
+  .pd-cardbody {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 12px 14px;
+  }
+  /* The centre (10f): one 680 px column. */
+  .thread {
+    gap: 16px;
+    padding: 12px 28px;
+  }
+  .thread > * {
+    flex: none;
+    width: 100%;
+    max-width: 680px;
+    margin-inline: auto;
+  }
+  .thread > .msg.owner {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 680px;
+  }
+  .msg.owner .bubble {
+    max-width: 80%;
+  }
+  .composer {
+    width: 100%;
+    max-width: 736px;
+    margin-inline: auto;
+    padding: 8px 28px var(--pd-foot, 20px);
+  }
+  .ph-linkcard {
+    min-height: 74px;
+  }
+  /* The Assistant (10e): 16 px, the composer on the pane. */
+  :host-context(.pad-right) .thread {
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  :host-context(.pad-right) .msg.owner .bubble {
+    max-width: 85%;
+    font-size: var(--ph-16);
+    line-height: 23px;
+  }
+  :host-context(.pad-right) .msg.mission .bubble {
+    font-size: var(--ph-16);
+    line-height: 24px;
+  }
+  :host-context(.pad-right) .composer {
+    max-width: none;
+    margin: 0 12px 12px;
+    padding: 0;
+    width: auto;
+  }
+  :host-context(.pad-right) .composer-input {
+    font-size: var(--ph-16);
+  }
+  :host-context(.pad-right) .mic svg {
+    width: 20px;
+    height: 20px;
+  }
+}

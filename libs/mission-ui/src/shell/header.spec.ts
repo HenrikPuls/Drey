@@ -66,9 +66,7 @@ describe('ShellHeader (req-96)', () => {
     const labels = () => Array.from(el.querySelectorAll('.switch .sw')).map((b) => b.textContent!.replace(/\s+/g, ' ').trim());
     expect(labels()).toEqual(['Work 2', 'Crew']);
     expect(el.querySelector('.switch .sw.on')!.textContent).toContain('Work');
-    expect(el.querySelector('.switch .sw.on .bdg')!.textContent).toBe('2');
     host.notes.set(true);
-    host.needs.set(0);
     fixture.detectChanges();
     expect(labels()).toEqual(['Notes', 'Work', 'Crew']);
     expect(el.querySelector('.bdg')).toBeNull();

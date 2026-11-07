@@ -1,14 +1,29 @@
 @if (phone()) {
+  @if (pad()) {
+    <div class="pd-head">
+      <b>{{ 'work.pad.tickets' | t }}</b>
+      <span class="pd-grow"></span>
+      @if (todayText(); as today) {
+        <span class="pd-today" [attr.title]="soFar">{{ today }}</span>
+      }
+      <button type="button" class="ph-iconbtn" [attr.aria-label]="'work.phone.search' | t" [attr.title]="'work.phone.search' | t" [attr.aria-expanded]="searchOpen()" (click)="toggleSearch()">
+        <mc-ph-icon name="search" />
+      </button>
+    </div>
+  } @else {
   <mc-app-bar [title]="'shell.work' | t" [autopilot]="true">
     <button bar-end type="button" class="ph-iconbtn" [attr.aria-label]="'work.phone.search' | t" [attr.title]="'work.phone.search' | t" [attr.aria-expanded]="searchOpen()" (click)="toggleSearch()">
       <mc-ph-icon name="search" />
     </button>
   </mc-app-bar>
+  }
   @if (state === null) {
     <p class="work-note">{{ 'work.phone.not_connected' | t }}</p>
   } @else {
-    @if (todayText(); as today) {
-      <div class="ph-today" [attr.title]="soFar">{{ today }}</div>
+    @if (!pad()) {
+      @if (todayText(); as today) {
+        <div class="ph-today" [attr.title]="soFar">{{ today }}</div>
+      }
     }
     @if (searchOpen()) {
       <div class="ph-searchwrap">
@@ -33,6 +48,7 @@
               <button
                 type="button"
                 class="ph-trow ticket-card"
+                [class.cur]="pad() && row.ticketId === state.openTicketId"
                 [class.flash-forward]="isFlashing(vm, 'forward')"
                 [class.flash-back]="isFlashing(vm, 'back')"
                 (pointerdown)="onCardPointerDown($event, vm)"
@@ -47,7 +63,7 @@
                 <ng-container [ngTemplateOutlet]="phoneRow" [ngTemplateOutletContext]="{ $implicit: row }" />
               </button>
             } @else {
-              <button type="button" class="ph-trow" (click)="openPhoneRow(row)">
+              <button type="button" class="ph-trow" [class.cur]="pad() && row.ticketId === state.openTicketId" (click)="openPhoneRow(row)">
                 <ng-container [ngTemplateOutlet]="phoneRow" [ngTemplateOutletContext]="{ $implicit: row }" />
               </button>
             }
@@ -60,6 +76,15 @@
   }
 
   <ng-template #phoneRow let-row>
+    @if (pad()) {
+      <span class="ph-tbody">
+        <span class="ph-ttitle ph-ellipsis">{{ row.title }}</span>
+        <span class="ph-tmeta"><span class="ph-tline ph-ellipsis">{{ row.padMeta }}</span></span>
+      </span>
+      @if (row.need !== null) {
+        <span class="ph-hot" role="img" [attr.aria-label]="'work.phone.needs_you' | t"></span>
+      }
+    } @else {
     <span class="ph-tbody">
       <span class="ph-ttitle ph-ellipsis">{{ row.title }}</span>
       <span class="ph-tmeta">
@@ -70,6 +95,7 @@
       </span>
     </span>
     <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+    }
   </ng-template>
 } @else {
 <mc-app-bar title="Work" [sub]="vaultTitle()" [autopilot]="true">

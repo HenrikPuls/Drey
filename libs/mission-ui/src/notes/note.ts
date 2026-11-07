@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import type { MessageKey } from '../../../../shared/i18n';
 import { AppBar } from '../app-bar/app-bar';
 import { PhoneIcon, type PhoneIconName } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
 import { noteWhenOf } from './notes.model';
 import type { ToolbarAction } from '@markdown-surface/toolbar-commands';
 import { McI18nPipe } from '../i18n/i18n.pipe';
@@ -36,11 +36,12 @@ const PHONE_FORMAT_BUTTONS: readonly { readonly icon: PhoneIconName; readonly la
   selector: 'mc-note',
   imports: [AppBar, McI18nPipe, Markdown, PhoneIcon],
   templateUrl: './note.html',
-  styleUrls: ['../phone/kit.css', './note.css'],
+  styleUrls: ['../phone/kit.css', './note.css', './note-pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Note {
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
   protected readonly store = inject(NotesStore);
   private readonly i18n = inject(McI18n);
 

@@ -211,6 +211,8 @@ export class McState {
   // --- the ticket screen's slice (E5c) --------------------------------------
   /** The ticket the screen shows; null = the board, not one ticket. */
   readonly ticketOpen = signal<{ id: string } | null>(null);
+  /** The iPad's thread in the centre (board 10f): the ticket it was opened from; null = the chat is the right pane. */
+  readonly padThread = signal<string | null>(null);
   /**
    * The ticket a card back-swipe parked its Send-back on: the screen
    * answers by opening its Send-back panel (on the proof face) for this
@@ -508,6 +510,18 @@ export class McState {
   openChat(): void {
     this.closeTicket();
     this.tab.set('chat');
+  }
+
+  /** The iPad's Thread (10f): the ticket's conversation in the centre, or an empty one when it has none yet. */
+  openPadThread(id: string): void {
+    const session = this.chat().sessions.find((entry) => entry.ticket === id || entry.title.startsWith(`${id}:`));
+    this.closeTicket();
+    this.padThread.set(id);
+    if (session === undefined) {
+      this.closeSession();
+    } else {
+      void this.openSession(session.file);
+    }
   }
 
   /** Starts a session with the first owner message and opens it; `ticket` makes it a shape session. */
@@ -1041,6 +1055,7 @@ export class McState {
    * an open — only the swipe's own call re-parks one, right after.
    */
   openTicket(id: string): void {
+    this.padThread.set(null);
     this.ticketOpen.set({ id });
     this.sendBackPending.set(null);
     this.ticketDetail.set(null);

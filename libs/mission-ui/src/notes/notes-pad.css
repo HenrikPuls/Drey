@@ -1,0 +1,6 @@
+/* The iPad's Notes list (10n, 10r). */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .ph-note-row.cur {
+    background: var(--panel-2);
+  }
+}
