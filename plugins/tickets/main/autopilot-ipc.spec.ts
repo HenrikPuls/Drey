@@ -29,5 +29,8 @@ describe('chainAutopilotOf', () => {
     expect(await chainAutopilotOf({ state: 'off' }, NOW, async () => null)).toEqual({ ok: false, error: 'runner_down', code: 'runner_down' });
     const refusal = { ok: false, error: 'bad_state', code: 'bad_state' } as const;
     expect(await chainAutopilotOf({ state: 'off' }, NOW, async () => refusal)).toEqual(refusal);
+    // D-51: the engine's reason for a runner that could not be started travels unchanged.
+    const down = { ok: false, error: 'the fleet runner could not be started: EEXIST', code: 'runner_down' } as const;
+    expect(await chainAutopilotOf({ state: 'on' }, NOW, async () => down)).toEqual(down);
   });
 });

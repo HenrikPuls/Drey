@@ -265,11 +265,20 @@ describe('the Autopilot writes', () => {
     expect((await words('bad_resume_at')).words).toBe('That resume time is not in the future.');
     expect((await words('bad_state')).words).toBe('The runner does not know that state.');
     expect((await words('runner_down')).words).toBe('The runner is not running.');
-    expect((await words('zzz')).words).toBe('The change was refused.');
+    expect((await words('zzz')).words).toBe('The change failed: zzz');
+    expect(await writeAutopilot({ invoke: async () => ({ ok: false, error: '' }) }, t, { state: 'on' })).toEqual({ ok: false, words: 'The change was refused.' });
   });
 
-  it('reads a thrown call or the chain\'s "not running" text as the runner being down', async () => {
-    expect(await writeAutopilot({ invoke: async () => Promise.reject(new Error('x')) }, t, { state: 'on' })).toEqual({ ok: false, words: 'The runner is not running.' });
+  it('D-51: a thrown call says what failed; only the engine says the runner is down, with its reason when it has one', async () => {
+    expect(await writeAutopilot({ invoke: async () => Promise.reject(new Error('No handler registered for chainAutopilot')) }, t, { state: 'on' })).toEqual({
+      ok: false,
+      words: 'The change failed: No handler registered for chainAutopilot',
+    });
     expect(await stopAllNow({ invoke: async () => ({ ok: false, error: 'the fleet runner is not running' }) }, t)).toEqual({ ok: false, words: 'The runner is not running.' });
+    const down = { ok: false, error: 'the fleet runner did not come up within 10 s', code: 'runner_down' };
+    expect(await writeAutopilot({ invoke: async () => down }, t, { state: 'on' })).toEqual({
+      ok: false,
+      words: 'The runner could not be started: the fleet runner did not come up within 10 s',
+    });
   });
 });

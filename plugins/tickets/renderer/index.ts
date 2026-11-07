@@ -34,7 +34,7 @@ import { THREAD_KEY } from './ticket-page';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { AUTOPILOT_COMMAND_ID, costSlotOf, createStatusSlots, type StatusSlotController } from './status-slot';
 import { createAutopilotCommand } from './autopilot/command';
-import { autopilotViewOf } from '../../../shared/autopilot';
+import { autopilotSwitchViewOf } from '../../../shared/autopilot';
 import { ageWords, checkpointActionOf, crewLineOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyBarNode, readyCardNode, storyNode } from './ready-view';
 import { stepCardOf } from '../shared/step-card';
@@ -371,6 +371,9 @@ let statusSlots: StatusSlotController | null = null;
 let statusApi: DreyPluginApi | null = null;
 /** Opens or closes the Autopilot popover: what Settings' "Change…" runs (board 7g). */
 let toggleAutopilotPopover: (() => void) | null = null;
+/** Whether a tickets vault is open: the Autopilot switch shows only then; a down runner reads as Off (D-51). */
+const hasTicketsVault = (): boolean => snapshot !== null && snapshot.vaultId !== null;
+
 const refreshStatusItem = (): void => {
   if (statusSlots === null || statusApi === null) {
     return;
@@ -386,7 +389,7 @@ const refreshStatusItem = (): void => {
     // No runner (req-110: it leaves when the Autopilot is Off and nothing is live) means
     // Off, not "no item": the switch is how the owner turns it on (board 10t). Hidden
     // only without a tickets vault.
-    autopilot: snapshot === null || snapshot.vaultId === null ? null : (autopilotViewOf(chain)?.state ?? 'off'),
+    autopilot: autopilotSwitchViewOf(hasTicketsVault(), chain)?.state ?? null,
     inNotesView: statusApi.ui.activeViewId() === 'notes',
   });
   // Board 7h: the dot on the Work view's tab while something needs the owner there (SDK 1.50).
@@ -3057,7 +3060,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     fleetListeners.add(refreshStatusItem);
     const autopilotCommand = createAutopilotCommand({
       api,
-      view: () => autopilotViewOf(chain),
+      view: () => autopilotSwitchViewOf(hasTicketsVault(), chain),
       applyStatus: applyChainStatus,
       costText: () => {
         const team = teamModelOf(teamStore(api).personas(), fleetRuns, chain, () => null, Date.now());

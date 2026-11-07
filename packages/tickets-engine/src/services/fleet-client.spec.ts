@@ -118,10 +118,15 @@ describe('FleetClient Autopilot', () => {
   let server: http.Server;
   let chain: Record<string, unknown>;
   const posted: unknown[] = [];
+  /** D-51: the next autopilot write is answered "leaving", and the next health probe fails once. */
+  let leaveOnce = false;
+  let healthDownOnce = false;
 
   beforeEach(async () => {
     root = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-client-'));
     posted.length = 0;
+    leaveOnce = false;
+    healthDownOnce = false;
     chain = { configured: true, master: 'halted', autopilot: { state: 'off' } };
     server = http.createServer((req, res) => {
       const send = (status: number, body: unknown): void => {
@@ -129,9 +134,19 @@ describe('FleetClient Autopilot', () => {
         res.end(JSON.stringify(body));
       };
       if (req.url === '/health') {
+        if (healthDownOnce) {
+          healthDownOnce = false;
+          send(503, { ok: false });
+          return;
+        }
         send(200, { ok: true, live: 0 });
       } else if (req.url === '/status') {
         send(200, { runs: [] });
+      } else if (req.url === '/chain/autopilot' && leaveOnce) {
+        leaveOnce = false;
+        healthDownOnce = true;
+        req.resume();
+        send(503, { ok: false, error: 'the runner is leaving', code: 'leaving' });
       } else if (req.url === '/chain') {
         send(200, chain);
       } else if (req.url === '/chain/autopilot') {
@@ -183,6 +198,17 @@ describe('FleetClient Autopilot', () => {
       await client.runs();
       await client.runs();
       expect(states).toEqual([paused, { state: 'on' }]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it('D-51: a runner on its way out is waited out and the write lands on the next one', async () => {
+    leaveOnce = true;
+    const client = new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: () => undefined, onFleetChanged: () => undefined });
+    try {
+      expect(await client.setAutopilot({ state: 'on' })).toMatchObject({ autopilot: { state: 'on' } });
+      expect(posted).toEqual([{ state: 'on' }]);
     } finally {
       client.dispose();
     }
@@ -269,5 +295,38 @@ describe('FleetClient retireIfIdle', () => {
     await fsp.rm(path.join(root, 'runner.json'));
     expect(await client().retireIfIdle()).toEqual({ ok: true, exiting: false, reason: 'down' });
     expect(retires).toEqual([]);
+  });
+});
+
+/** D-51: a runner that cannot be started is a refusal that names why — never a bare "not running". */
+describe('FleetClient runner start failure', () => {
+  let dir = '';
+
+  beforeEach(async () => {
+    dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-client-'));
+  });
+
+  afterEach(async () => {
+    await fsp.rm(dir, { recursive: true, force: true });
+  });
+
+  it('an unwritable fleet root: the Autopilot write is refused with the start error', async () => {
+    // A file where the fleet root should be: the runner's folder cannot be made.
+    const root = path.join(dir, 'fleet');
+    await fsp.writeFile(root, 'not a folder');
+    const logs: string[] = [];
+    const client = new FleetClient({ root, runnerScript: path.join(dir, 'runner.js'), log: (m) => logs.push(m), onFleetChanged: () => undefined });
+    try {
+      const reply = await client.setAutopilot({ state: 'on' });
+      expect(reply).toMatchObject({ ok: false, code: 'runner_down' });
+      // The bare cause: the refusal code already says the runner could not be started.
+      expect((reply as { error: string }).error).toMatch(/EEXIST|ENOTDIR/);
+      expect(logs.some((line) => line.startsWith('the fleet runner could not be started'))).toBe(true);
+      // A run start says the same.
+      const started = await client.start({ ticketId: 'T-1' } as never);
+      expect(started).toMatchObject({ ok: false, error: expect.stringMatching(/could not be started/) as unknown as string });
+    } finally {
+      client.dispose();
+    }
   });
 });

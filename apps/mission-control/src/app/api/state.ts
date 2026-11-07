@@ -1727,10 +1727,10 @@ export class McState {
         ...(error instanceof ApiError && error.code !== null ? { code: error.code } : {}),
       }));
     if (isFailure(body)) {
-      return autopilotRefusalOf(body, 'The change was refused.');
+      return autopilotRefusalOf(body, '');
     }
     if (body['ok'] !== true) {
-      return autopilotRefusalOf(body, 'The change was refused.');
+      return autopilotRefusalOf(body, '');
     }
     await this.refreshTeam();
     return { ok: true };
@@ -1745,7 +1745,7 @@ export class McState {
         ...(error instanceof ApiError && error.code !== null ? { code: error.code } : {}),
       }));
     if (isFailure(body) || body['ok'] !== true) {
-      return autopilotRefusalOf(body, 'The change was refused.');
+      return autopilotRefusalOf(body, '');
     }
     await this.refreshTeam();
     return { ok: true };

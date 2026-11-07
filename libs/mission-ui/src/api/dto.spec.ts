@@ -530,6 +530,11 @@ describe('parseTeam — live runs and capacity (E12-4)', () => {
     ]);
     expect(parseTeam(personas, { runs: [], chain: { master: 'run' } }).capacity).toBeUndefined();
   });
+
+  it('D-51: a fleet with `chain: null` (the runner is down) reads as Autopilot Off; no chain field stays unknown', () => {
+    expect(parseTeam(personas, { runs: [], chain: null }).autopilot).toEqual({ state: 'off' });
+    expect(parseTeam(personas, { runs: [] }).autopilot).toBeUndefined();
+  });
 });
 
 describe('parseTeam', () => {

@@ -2,8 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal } from '@angular/core';
 import {
   AUTOPILOT_KINDS,
-  autopilotRefusalCodeOf,
-  autopilotRefusalKeyOf,
+  autopilotRefusalWordsOf,
   resumeAtOfTime,
   timeFieldOfResume,
   type AutopilotKind,
@@ -298,7 +297,8 @@ export class Settings {
     this.autopilotError.set(null);
     const reply = await this.autopilotState?.set(record);
     if (reply !== undefined && !reply.ok) {
-      this.autopilotError.set(this.i18n.t(autopilotRefusalKeyOf(reply.code ?? autopilotRefusalCodeOf(reply))));
+      const words = autopilotRefusalWordsOf(reply);
+      this.autopilotError.set(this.i18n.t(words.key, words.params));
     }
   }
 

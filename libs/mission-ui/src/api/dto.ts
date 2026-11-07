@@ -6,7 +6,7 @@
  * fields with defaults instead of throwing: a partial desk answer must
  * never white-screen the phone.
  */
-import { autopilotViewOf, type AutopilotView } from '../../../../shared/autopilot';
+import { autopilotSwitchViewOf, autopilotViewOf, type AutopilotView } from '../../../../shared/autopilot';
 import { maskFences } from '../../../../shared/markdown/fences';
 
 // --- Work ------------------------------------------------------------------
@@ -1116,7 +1116,10 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
   const chain = rec(fleet['chain']);
   const master = chain?.['master'];
   const chainMaster = master === 'run' || master === 'halted' ? master : null;
-  const autopilot = chain === null ? null : autopilotViewOf(chain);
+  // D-51: a snapshot that names no chain (`chain: null` — the runner is down,
+  // req-110) reads as Off, so the switch stays usable; a snapshot without the
+  // field at all leaves the Autopilot unknown.
+  const autopilot = chain === null ? (fleet['chain'] === null ? autopilotSwitchViewOf(true, null) : null) : autopilotViewOf(chain);
   const pausedPersonas = strArray(fleet['pausedPersonas']);
   const capacity = capacityOf(chain, runs);
   const personas: PersonaView[] = [];

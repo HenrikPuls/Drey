@@ -76,6 +76,8 @@ export class FleetClient {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnapshotJson = '';
   private readonly detachedProbes = new Map<string, { at: number; gone: boolean }>();
+  /** Why the last runner start failed (D-51); cleared when a runner is adopted. */
+  private lastRunnerFailure: string | null = null;
 
   constructor(private readonly opts: FleetClientOpts) {}
 
@@ -151,7 +153,7 @@ export class FleetClient {
 
   async start(request: RunRequest): Promise<StartOutcome> {
     if (!(await this.ensureRunner())) {
-      return { ok: false, error: 'the fleet runner is not running' };
+      return { ok: false, error: this.runnerDownReason() };
     }
     return this.post<StartOutcome>('/start', request);
   }
@@ -163,9 +165,15 @@ export class FleetClient {
     return this.post<{ ok: boolean; error?: string }>('/stop', { runId, reason });
   }
 
+  /**
+   * A message to a run (req-154): a chat with a worker is no Autopilot
+   * matter, so the runner is started on demand when it is down — a
+   * reopenable run resumes under the fresh runner. Its idle exit (req-110)
+   * still applies once the run settles again.
+   */
   async send(runId: string, text: string): Promise<{ ok: boolean; error?: string; rung?: string }> {
-    if (!(await this.withRunner())) {
-      return { ok: false, error: 'the fleet runner is not running' };
+    if (!(await this.ensureRunner())) {
+      return { ok: false, error: this.runnerDownReason() };
     }
     return this.post<{ ok: boolean; error?: string; rung?: string }>('/send', { runId, text });
   }
@@ -296,17 +304,14 @@ export class FleetClient {
    * device hears the change now — and starts the poll that carries the
    * runner's own later change (a resume time firing) to them.
    */
-  async setAutopilot(record: AutopilotRecord): Promise<ChainStatus | AutopilotRefusal | null> {
-    if (!(await this.ensureRunner())) {
-      return null;
+  async setAutopilot(record: AutopilotRecord): Promise<ChainStatus | AutopilotRefusal> {
+    const reply = await this.postToRunner<ChainStatus | AutopilotRefusal>('/chain/autopilot', record);
+    if (!reply.ok) {
+      // D-51: the refusal names why — the spawn failure, or what the request ran into.
+      return { ok: false, error: reply.error, code: 'runner_down' };
     }
-    try {
-      const reply = await this.post<ChainStatus | AutopilotRefusal>('/chain/autopilot', record);
-      await this.runs();
-      return reply;
-    } catch {
-      return null;
-    }
+    await this.runs();
+    return reply.value;
   }
 
   async setColumn(phase: string, mode: ColumnMode): Promise<ChainStatus | null> {
@@ -536,6 +541,64 @@ export class FleetClient {
     return true;
   }
 
+  /** A run start's or a message's refusal without a runner: the last start failure, else the plain fact. */
+  private runnerDownReason(): string {
+    return this.lastRunnerFailure !== null ? `the fleet runner could not be started: ${this.lastRunnerFailure}` : 'the fleet runner is not running';
+  }
+
+  /** The Autopilot refusal's reason (`runner_down` already says "could not be started"): the bare cause. */
+  private runnerFailureCause(): string {
+    return this.lastRunnerFailure ?? 'the fleet runner is not running';
+  }
+
+  /**
+   * A write that brings the runner up when it is down (D-51). A runner that
+   * answers "leaving" (req-110: it exits after an Off with nothing live) is
+   * waited out and a fresh one started, once; a request the runner died
+   * under is retried the same way. Never null: a failure says why.
+   */
+  private async postToRunner<T>(
+    pathname: string,
+    body: unknown,
+  ): Promise<{ readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string }> {
+    let lastError = this.runnerFailureCause();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!(await this.ensureRunner())) {
+        return { ok: false, error: this.runnerFailureCause() };
+      }
+      try {
+        const res = await fetch(`${this.base()}${pathname}`, {
+          method: 'POST',
+          headers: { ...this.headers(), 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const reply = (await res.json()) as T & { code?: unknown };
+        if (res.status === 503 && reply.code === 'leaving') {
+          lastError = 'the fleet runner was leaving and no new one came up';
+          await this.waitGone();
+          continue;
+        }
+        return { ok: true, value: reply };
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+        if (this.descriptor !== null && (await this.alive(this.descriptor))) {
+          return { ok: false, error: lastError };
+        }
+        this.descriptor = null;
+      }
+    }
+    return { ok: false, error: lastError };
+  }
+
+  /** Waits (bounded) until the current runner stops answering, then forgets it. */
+  private async waitGone(): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && this.descriptor !== null && (await this.alive(this.descriptor))) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    this.descriptor = null;
+  }
+
   private async spawnRunner(): Promise<boolean> {
     if (this.spawning !== null) {
       return this.spawning;
@@ -552,7 +615,11 @@ export class FleetClient {
           stdio: 'ignore',
           windowsHide: true,
         });
-        child.once('error', (error) => this.opts.log(`fleet runner spawn failed: ${String(error)}`, 'warn'));
+        let spawnError: string | null = null;
+        child.once('error', (error) => {
+          spawnError = error.message;
+          this.opts.log(`fleet runner spawn failed: ${String(error)}`, 'warn');
+        });
         child.unref();
         const deadline = Date.now() + 10_000;
         for (;;) {
@@ -560,15 +627,19 @@ export class FleetClient {
           this.descriptor = await this.readDescriptor();
           if (this.descriptor !== null && (await this.alive(this.descriptor))) {
             this.opts.log(`fleet runner adopted (pid ${this.descriptor.pid}, port ${this.descriptor.port})`);
+            this.lastRunnerFailure = null;
             return true;
           }
-          if (Date.now() > deadline) {
-            this.opts.log('the fleet runner did not come up in time', 'warn');
+          if (spawnError !== null || Date.now() > deadline) {
+            this.lastRunnerFailure =
+              spawnError ?? `it did not come up within 10 s (see ${path.join(this.opts.root, 'runner.log')})`;
+            this.opts.log(`the fleet runner could not be started: ${this.lastRunnerFailure}`, 'warn');
             return false;
           }
         }
       } catch (error) {
-        this.opts.log(`the fleet runner could not be started: ${String(error)}`, 'warn');
+        this.lastRunnerFailure = error instanceof Error ? error.message : String(error);
+        this.opts.log(`the fleet runner could not be started: ${this.lastRunnerFailure}`, 'warn');
         return false;
       } finally {
         this.spawning = null;

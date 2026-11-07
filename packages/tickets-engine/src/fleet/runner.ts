@@ -318,6 +318,14 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
         respond(200, { ok: true, version: VERSION, build: buildStamp, live: supervisorsOfLive() });
         return;
       }
+      // D-51: a runner on its way out (req-110's exit after an Off) takes no
+      // more writes — an On sent in that instant would be answered and then
+      // lost with the process. The client waits for the exit and starts a
+      // fresh runner instead.
+      if (req.method === 'POST' && leaving && pathname !== '/shutdown' && pathname !== '/retire-if-idle') {
+        respond(503, { ok: false, error: 'the runner is leaving', code: 'leaving' });
+        return;
+      }
       if (req.method === 'POST' && pathname === '/shutdown') {
         const body = (await readBody(req).catch(() => ({}))) as { handover?: unknown };
         if (body.handover === true) {

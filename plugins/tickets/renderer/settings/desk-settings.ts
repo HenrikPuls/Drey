@@ -37,6 +37,8 @@ export interface DeskSettings {
   readonly videos: HTMLElement;
   /** Repaints the rows that follow the board; refetches the engine's answers. */
   update(snapshot: BoardSnapshot): void;
+  /** Repaints the Autopilot row: the fleet changed (the popover switched it, or the runner left — D-51). */
+  repaintAutopilot(): void;
 }
 
 /** One group of the page: the board's heading, then its settings. */
@@ -328,6 +330,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   return {
     root,
     videos: video.root,
+    repaintAutopilot: () => void paintAutopilot(),
     update: (next) => {
       snapshot = next;
       paintFlow();

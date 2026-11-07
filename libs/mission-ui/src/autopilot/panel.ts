@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import {
   AUTOPILOT_KINDS,
-  autopilotRefusalCodeOf,
-  autopilotRefusalKeyOf,
+  autopilotRefusalWordsOf,
   autopilotToneOf,
   resumeAtOfTime,
   timeFieldOfResume,
@@ -112,6 +111,7 @@ export class AutopilotPanel {
   }
 
   private wordsOf(reply: Extract<McAutopilotReply, { ok: false }>): string {
-    return this.i18n.t(autopilotRefusalKeyOf(reply.code ?? autopilotRefusalCodeOf(reply)));
+    const words = autopilotRefusalWordsOf(reply);
+    return this.i18n.t(words.key, words.params);
   }
 }
