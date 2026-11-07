@@ -80,7 +80,7 @@ describe('OpenWindows', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect([...host.querySelectorAll('.group')].map((g) => g.textContent?.trim())).toEqual([
+    expect([...host.querySelectorAll('.group b')].map((g) => g.textContent?.trim())).toEqual([
       'In this view',
       'In other views',
     ]);

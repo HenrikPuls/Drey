@@ -79,7 +79,7 @@ import { teamModelOf } from './team/team-model';
 import { createTeamStore, type TeamStore } from './team/team-store';
 import { createConversationProvider } from './conversation/targets';
 import { mountTeam } from './team/team-view';
-import { bandStatusOf, mountCapacity } from './team/capacity-view';
+import { bandHeaderStatusOf, bandStatusOf, mountCapacity } from './team/capacity-view';
 import { mountBoard } from './board/board-view';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -764,11 +764,23 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
         void runMutation('Switching the project', () => invokeBoard('switchProject', { id: project.value }));
       });
 
+      // Board 7a: the first of the header's hover actions; the title bar shows none (9a).
+      const captureButton = el('button', 'icon-btn');
+      captureButton.type = 'button';
+      captureButton.title = api.i18n.t('work.capture_by_voice_title');
+      captureButton.setAttribute('aria-label', api.i18n.t('work.capture_by_voice_title'));
+      captureButton.append(api.ui.icon('mic', 13));
+      captureButton.addEventListener('click', () => {
+        if (snapshot?.vaultId != null) {
+          openCreateModal(api, snapshot, { dictate: true });
+        }
+      });
+
       const newButton = el('button', 'icon-btn');
       newButton.type = 'button';
       newButton.title = 'New idea';
       newButton.setAttribute('aria-label', 'New idea');
-      newButton.append(api.ui.icon('plus', 14));
+      newButton.append(api.ui.icon('plus', 13));
       newButton.addEventListener('click', () => {
         if (snapshot?.vaultId != null) {
           openCreateModal(api, snapshot);
@@ -779,7 +791,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       boardButton.type = 'button';
       boardButton.title = api.i18n.t('work.open_board');
       boardButton.setAttribute('aria-label', api.i18n.t('work.open_board'));
-      boardButton.append(api.ui.icon('table', 14));
+      boardButton.append(api.ui.icon('table', 13));
       boardButton.addEventListener('click', () => openBoardDoc(api));
 
       // E12-11 (boards 7a–7c): one 40 px row, never wrapping — filter ·
@@ -788,9 +800,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       // adds the grip. The project switch shows only with a second project.
       const viewControls = boardViewControlsNode(api);
       const actions = el('span', 'tickets-head-actions');
-      actions.append(newButton, boardButton);
+      actions.append(captureButton, newButton, boardButton);
       host.classList.add('tickets-panel-head');
-      host.append(project, viewControls.node, actions, el('span', 'tickets-head-spacer'), masterControlNode(api), headerMenuButton(api));
+      host.append(project, actions, viewControls.node, el('span', 'tickets-head-spacer'), masterControlNode(api), headerMenuButton(api));
       return () => {
         projectPainters.delete(paintProjects);
         viewControls.dispose();
@@ -1314,14 +1326,14 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HT
 function fleetFooterNode(api: DreyPluginApi): { readonly node: HTMLElement; readonly dispose: () => void } {
   const node = el('button', 'tickets-statusbar-fleet');
   node.type = 'button';
-  const light = el('span', 'tickets-light');
   const text = el('span', 'tickets-statusbar-fleet-text');
-  node.append(light, text);
+  const chevron = el('span', 'tickets-statusbar-fleet-go');
+  chevron.append(api.ui.icon('chevron-right', 13));
+  node.append(text, chevron);
   node.addEventListener('click', () => openTeamDoc(api));
   const paint = (): void => {
     const live = liveRuns();
     const line = fleetLine(live, currentChainAlerts(), Date.now());
-    light.className = `tickets-light tickets-light-${line.light}`;
     text.textContent = crewLineOf(
       live.map((run) => (run.persona === null || run.persona === undefined ? null : teamStore(api).nameOf(run.persona))),
       live.length,
@@ -3111,7 +3123,18 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       defaultOpen: false,
       defaultFlex: 120,
       flush: true,
-      status: () => bandStatusOf(fleetRuns),
+      status: () => bandHeaderStatusOf(fleetRuns, chain),
+      // Board 7e: one hover action, Pause all (a second press lets the chain run again).
+      headerActions: (host) => {
+        const pause = el('button', 'icon-btn');
+        pause.type = 'button';
+        pause.title = 'Pause all after the current step';
+        pause.setAttribute('aria-label', 'Pause all');
+        pause.append(api.ui.icon('pause', 14));
+        pause.addEventListener('click', () => void runChainAction('chainMaster', { mode: chain?.master === 'halted' ? 'run' : 'halted' }));
+        host.append(pause);
+        return () => pause.remove();
+      },
       mount: (el) => mountCapacity(deskDeps(api), teamStore(api), el, () => openTeamDoc(api)),
     });
     api.commands.register({ id: 'tickets.openBoard', label: 'Open the Board', run: () => openBoardDoc(api) });
@@ -3301,11 +3324,6 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
 
-    api.ui.registerTitlebarAction({
-      label: api.i18n.t('work.capture_by_voice'),
-      icon: 'mic',
-      commandId: 'tickets.newTicket',
-    });
     // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
     // chord raises Drey, reveals the board and opens the create modal.
     // Global — the base registers it with the OS; it never also fires

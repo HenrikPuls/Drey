@@ -6,17 +6,16 @@
  * (`team-model.ts`); the band is the glance, the tab the detail.
  */
 import { h, textButton, type DeskDeps } from '../desk-deps';
-import { capacityChipsNode } from './team-view';
-import type { RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
-import { isLiveRun, slotsLineOf, teamModelOf, usd, type PersonaCardModel } from './team-model';
+import type { ChainStatus, RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
+import { isLiveRun, teamModelOf, usd, usdBudget, type PersonaCardModel } from './team-model';
 import type { TeamStore } from './team-store';
 
 const TICK_MS = 15_000;
 
-/** The tab identities the band belongs to (board 7e): the Board and the Crew. */
-const BAND_TABS: readonly string[] = ['board://all', 'team://all'];
+/** The tab identity the band belongs to (board 7e); the Crew tab (7f) shows none. */
+const BAND_TABS: readonly string[] = ['board://all'];
 
-/** The band shows only while the Board or Crew tab is the active one; in a note or a ticket it would only be noise. */
+/** The band shows only while the Board tab is the active one; in a note, a ticket or the Crew tab it would only be noise. */
 export function bandShownFor(activePath: string | null): boolean {
   return activePath !== null && BAND_TABS.includes(activePath);
 }
@@ -31,8 +30,10 @@ export function personaLineOf(card: PersonaCardModel): string {
     return card.stateWord;
   }
   const extra = card.runs.length > 1 ? ` +${card.runs.length - 1}` : '';
-  const why = run.stuck ? 'stuck on' : run.waiting ? 'waits for you on' : 'works on';
-  return `${why} ${run.ticketId}${extra}`;
+  if (run.waiting && !run.stuck) {
+    return `${run.ticketId} waits for you${extra}`;
+  }
+  return `${run.stuck ? 'stuck on' : 'works on'} ${run.ticketId}${extra}`;
 }
 
 /** The status the panel header shows (`1 stuck`, `2 running`); null while nothing runs. Reads the runs only, so it works while the panel is closed. */
@@ -43,6 +44,41 @@ export function bandStatusOf(runs: readonly RunInfo[]): string | null {
     return `${stuck} stuck`;
   }
   return live.length > 0 ? `${live.length} running` : null;
+}
+
+/** The panel header's status (board 7e): `2 of 5 slots busy` once the pool sizes are known, else what runs. */
+export function bandHeaderStatusOf(runs: readonly RunInfo[], chain: ChainStatus | null): string | null {
+  const sizes = chain?.poolSize;
+  if (sizes !== undefined) {
+    const slots = Object.values(sizes).reduce((sum, size) => sum + (typeof size === 'number' && Number.isFinite(size) && size > 0 ? size : 0), 0);
+    if (slots > 0) {
+      return `${runs.filter(isLiveRun).length} of ${slots} slots busy`;
+    }
+  }
+  return bandStatusOf(runs);
+}
+
+/** A persona's avatar as the band draws it: initials on the persona colour, an orange dot while it is stuck. */
+function avatarNode(card: PersonaCardModel): HTMLElement {
+  const avatar = h('span', 'desk-cap-avatar', card.initials);
+  avatar.style.setProperty('--persona-color', card.color);
+  if (card.state === 'stuck') {
+    const dot = h('span', 'desk-cap-stuckdot');
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', 'Stuck');
+    avatar.append(dot);
+  }
+  return avatar;
+}
+
+/** Slot dots: one filled per live run (the persona's slot total needs an engine count, E13-19). */
+function slotDots(card: PersonaCardModel): HTMLElement {
+  const dots = h('span', 'desk-cap-slots');
+  const total = Math.max(1, card.runs.length);
+  for (let i = 0; i < total; i++) {
+    dots.append(h('span', `desk-cap-slot${i < card.runs.length ? ' desk-cap-slot-busy' : ''}`));
+  }
+  return dots;
 }
 
 export function mountCapacity(deps: DeskDeps, store: TeamStore, host: HTMLElement, openTeam: () => void): () => void {
@@ -57,33 +93,43 @@ export function mountCapacity(deps: DeskDeps, store: TeamStore, host: HTMLElemen
       return;
     }
     const model = teamModelOf(store.personas(), deps.runs(), deps.chain(), deps.titleOf, Date.now());
-    const lead = h('div', 'desk-cap-lead');
-    const slots = slotsLineOf(model);
-    lead.append(h('span', 'desk-cap-slots', slots === '' ? 'Capacity' : slots));
-    if (model.capacity.length > 0) {
-      lead.append(capacityChipsNode(model.capacity));
-    }
-    const people = h('div', 'desk-cap-people');
+    const nodes: HTMLElement[] = [];
     for (const card of model.personas) {
-      const person = h('div', `desk-cap-person desk-cap-${card.state}`);
-      person.style.setProperty('--persona-color', card.color);
-      person.append(h('span', 'desk-cap-dot'), h('span', 'desk-cap-name', card.title), h('span', 'desk-cap-line', personaLineOf(card)));
-      people.append(person);
+      const person = h('button', `desk-cap-person desk-cap-${card.state}`);
+      person.type = 'button';
+      person.dataset['persona'] = card.id;
+      person.title = `${card.title}: ${personaLineOf(card)}`;
+      person.addEventListener('click', openTeam);
+      const text = h('span', 'desk-cap-text');
+      const nameLine = h('span', 'desk-cap-nameline');
+      nameLine.append(h('span', 'desk-cap-name', card.title), slotDots(card));
+      text.append(nameLine, h('span', 'desk-cap-line', personaLineOf(card)));
+      person.append(avatarNode(card), text);
+      nodes.push(person);
     }
     if (store.loaded() && model.personas.length === 0) {
-      people.append(h('span', 'desk-cap-line', 'No personas yet'));
+      nodes.push(h('span', 'desk-cap-line', 'No personas yet'));
     }
-    const tail = h('div', 'desk-cap-tail');
+    nodes.push(h('span', 'desk-cap-sep'));
     if (model.todayCost !== null) {
-      tail.append(h('span', 'desk-cap-today', `Today ${usd(model.todayCost)}${model.todayBudget === null ? '' : ` of ${usd(model.todayBudget)}`}`));
+      const budget = h('div', 'desk-cap-budget');
+      const row = h('div', 'desk-cap-budget-row');
+      row.append(
+        h('span', 'desk-cap-budget-label', 'Budget'),
+        h('span', 'desk-cap-today', `${usd(model.todayCost)}${model.todayBudget === null ? '' : ` of ${usdBudget(model.todayBudget)}`} today`),
+      );
+      budget.append(row);
+      if (model.todayBudget !== null && model.todayBudget > 0) {
+        const bar = h('span', 'desk-bar');
+        const fill = h('span', 'desk-bar-fill');
+        fill.style.width = `${Math.min(100, Math.round((model.todayCost / model.todayBudget) * 100))}%`;
+        bar.append(fill);
+        budget.append(bar);
+      }
+      nodes.push(budget);
     }
-    tail.append(
-      textButton(model.halted ? 'Resume all' : 'Pause all', 'desk-btn', model.halted ? 'Let the chain dispatch again' : 'Let running work finish and start nothing new', () =>
-        void deps.chainAction('chainMaster', { mode: model.halted ? 'run' : 'halted' }),
-      ),
-      textButton('Open Crew ›', 'desk-btn desk-btn-link', 'Open the Crew tab', openTeam),
-    );
-    root.replaceChildren(lead, people, tail);
+    nodes.push(textButton('Crew', 'desk-btn desk-cap-crew', 'Open the Crew tab', openTeam));
+    root.replaceChildren(...nodes);
   };
 
   const schedule = (): void => {

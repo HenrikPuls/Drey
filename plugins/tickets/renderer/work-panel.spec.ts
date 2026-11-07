@@ -126,7 +126,7 @@ describe('workListNode', () => {
       createGroupFoldStore(null),
       () => undefined,
     );
-    expect(list.querySelector('.work-group-running .work-group-count')?.textContent).toBe('2 · 1 running');
+    expect(list.querySelector('.work-group-running .work-group-count')?.textContent).toBe('2');
     expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0002"]')!.dataset['running']).toBe('true');
     expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0003"]')!.hasAttribute('data-running')).toBe(false);
   });
@@ -174,8 +174,7 @@ describe('workListNode', () => {
     const list = workListNode(d, board({ done: [card('T-0003', 'done')] }), [], createGroupFoldStore(null), () => undefined);
     expect(titles(list)[0]).toBe('Needs you');
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    expect(row.querySelector('.work-kind')?.textContent).toBe('Ready to try');
-    expect(row.querySelector('.work-row-line')?.textContent).toBe('checks green');
+    expect(row.querySelector('.work-kind')?.textContent).toBe('ready to try');
     expect(row.querySelector('.work-action')).toBeNull();
     expect(row.querySelector('button.work-action')).toBeNull();
   });
@@ -183,8 +182,7 @@ describe('workListNode', () => {
   it('a checkpoint after the plan column reads as a plan to accept', () => {
     const list = workListNode(deps(), board({ 'plan-review': [card('T-0004', 'plan-review')] }), [], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    expect(row.querySelector('.work-kind')?.textContent).toBe('Plan to accept');
-    expect(row.querySelector('.work-row-line')?.textContent).toBe('plan ready');
+    expect(row.querySelector('.work-kind')?.textContent).toBe('plan to accept');
   });
 
   it('an interactive ticket shapes: the group shows, with the dialog not started', () => {
@@ -196,7 +194,7 @@ describe('workListNode', () => {
     expect(sub.querySelector('.work-row-line')?.textContent).toBe('Dialog not started');
   });
 
-  it('lists the queued ideas under Prioritized, waiting for their persona, and gives ideas their track chip', () => {
+  it('lists the queued ideas under Prioritized with the id at the right end; an Inbox row is its title alone (board 7a)', () => {
     const placed = {
       // Same priority and stamp: newest id first inside Ideas.
       inbox: [card('T-0006', 'inbox', { track: 'auto' }), card('T-0007', 'inbox', { track: 'shape' })],
@@ -205,14 +203,14 @@ describe('workListNode', () => {
     const list = workListNode(deps(), board(placed), [], createGroupFoldStore(null), () => undefined);
     const queued = [...list.querySelectorAll<HTMLElement>('.work-group-prioritized .work-row')];
     expect(queued.map((row) => row.dataset['id'])).toEqual(['T-0008']);
-    expect(queued[0]!.querySelector('.work-row-queued')?.textContent).toBe('Queued');
+    expect(queued[0]!.querySelector('.work-row-id')?.textContent).toBe('T-0008');
     const rows = [...list.querySelectorAll<HTMLElement>('.work-group-ideas .work-row')];
     expect(rows.map((row) => row.dataset['id'])).toEqual(['T-0007', 'T-0006']);
-    expect(rows[0]!.querySelector('.work-track')?.textContent).toBe('Shape');
-    expect(rows[1]!.querySelector('.work-track')?.textContent).toBe('Auto');
+    expect(rows[0]!.querySelector('.work-track')).toBeNull();
+    expect(rows[0]!.querySelector('.work-row-id')).toBeNull();
   });
 
-  it('every row carries the persona and the cost, and a Prioritized row says who it waits for (E13-8)', () => {
+  it('a rich row carries its cost grey at the right end; nothing is invented without one (E13-8, board 7a)', () => {
     const withCost = (id: string, at: string, cost: number | null, persona: string | null): TicketCard => {
       const base = card(id, at);
       return {
@@ -234,19 +232,16 @@ describe('workListNode', () => {
       () => undefined,
     );
     const build = list.querySelector<HTMLElement>('.work-group-running [data-id="T-0003"]')!;
-    expect(build.querySelector('.work-row-persona')?.textContent).toBe('BEN');
     expect(build.querySelector('.work-row-cost')?.textContent).toBe('$1.20');
     expect(build.querySelector<HTMLElement>('.work-row-cost')?.title).toBe('So far');
     const queued = list.querySelector<HTMLElement>('.work-group-prioritized [data-id="T-0002"]')!;
-    expect(queued.querySelector('.work-row-queued')?.textContent).toBe('waits for BEN');
-    expect(queued.querySelector('.work-row-cost')?.textContent).toBe('$0.50');
+    expect(queued.querySelector('.work-row-id')?.textContent).toBe('T-0002');
     // No known cost, no persona: nothing is invented.
     const idea = list.querySelector<HTMLElement>('.work-group-ideas [data-id="T-0001"]')!;
     expect(idea.querySelector('.work-row-cost')).toBeNull();
-    expect(idea.querySelector('.work-row-persona')).toBeNull();
   });
 
-  it('shows the first five ideas, then "<n> more" unfolds the rest (remembered)', () => {
+  it('shows the first two ideas, then "<n> more" unfolds the rest (remembered)', () => {
     const storage = memoryStorage();
     const folds = createGroupFoldStore(storage);
     const rerender = vi.fn();
@@ -254,9 +249,9 @@ describe('workListNode', () => {
       inbox: Array.from({ length: 7 }, (_, i) => card(`T-00${10 + i}`, 'inbox')),
     };
     const list = workListNode(deps(), board(placed), [], folds, rerender);
-    expect(list.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(5);
+    expect(list.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(2);
     const more = list.querySelector<HTMLButtonElement>('.work-ideas-more')!;
-    expect(more.textContent).toBe('2 more');
+    expect(more.textContent).toBe('5 more');
     more.click();
     expect(rerender).toHaveBeenCalledOnce();
     const open = workListNode(deps(), board(placed), [], createGroupFoldStore(storage), () => undefined);
@@ -264,7 +259,7 @@ describe('workListNode', () => {
     expect(open.querySelector('.work-ideas-more')?.textContent).toBe('Show fewer');
   });
 
-  it('a running row carries the dot, the step word and the activity line', () => {
+  it('a running row carries id, phase and the step word on its meta line (board 7a)', () => {
     const run = {
       id: 'r1',
       ticketId: 'T-0009',
@@ -278,27 +273,8 @@ describe('workListNode', () => {
     const list = workListNode(deps(), board({ build: [card('T-0009', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-running .work-row')!;
     expect(row.querySelector('.work-run-step')?.textContent).toBe('Building');
-    expect(row.querySelector('.work-run-line')?.textContent).toBe('edit electron/capture-hotkey.ts');
-    expect(row.querySelector('.work-run-dot-queued')).toBeNull();
-  });
-
-  it('always mounts the run line span, hidden while the worker says nothing', () => {
-    const run = {
-      id: 'r4',
-      ticketId: 'T-0020',
-      provider: 'opencode',
-      state: 'running',
-      startedAt: '2026-10-31T11:00:00Z',
-      endedAt: null,
-      gateFailure: null,
-    } as unknown as RunInfo;
-    const snap = board({ build: [card('T-0020', 'build')] });
-    const list = workListNode(deps(), snap, [run], createGroupFoldStore(null), () => undefined);
-    const line = list.querySelector<HTMLElement>('.work-group-running .work-run-line')!;
-    expect(line.hidden).toBe(true);
-    workListLivePaint(list, deps(), snap, [{ ...run, activity: 'reading board.ts' } as RunInfo]);
-    expect(line.hidden).toBe(false);
-    expect(line.textContent).toBe('reading board.ts');
+    expect(row.querySelector('.work-row-id')?.textContent).toBe('T-0009');
+    expect(row.querySelector('.work-run-line')).toBeNull();
   });
 
   it('opens the ticket on a row click and the menu on the ⋯ button', () => {
@@ -324,7 +300,7 @@ describe('workListNode', () => {
     expect(folded.querySelector('.work-group-ideas .work-row')).toBeNull();
   });
 
-  it('a question from a live run sits under Needs you as its kind chip and text', () => {
+  it('a question from a live run sits under Needs you as its kind (board 7a)', () => {
     const run = {
       id: 'r2',
       ticketId: 'T-0012',
@@ -340,8 +316,7 @@ describe('workListNode', () => {
     } as unknown as RunInfo;
     const list = workListNode(deps(), board({ build: [card('T-0012', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    expect(row.querySelector('.work-kind')?.textContent).toBe('Question');
-    expect(row.querySelector('.work-row-line')?.textContent).toBe('Which file?');
+    expect(row.querySelector('.work-kind')?.textContent).toBe('question');
   });
 
   it('a shaped question shows its question — the option pills live in the thread (req-75 W2)', () => {
@@ -376,7 +351,7 @@ describe('workListNode', () => {
     } as unknown as RunInfo;
     const list = workListNode(deps(), board({ build: [card('T-0013', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    expect(row.querySelector('.work-row-line')?.textContent).toBe('Which database?');
+    expect(row.querySelector('.work-kind')?.textContent).toBe('question');
     expect(row.querySelectorAll('.tickets-pill')).toHaveLength(0);
   });
 
@@ -464,7 +439,7 @@ describe('workListNode', () => {
     expect(list.querySelector('.work-empty')?.textContent).toBe('No tickets yet — capture one with +');
   });
 
-  it('leads every row with its ticket id before the title (req-85)', () => {
+  it('every row names its ticket: after the title on the meta line, before it on a Done row (req-85, board 7a)', () => {
     const run = {
       id: 'r1',
       ticketId: 'T-0002',
@@ -488,10 +463,15 @@ describe('workListNode', () => {
     const rows = [...list.querySelectorAll<HTMLElement>('.work-row, .work-done-row')];
     expect(rows.length).toBe(5); // one shaped, one needing, one running, one idea, one done
     for (const row of rows) {
-      const id = row.querySelector<HTMLElement>('.work-row-id')!;
+      const id = row.querySelector<HTMLElement>('.work-row-id');
       const title = row.querySelector<HTMLElement>('.work-row-title, .work-done-title')!;
-      expect(id.textContent).toBe(row.dataset['id']);
-      expect(id.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      if (row.classList.contains('work-row-idea')) {
+        expect(id).toBeNull(); // an Inbox row is its title alone
+        continue;
+      }
+      expect(id!.textContent).toBe(row.dataset['id']);
+      const done = row.classList.contains('work-done-row');
+      expect(Boolean(id!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(done);
     }
   });
 });
@@ -510,21 +490,20 @@ describe('workListLivePaint — text in place, the bones untouched (T-0086)', ()
       ...patch,
     }) as unknown as RunInfo;
 
-  it('changes a run\'s line and an age in place — same elements, new text', () => {
+  it('changes a run\'s step and an age in place — same elements, new text', () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse('2026-10-31T12:00:00Z'));
     try {
       const snap = board({ build: [card('T-0021', 'build')] });
       const list = workListNode(deps(), snap, [liveRun()], createGroupFoldStore(null), () => undefined);
       const row = list.querySelector<HTMLElement>('[data-id="T-0021"]')!;
-      const line = row.querySelector<HTMLElement>('.work-run-line')!;
+      const step = row.querySelector<HTMLElement>('.work-run-step')!;
       const age = row.querySelector<HTMLElement>('.work-row-age')!;
       expect(age.textContent).toBe('now');
       vi.setSystemTime(Date.parse('2026-10-31T12:02:00Z'));
       workListLivePaint(list, deps(), snap, [liveRun({ activity: 'editing b.ts' })]);
       expect(list.querySelector('[data-id="T-0021"]')).toBe(row);
-      expect(row.querySelector('.work-run-line')).toBe(line);
-      expect(line.textContent).toBe('editing b.ts');
+      expect(row.querySelector('.work-run-step')).toBe(step);
       expect(age.textContent).toBe('2 min');
     } finally {
       vi.useRealTimers();
@@ -535,9 +514,10 @@ describe('workListLivePaint — text in place, the bones untouched (T-0086)', ()
     const snap = board({ build: [card('T-0022', 'build')] });
     const list = workListNode(deps(), snap, [liveRun({ id: 'b', ticketId: 'T-0022' })], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('[data-id="T-0022"]')!;
-    const line = row.querySelector<HTMLElement>('.work-run-line')!;
+    const age = row.querySelector<HTMLElement>('.work-row-age')!;
+    const before = age.textContent;
     workListLivePaint(list, deps(), board({}), [liveRun({ id: 'b', ticketId: 'T-0022', activity: 'gone dark' })]);
     expect(list.querySelector('[data-id="T-0022"]')).toBe(row);
-    expect(line.textContent).toBe('reading a.ts');
+    expect(age.textContent).toBe(before);
   });
 });

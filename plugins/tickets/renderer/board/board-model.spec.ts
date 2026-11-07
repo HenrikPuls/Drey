@@ -71,8 +71,8 @@ describe('the board model', () => {
       [run({ activity: 'Editing outline.ts' }), waiting],
     );
     const [a, b, c] = model.columns.find((col) => col.id === 'build')!.cards;
-    expect(a).toMatchObject({ kind: 'Running', running: true, line: 'Editing outline.ts' });
-    expect(b).toMatchObject({ kind: 'Waiting', running: true });
+    expect(a).toMatchObject({ kind: '', running: true, line: 'Editing outline.ts' });
+    expect(b).toMatchObject({ kind: 'Question', running: true });
     expect(c).toMatchObject({ kind: '', running: false, line: 'blocked by T-0010' });
   });
 
@@ -107,7 +107,7 @@ describe('the board model', () => {
     ]);
     const model = boardModelOf(board({ review: [card('T-0130', 'review')] }), [], plan);
     const planCard = model.columns.find((c) => c.id === 'review')!.cards[0]!;
-    expect(planCard.kind).toBe('Plan');
+    expect(planCard.kind).toBe('Review');
     expect(planCard.parts.map((p) => [p.handle, p.state, p.ticketId])).toEqual([
       ['P1', 'Runs now', null],
       ['P2', 'After part 1', null],

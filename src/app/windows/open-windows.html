@@ -2,14 +2,40 @@
   <p class="empty">Nothing open.</p>
 } @else {
   @if (elsewhere().length > 0) {
-    <div class="group">In this view</div>
+    <div class="group">
+      <span class="fold" aria-hidden="true">▾</span>
+      <b>In this view</b>
+      <span class="grow"></span>
+      <span class="aside">{{ shown().length }}</span>
+    </div>
   }
   <div class="list">
     @for (doc of shown(); track doc.key) {
       <div class="row" [class.active]="doc.key === editor.activePath()" [title]="doc.path">
         <button type="button" class="open" (click)="editor.activate(doc.key)">
-          <span class="win-glyph" aria-hidden="true"></span>
-          <span class="name">{{ doc.name }}</span>
+          <svg class="glyph" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            @switch (kindOf(doc.key)) {
+              @case ('board') {
+                <rect x="3" y="3" width="7" height="18" rx="1.5" />
+                <rect x="14" y="3" width="7" height="10" rx="1.5" />
+              }
+              @case ('crew') {
+                <circle cx="9" cy="8" r="3.5" />
+                <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.4 3.5 6" />
+              }
+              @case ('review') {
+                <path d="M4 5h16v11H9l-5 4z" />
+              }
+              @default {
+                <path d="M6 3h8l4 4v14H6z" />
+                <path d="M14 3v4h4" />
+              }
+            }
+          </svg>
+          <span class="text">
+            <span class="name">{{ doc.name }}</span>
+            <span class="where">{{ whereOf(doc.key) }}</span>
+          </span>
         </button>
         @if (doc.bufferContent !== doc.savedContent) {
           <span class="dirty" aria-label="Unsaved changes"></span>
@@ -20,25 +46,51 @@
           (click)="onClose($event, doc.key)"
           [attr.aria-label]="'Close ' + doc.name"
         >
-          <app-icon name="x" [size]="7" [strokeWidth]="1.1" />
+          <app-icon name="x" [size]="10" [strokeWidth]="1.5" />
         </button>
       </div>
     }
   </div>
   @if (elsewhere().length > 0) {
-    <div class="group">In other views</div>
+    <div class="group">
+      <span class="fold" aria-hidden="true">▾</span>
+      <b>In other views</b>
+      <span class="grow"></span>
+      <span class="aside">hidden in the tab bar</span>
+    </div>
     <div class="list">
       @for (entry of elsewhere(); track entry.doc.key) {
         <div class="row other" [title]="entry.doc.path + ' · ' + entry.where">
-          <span class="win-glyph" aria-hidden="true"></span>
-          <span class="name">{{ entry.doc.name }}</span>
+          <svg class="glyph" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            @switch (kindOf(entry.doc.key)) {
+              @case ('board') {
+                <rect x="3" y="3" width="7" height="18" rx="1.5" />
+                <rect x="14" y="3" width="7" height="10" rx="1.5" />
+              }
+              @case ('crew') {
+                <circle cx="9" cy="8" r="3.5" />
+                <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.4 3.5 6" />
+              }
+              @case ('review') {
+                <path d="M4 5h16v11H9l-5 4z" />
+              }
+              @default {
+                <path d="M6 3h8l4 4v14H6z" />
+                <path d="M14 3v4h4" />
+              }
+            }
+          </svg>
+          <span class="text">
+            <span class="name">{{ entry.doc.name }}</span>
+            <span class="where">{{ entry.where }}</span>
+          </span>
           @if (entry.doc.bufferContent !== entry.doc.savedContent) {
             <span class="dirty" aria-label="Unsaved changes"></span>
           }
-          <span class="where">{{ entry.where }}</span>
           <button type="button" class="show-here" (click)="views.showHere(entry.doc.key)">Show here</button>
         </div>
       }
     </div>
+    <p class="note">Tabs of other views stay out of the tab bar and the quick switcher. “Show here” adds a tab to this view as well; it stays in the other one.</p>
   }
 }

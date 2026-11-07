@@ -33,11 +33,10 @@ interface ViewMenu {
  * {@link SEGMENT_LIMIT}), a dot on the view whose working layout differs
  * from its saved one, and ONE "Layout" menu for everything that keeps or
  * changes a view -- save, reset to the saved layout, save as a new view,
- * rename, delete -- with "Edit views…" as its footer. Selecting a view
+ * rename, delete. Selecting a view
  * never changes it (D-6): only "Save layout" does. With only Notes there
  * is nothing to switch, so it draws nothing. Also hosts the name field
- * of "Save as new view…" / rename, the right-click menu of a user view
- * and the "Edit views" list.
+ * of "Save as new view…" / rename and the right-click menu of a user view.
  */
 @Component({
   selector: 'app-view-switcher',
@@ -53,7 +52,6 @@ export class ViewSwitcher {
 
   protected readonly folded = computed(() => this.views.views().length > SEGMENT_LIMIT);
   protected readonly menu = signal<ViewMenu | null>(null);
-  protected readonly editing = signal(false);
   protected readonly rejected = signal(false);
   private readonly nameInput = viewChild<ElementRef<HTMLInputElement>>('name');
 
@@ -94,10 +92,12 @@ export class ViewSwitcher {
   }
 
   private openBelow(event: MouseEvent, kind: MenuKind): void {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    // Under the whole group, left edges aligned (board 7h).
+    const anchor = (event.currentTarget as HTMLElement).closest('.vs-group') ?? (event.currentTarget as HTMLElement);
+    const rect = anchor.getBoundingClientRect();
     this.menu.set({
       x: Math.max(8, Math.min(rect.left, window.innerWidth - 300)),
-      y: rect.bottom + 4,
+      y: rect.bottom + 3,
       kind,
       view: null,
     });
@@ -129,22 +129,12 @@ export class ViewSwitcher {
 
   protected rename(view: ViewDef): void {
     this.closeMenu();
-    this.editing.set(false);
     this.views.openRenamePrompt(view.id);
   }
 
   protected remove(view: ViewDef): void {
     this.closeMenu();
     void this.views.remove(view.id);
-  }
-
-  protected editViews(): void {
-    this.closeMenu();
-    this.editing.set(true);
-  }
-
-  protected closeEditor(): void {
-    this.editing.set(false);
   }
 
   protected commit(value: string): void {

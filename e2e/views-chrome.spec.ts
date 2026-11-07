@@ -56,7 +56,7 @@ test.use({
 test.describe('Views chrome (E12-18)', () => {
   test('Layout menu, tab menu and Open windows follow the boards', async ({ page }, testInfo) => {
     const tabs = page.locator('[role="tablist"][aria-label="Views"] [role="tab"]');
-    await expect(tabs).toHaveText(['Notes', 'Work']);
+    await expect(tabs).toHaveText(['Notes', 'Work', 'Crew']);
 
     // A note open in Notes, shown in Work too.
     const files = page.locator('app-files-panel');
@@ -75,14 +75,7 @@ test.describe('Views chrome (E12-18)', () => {
     // The one Layout menu.
     await page.locator('app-view-switcher .vs-layout').click();
     const menu = page.locator('app-view-switcher .ctx-menu');
-    await expect(menu.locator('.row-label')).toHaveText([
-      'Save layout',
-      'Reset to saved layout',
-      'Save as new view…',
-      'Rename view…',
-      'Delete view',
-      'Edit views…',
-    ]);
+    await expect(menu.locator('button')).toHaveText(['Save layout', 'Reset to saved layout', 'Save as new view…', 'Rename view…', 'Delete view…']);
     await page.screenshot({ path: testInfo.outputPath('layout-menu.png') });
     await page.keyboard.press('Escape');
     await page.locator('.ctx-backdrop').first().click({ position: { x: 5, y: 5 } });
@@ -110,7 +103,7 @@ test.describe('Views chrome (E12-18)', () => {
     await page.locator('app-tab-bar .ctx-sub').getByText('Notes', { exact: true }).click();
     await expect(page.locator('app-tab-bar .ctx-menu')).toHaveCount(0);
     await page.locator('app-dock-strip button[data-widget="windows"]').first().waitFor();
-    await expect(page.locator('app-open-windows .group')).toHaveText(['In this view', 'In other views']);
+    await expect(page.locator('app-open-windows .group b')).toHaveText(['In this view', 'In other views']);
     await expect(page.locator('app-panel-frame', { hasText: 'Open windows' }).first()).toContainText('1 here · 1 elsewhere');
     await page.screenshot({ path: testInfo.outputPath('open-windows.png') });
 

@@ -1,22 +1,25 @@
 /**
- * The Team tab (E13-8; design board DeskTeam, state words and run rows
- * from E12-4): one card per persona with its state, the day's cost
- * against its budget and one row per live run - a flagged (stuck) run
- * turns amber and offers Nudge, Hand to Claude Code and Stop. Above the
- * cards: today's cost, the capacity chips, Pause all and Stop all. A
- * card opens the persona's detail beside the grid: the 1:1 (coaching
- * thread), Memory and Setup. Plain DOM over the model in `team-model.ts`.
+ * The Crew tab (E13-8; design board DeskTeam / 7f): the head with the
+ * day's budget and the chain's pause and stop, one card per persona with
+ * its state, what it does, and - for a stuck run - Nudge, Hand to Claude
+ * Code and Stop (asking first); under the cards the selected persona's
+ * detail: a list of panes at the left (Setup, Memory, 1:1) and the pane.
+ * Not built yet and left out, as the board has them: the Autopilot chip
+ * (the status bar's item), New persona, Edit persona, Talk to 1:1 in the
+ * Assistant, Remove from crew, Friction, Notify / Runs after, the slot
+ * share and the week / typical-run costs (E12-16, E13-19). Plain DOM over
+ * the model in `team-model.ts`.
  */
 import type { PersonaView } from '../../shared/remote-protocol';
 import type { PersonaMemoryReply, PersonaThreadReply } from '../../shared/remote-protocol';
-import type { TicketCard } from '../../shared/tickets';
 import { h, textButton, type DeskDeps } from '../desk-deps';
 import { NUDGE_TEXT } from '../workers-view';
 import {
+  poolLabelOf,
+  usdBudget,
   teamHeadOf,
   teamModelOf,
   usd,
-  type CapacityChip,
   type PersonaCardModel,
   type RunRowModel,
   type TeamModel,
@@ -29,82 +32,149 @@ const ARM_MS = 4_000;
 /** How often the ages and stuck minutes repaint without any event. */
 const TICK_MS = 15_000;
 
-type DetailTab = '1:1' | 'Memory' | 'Setup';
-const DETAIL_TABS: readonly DetailTab[] = ['1:1', 'Memory', 'Setup'];
+type DetailTab = 'Setup' | 'Memory' | '1:1';
+const DETAIL_TABS: readonly DetailTab[] = ['Setup', 'Memory', '1:1'];
 
-function cardOf(deps: DeskDeps, ticketId: string): TicketCard | null {
-  for (const column of deps.snapshot()?.columns ?? []) {
-    const found = column.tickets.find((ticket) => ticket.id === ticketId);
-    if (found !== undefined) {
-      return found;
-    }
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** One of the board's own 16 px glyphs (1.75 stroke, round), from its path data. */
+function glyph(paths: readonly string[], rect?: { x: number; y: number; size: number }): SVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.75');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of paths) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
   }
-  return null;
-}
-
-function avatarNode(card: Pick<PersonaCardModel, 'initials' | 'color'>, size: 'sm' | 'lg' = 'sm'): HTMLElement {
-  const avatar = h('span', `desk-avatar desk-avatar-${size}`, card.initials);
-  avatar.style.setProperty('--persona-color', card.color);
-  return avatar;
-}
-
-/** The capacity chips (`Local 2/2`), shared by the tab and the band. */
-export function capacityChipsNode(chips: readonly CapacityChip[]): HTMLElement {
-  const row = h('div', 'desk-chips');
-  for (const chip of chips) {
-    const node = h('span', `desk-chip${chip.running >= chip.size && chip.size > 0 ? ' desk-chip-full' : ''}`, `${chip.label} ${chip.running}/${chip.size}`);
-    node.title = `${chip.label}: ${chip.running} of ${chip.size} parallel runs`;
-    row.append(node);
+  if (rect !== undefined) {
+    const shape = document.createElementNS(SVG_NS, 'rect');
+    shape.setAttribute('x', String(rect.x));
+    shape.setAttribute('y', String(rect.y));
+    shape.setAttribute('width', String(rect.size));
+    shape.setAttribute('height', String(rect.size));
+    shape.setAttribute('rx', '2');
+    svg.append(shape);
   }
-  return row;
+  return svg;
 }
 
-/** One live run under a card. */
-function runRowNode(deps: DeskDeps, store: TeamStore, run: RunRowModel): HTMLElement {
-  const row = h('div', `desk-run${run.stuck ? ' desk-run-stuck' : ''}`);
-  const ticket = cardOf(deps, run.ticketId);
-  const head = h('div', 'desk-run-head');
-  const link = h('button', 'desk-run-ticket', run.title === '' ? run.ticketId : `${run.ticketId} ${run.title}`);
-  link.type = 'button';
-  link.title = 'Open the ticket';
-  link.addEventListener('click', (event) => {
+const GLYPH_BELL = ['M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0'];
+const GLYPH_TERMINAL = ['M4 17l6-5-6-5M12 19h8'];
+const GLYPH_PAUSE = ['M8 5v14M16 5v14'];
+const GLYPH_PLAY = ['M7 5l12 7-12 7z'];
+
+/** The silhouette a card shows while a persona has no picture: the persona colour, a head and shoulders. */
+function silhouetteNode(color: string, title: string): SVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', title);
+  svg.setAttribute('width', '20');
+  svg.setAttribute('height', '20');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'desk-silhouette');
+  const bg = document.createElementNS(SVG_NS, 'rect');
+  bg.setAttribute('width', '24');
+  bg.setAttribute('height', '24');
+  bg.setAttribute('fill', color);
+  const head = document.createElementNS(SVG_NS, 'circle');
+  head.setAttribute('cx', '12');
+  head.setAttribute('cy', '9.5');
+  head.setAttribute('r', '4.2');
+  const body = document.createElementNS(SVG_NS, 'path');
+  body.setAttribute('d', 'M3.5 24c0-5 3.8-8 8.5-8s8.5 3 8.5 8z');
+  for (const part of [head, body]) {
+    part.setAttribute('fill', 'var(--on-pastel)');
+    part.setAttribute('fill-opacity', '0.78');
+  }
+  svg.append(bg, head, body);
+  return svg;
+}
+
+function iconButton(label: string, title: string, icon: SVGElement, extra: string, onClick: () => void): HTMLButtonElement {
+  const button = h('button', `desk-btn desk-btn-icon ${extra}`);
+  button.type = 'button';
+  button.title = title;
+  button.setAttribute('aria-label', label);
+  button.append(icon);
+  button.addEventListener('click', (event) => {
     event.stopPropagation();
-    if (ticket !== null) {
-      deps.openTicket(ticket);
-    }
+    onClick();
   });
-  head.append(link, h('span', 'desk-run-age', run.age));
-  row.append(head);
-  if (run.stuck) {
-    row.append(h('div', 'desk-run-stuckline', run.stuckLine));
-    const controls = h('div', 'desk-run-controls');
-    // A press on a control must not also select the card behind it.
-    controls.addEventListener('click', (event) => event.stopPropagation());
-    controls.append(
-      textButton('Nudge', 'desk-btn', 'Ask the worker to say what it is doing and carry on', () =>
-        void deps.mutate('Nudging the worker', () => deps.invoke('fleetSend', { runId: run.runId, text: NUDGE_TEXT })),
-      ),
-    );
-    if (run.provider !== 'claude-code') {
-      controls.append(
-        textButton('Hand to Claude Code', 'desk-btn', 'Stop this run and start the ticket again on Claude Code', () =>
-          void deps.mutate('Handing the ticket to Claude Code', () => deps.invoke('handoffRun', { runId: run.runId })).then(() => store.refresh()),
-        ),
-      );
-    }
-    controls.append(
-      textButton('Stop', 'desk-btn desk-btn-danger', 'Stop this run', () =>
-        void deps.mutate('Stopping the worker', () => deps.invoke('fleetStop', { runId: run.runId })),
-      ),
-    );
-    row.append(controls);
-  } else if (run.activity !== '') {
-    row.append(h('div', 'desk-run-activity', run.activity));
-  }
-  return row;
+  return button;
 }
 
-function personaCardNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, selected: boolean, select: () => void): HTMLElement {
+/** What the card says first: what the persona waits on, is stuck on, or does; the ticket id stays in one piece. */
+function headlineNode(card: PersonaCardModel): HTMLElement {
+  const node = h('div', 'desk-persona-headline');
+  const say = (before: string, ticket: string, after = ''): void => {
+    node.append(before);
+    node.append(h('span', 'desk-nowrap', ticket));
+    if (after !== '') {
+      node.append(after);
+    }
+  };
+  if (card.state === 'idle' || card.state === 'paused') {
+    node.textContent = card.state === 'idle' ? 'Idle' : 'Paused';
+    return node;
+  }
+  const run = card.runs.find((entry) => entry.stuck) ?? card.runs.find((entry) => entry.waiting) ?? card.runs[0];
+  if (run === undefined) {
+    node.textContent = card.stateWord;
+  } else if (run.stuck) {
+    if (run.quietMinutes === null) {
+      say('No output on ', run.ticketId);
+    } else {
+      say(`No output for ${run.quietMinutes} min on `, run.ticketId);
+    }
+  } else if (run.waiting) {
+    say('Waits for your answer on ', run.ticketId);
+  } else {
+    say('Works on ', run.ticketId, card.runs.length > 1 ? ` +${card.runs.length - 1}` : '');
+  }
+  return node;
+}
+
+/** `Planner · $0.61 today`: the role, then the day's cost when one is known. */
+function subLineOf(card: PersonaCardModel): string {
+  const cost = card.dailyCost === null ? '' : `${usd(card.dailyCost)} today`;
+  return [card.role, cost].filter((part) => part !== '').join(' · ');
+}
+
+/** The inline "Stop <name>?" ask under a stuck card's buttons. */
+function stopConfirmNode(card: PersonaCardModel, run: RunRowModel, deps: DeskDeps, close: () => void): HTMLElement {
+  const box = h('div', 'desk-confirm');
+  box.setAttribute('role', 'alertdialog');
+  box.setAttribute('aria-label', `Stop ${card.title}?`);
+  box.addEventListener('click', (event) => event.stopPropagation());
+  const row = h('div', 'desk-confirm-row');
+  row.append(
+    textButton('Cancel', 'desk-btn', 'Keep the worker running', close),
+    textButton('Stop', 'desk-btn desk-btn-danger', 'Stop this run; the branch stays', () => {
+      close();
+      void deps.mutate('Stopping the worker', () => deps.invoke('fleetStop', { runId: run.runId }));
+    }),
+  );
+  box.append(h('span', undefined, `Stop ${card.title}? The branch stays.`), row);
+  return box;
+}
+
+function personaCardNode(
+  deps: DeskDeps,
+  store: TeamStore,
+  card: PersonaCardModel,
+  selected: boolean,
+  stopAsk: boolean,
+  select: () => void,
+  setStopAsk: (open: boolean) => void,
+): HTMLElement {
   const node = h('article', `desk-persona desk-persona-${card.state}${selected ? ' desk-persona-selected' : ''}`);
   node.dataset['persona'] = card.id;
   node.tabIndex = 0;
@@ -119,26 +189,30 @@ function personaCardNode(deps: DeskDeps, store: TeamStore, card: PersonaCardMode
     }
   });
   const top = h('div', 'desk-persona-top');
-  const name = h('div', 'desk-persona-name');
-  name.append(h('span', 'desk-persona-title', card.title), h('span', 'desk-persona-state', card.stateWord));
-  top.append(avatarNode(card), name);
-  node.append(top);
-  const phases = card.phases.length > 0 ? ` · ${card.phases.join(', ')}` : '';
-  node.append(h('div', 'desk-persona-role', `${card.role}${phases}`));
-  for (const run of card.runs) {
-    node.append(runRowNode(deps, store, run));
-  }
-  if (card.costLine !== '') {
-    const foot = h('div', 'desk-persona-foot');
-    foot.append(h('span', `desk-persona-cost${card.overBudget ? ' desk-over' : ''}`, card.costLine));
-    if (card.budgetPct !== null) {
-      const bar = h('span', 'desk-bar');
-      const fill = h('span', 'desk-bar-fill');
-      fill.style.width = `${card.budgetPct}%`;
-      bar.append(fill);
-      foot.append(bar);
+  const title = h('span', 'desk-persona-title');
+  title.append(silhouetteNode(card.color, card.title), card.title);
+  top.append(title, h('span', 'desk-head-spacer'), h('span', 'desk-persona-dot'), h('span', 'desk-persona-state', card.stateWord));
+  node.append(top, headlineNode(card), h('div', 'desk-persona-role', subLineOf(card)));
+  const stuck = card.runs.find((run) => run.stuck);
+  if (stuck !== undefined) {
+    const controls = h('div', 'desk-persona-controls');
+    controls.append(
+      iconButton('Nudge the worker', 'Nudge the worker', glyph(GLYPH_BELL), '', () =>
+        void deps.mutate('Nudging the worker', () => deps.invoke('fleetSend', { runId: stuck.runId, text: NUDGE_TEXT })),
+      ),
+    );
+    if (stuck.provider !== 'claude-code') {
+      controls.append(
+        iconButton('Hand to Claude Code', 'Hand to Claude Code', glyph(GLYPH_TERMINAL), '', () =>
+          void deps.mutate('Handing the ticket to Claude Code', () => deps.invoke('handoffRun', { runId: stuck.runId })).then(() => store.refresh()),
+        ),
+      );
     }
-    node.append(foot);
+    controls.append(iconButton('Stop', `Stop ${card.title}? Asks first, the branch stays`, glyph([], { x: 6, y: 6, size: 12 }), '', () => setStopAsk(!stopAsk)));
+    node.append(controls);
+    if (stopAsk) {
+      node.append(stopConfirmNode(card, stuck, deps, () => setStopAsk(false)));
+    }
   }
   return node;
 }
@@ -250,42 +324,59 @@ function memoryPane(deps: DeskDeps, persona: PersonaView, body: HTMLElement): vo
   void act('personaMemory', { persona: persona.id });
 }
 
+/** Setup (board 7f): the model pool in order, and what the persona cost today. */
 function setupPane(deps: DeskDeps, store: TeamStore, persona: PersonaView, card: PersonaCardModel, body: HTMLElement): void {
-  const rows: [string, string][] = [
-    ['Worker', persona.worker],
-    ['Model', persona.model],
-    ['Pool', persona.pool.length === 0 ? 'none' : persona.pool.map((entry, index) => `${index + 1} · ${entry}`).join('\n')],
-    ['Runs in', card.phases.length === 0 ? 'no phase' : card.phases.join(', ')],
-    ['Today', card.costLine === '' ? 'no cost yet' : card.costLine],
-  ];
-  const grid = h('dl', 'desk-setup');
-  for (const [label, value] of rows) {
-    const term = h('dt', undefined, label);
-    const desc = h('dd', undefined, value);
-    desc.style.whiteSpace = 'pre-line';
-    grid.append(term, desc);
+  body.append(h('b', 'desk-pane-title', 'Setup'));
+  const columns = h('div', 'desk-setup');
+  const poolColumn = h('div', 'desk-setup-col');
+  poolColumn.append(h('span', 'desk-label', 'Model pool, in order'));
+  const label = poolLabelOf(persona.worker);
+  const entries = persona.pool.length > 0 ? persona.pool : persona.model === '' ? [] : [persona.model];
+  entries.forEach((model, index) => {
+    if (index > 0) {
+      poolColumn.append(h('div', 'desk-pool-link', `when ${label} is full`));
+    }
+    const entry = h('div', `desk-pool${index === 0 ? ' desk-pool-first' : ''}`);
+    const text = h('div', 'desk-pool-body');
+    const name = h('div', 'desk-pool-name');
+    name.append(h('b', undefined, label), h('span', 'desk-pool-model', model));
+    text.append(name, h('div', 'desk-pool-note', index === 0 ? 'First choice' : 'Overflow'));
+    entry.append(h('span', 'desk-pool-n', String(index + 1)), text);
+    poolColumn.append(entry);
+  });
+  if (entries.length === 0) {
+    poolColumn.append(messageNode('No model set.'));
   }
-  body.append(grid);
-  const pause = textButton(card.paused ? `Resume ${persona.title}` : `Pause ${persona.title}`, 'desk-btn', card.paused ? 'The dispatcher takes this persona\'s tickets again' : 'The dispatcher holds this persona\'s tickets until it is resumed', () =>
-    void deps
-      .mutate(card.paused ? 'Resuming the persona' : 'Pausing the persona', () => deps.invoke('personaPause', { persona: persona.id, paused: !card.paused }))
-      .then(() => store.refresh()),
+  columns.append(poolColumn);
+  body.append(columns);
+  if (card.dailyCost !== null) {
+    body.append(h('span', 'desk-label', 'Cost'));
+    const costs = h('div', 'desk-costs');
+    const today = h('div', 'desk-cost');
+    today.append(h('span', 'desk-cost-label', 'Today'), h('b', 'desk-cost-value', usd(card.dailyCost)), h('span', 'desk-cost-note', card.runs.length > 0 ? `${card.runs.length} ${card.runs.length === 1 ? 'slot' : 'slots'} running` : 'no run now'));
+    costs.append(today);
+    body.append(costs);
+  }
+  const actions = h('div', 'desk-detail-actions');
+  actions.append(
+    textButton(card.paused ? `Resume ${persona.title}` : `Pause ${persona.title}`, 'desk-btn', card.paused ? 'The dispatcher takes this persona\'s tickets again' : 'The dispatcher holds this persona\'s tickets until it is resumed', () =>
+      void deps
+        .mutate(card.paused ? 'Resuming the persona' : 'Pausing the persona', () => deps.invoke('personaPause', { persona: persona.id, paused: !card.paused }))
+        .then(() => store.refresh()),
+    ),
   );
-  body.append(pause);
+  body.append(actions);
 }
 
-function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, persona: PersonaView, tab: DetailTab, setTab: (tab: DetailTab) => void, close: () => void): HTMLElement {
-  const aside = h('aside', 'desk-detail');
+function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, persona: PersonaView, tab: DetailTab, setTab: (tab: DetailTab) => void): HTMLElement {
+  const detail = h('section', 'desk-detail');
   const head = h('div', 'desk-detail-head');
+  const avatar = h('span', 'desk-avatar desk-avatar-lg', card.initials);
+  avatar.style.setProperty('--persona-color', card.color);
   const name = h('div', 'desk-detail-name');
   name.append(h('span', 'desk-persona-title', card.title), h('span', 'desk-persona-role', card.role));
-  const closeButton = h('button', 'icon-btn desk-detail-close');
-  closeButton.type = 'button';
-  closeButton.title = 'Close the detail';
-  closeButton.setAttribute('aria-label', 'Close the detail');
-  closeButton.append(deps.api.ui.icon('x', 14));
-  closeButton.addEventListener('click', close);
-  head.append(avatarNode(card, 'lg'), name, closeButton);
+  head.append(avatar, name);
+  const main = h('div', 'desk-detail-main');
   const tabs = h('div', 'desk-tabs');
   tabs.setAttribute('role', 'tablist');
   for (const entry of DETAIL_TABS) {
@@ -297,7 +388,8 @@ function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, pe
     tabs.append(button);
   }
   const body = h('div', 'desk-detail-body');
-  aside.append(head, tabs, body);
+  main.append(tabs, body);
+  detail.append(head, main);
   if (tab === '1:1') {
     threadPane(deps, persona, body);
   } else if (tab === 'Memory') {
@@ -305,20 +397,29 @@ function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, pe
   } else {
     setupPane(deps, store, persona, card, body);
   }
-  return aside;
+  return detail;
 }
 
 // --- the tab -------------------------------------------------------------------
 
-/** Today's cost against the budget as the head writes it (`Today $4.10 of $15`). */
-function todayNode(model: TeamModel): HTMLElement | null {
+/** The day's cost against the budget as the head writes it (`$4.10 of $15 today` over a bar). */
+function budgetNode(model: TeamModel): HTMLElement | null {
   if (model.todayCost === null) {
     return null;
   }
-  const node = h('div', 'desk-today');
-  node.append(h('span', 'desk-today-label', 'Today'), h('span', 'desk-today-cost', usd(model.todayCost)));
-  if (model.todayBudget !== null) {
-    node.append(h('span', 'desk-today-budget', `of ${usd(model.todayBudget)}`));
+  const node = h('div', 'desk-budget');
+  const row = h('div', 'desk-budget-row');
+  const cost = h('b', undefined, usd(model.todayCost));
+  const rest = h('span');
+  rest.append(cost, model.todayBudget === null ? ' today' : ` of ${usdBudget(model.todayBudget)} today`);
+  row.append(h('span', undefined, 'Budget'), rest);
+  node.append(row);
+  if (model.todayBudget !== null && model.todayBudget > 0) {
+    const bar = h('span', 'desk-bar');
+    const fill = h('span', 'desk-bar-fill');
+    fill.style.width = `${Math.min(100, Math.round((model.todayCost / model.todayBudget) * 100))}%`;
+    bar.append(fill);
+    node.append(bar);
   }
   return node;
 }
@@ -327,7 +428,8 @@ export function mountTeam(deps: DeskDeps, store: TeamStore, host: HTMLElement): 
   const root = h('div', 'desk-team');
   host.append(root);
   let selected: string | null = null;
-  let tab: DetailTab = '1:1';
+  let tab: DetailTab = 'Setup';
+  let stopAskFor: string | null = null;
   let armed = false;
   let armTimer: ReturnType<typeof setTimeout> | null = null;
   let frame = 0;
@@ -337,46 +439,71 @@ export function mountTeam(deps: DeskDeps, store: TeamStore, host: HTMLElement): 
   const render = (): void => {
     frame = 0;
     const model = teamModelOf(store.personas(), deps.runs(), deps.chain(), deps.titleOf, Date.now());
-    const head = h('header', 'desk-head');
-    const title = h('div', 'desk-head-title');
-    title.append(h('h2', 'desk-h', 'Crew'), h('span', 'desk-head-sub', store.loaded() ? teamHeadOf(model) : 'Loading…'));
-    const controls = h('div', 'desk-head-controls');
-    const today = todayNode(model);
-    if (today !== null) {
-      controls.append(today);
+    // The first persona is selected until the owner picks another: the detail is always there (board 7f).
+    if (selected === null || !model.personas.some((entry) => entry.id === selected)) {
+      selected = model.personas[0]?.id ?? null;
+      detailKey = '';
     }
-    controls.append(
-      textButton(model.halted ? 'Resume all' : 'Pause all', 'desk-btn', model.halted ? 'Let the chain dispatch again' : 'Let running work finish and start nothing new', () =>
-        void deps.chainAction('chainMaster', { mode: model.halted ? 'run' : 'halted' }),
+    const head = h('header', 'desk-head');
+    head.append(h('h2', 'desk-h', 'Crew'), h('span', 'desk-head-sub', store.loaded() ? teamHeadOf(model) : 'Loading…'), h('span', 'desk-head-spacer'));
+    const budget = budgetNode(model);
+    if (budget !== null) {
+      head.append(budget);
+    }
+    head.append(
+      iconButton(
+        model.halted ? 'Resume all' : 'Pause all after this step',
+        model.halted ? 'Let the chain dispatch again' : 'Pause all after this step',
+        glyph(model.halted ? GLYPH_PLAY : GLYPH_PAUSE),
+        '',
+        () => void deps.chainAction('chainMaster', { mode: model.halted ? 'run' : 'halted' }),
       ),
-      textButton(armed ? 'Stop all — click again' : 'Stop all', `desk-btn desk-btn-danger${armed ? ' desk-btn-armed' : ''}`, 'Abort every live run and halt the chain', () => {
-        if (!armed) {
-          armed = true;
-          armTimer = setTimeout(() => {
-            armed = false;
-            armTimer = null;
+      iconButton(
+        'Stop all',
+        armed ? 'Click again to abort every live run and halt the chain' : 'Stop all workers? Asks first, branches stay',
+        glyph([], { x: 6, y: 6, size: 12 }),
+        `desk-btn-peach${armed ? ' desk-btn-armed' : ''}`,
+        () => {
+          if (!armed) {
+            armed = true;
+            armTimer = setTimeout(() => {
+              armed = false;
+              armTimer = null;
+              schedule();
+            }, ARM_MS);
             schedule();
-          }, ARM_MS);
-          schedule();
-          return;
-        }
-        armed = false;
-        if (armTimer !== null) {
-          clearTimeout(armTimer);
-          armTimer = null;
-        }
-        void deps.chainAction('chainAbort', {});
-      }),
+            return;
+          }
+          armed = false;
+          if (armTimer !== null) {
+            clearTimeout(armTimer);
+            armTimer = null;
+          }
+          void deps.chainAction('chainAbort', {});
+        },
+      ),
     );
-    head.append(title, controls);
 
     const grid = h('div', 'desk-persona-grid');
     for (const card of model.personas) {
-      grid.append(personaCardNode(deps, store, card, card.id === selected, () => {
-        selected = selected === card.id ? null : card.id;
-        detailKey = '';
-        schedule();
-      }));
+      grid.append(
+        personaCardNode(
+          deps,
+          store,
+          card,
+          card.id === selected,
+          stopAskFor === card.id,
+          () => {
+            selected = card.id;
+            detailKey = '';
+            schedule();
+          },
+          (open) => {
+            stopAskFor = open ? card.id : null;
+            schedule();
+          },
+        ),
+      );
     }
     if (store.loaded() && model.personas.length === 0) {
       grid.append(messageNode('No personas yet.'));
@@ -384,8 +511,6 @@ export function mountTeam(deps: DeskDeps, store: TeamStore, host: HTMLElement): 
     if (store.error() !== '') {
       grid.append(messageNode(store.error(), 'error'));
     }
-    const main = h('div', 'desk-team-main');
-    main.append(capacityChipsNode(model.capacity), grid);
 
     // The detail keeps its own DOM across fleet repaints (a typed message survives).
     const persona = selected === null ? undefined : store.personas().find((entry) => entry.id === selected);
@@ -399,20 +524,9 @@ export function mountTeam(deps: DeskDeps, store: TeamStore, host: HTMLElement): 
           : detailNode(deps, store, card, persona, tab, (next) => {
               tab = next;
               schedule();
-            }, () => {
-              selected = null;
-              schedule();
             });
     }
-    const body = h('div', 'desk-team-body');
-    body.append(main);
-    if (detail !== null) {
-      body.append(detail);
-    }
-    // A repaint keeps the cards' scroll position.
-    const scrolled = root.querySelector<HTMLElement>('.desk-team-main')?.scrollTop ?? 0;
-    root.replaceChildren(head, body);
-    main.scrollTop = scrolled;
+    root.replaceChildren(head, grid, ...(detail === null ? [] : [detail]));
   };
 
   const schedule = (): void => {

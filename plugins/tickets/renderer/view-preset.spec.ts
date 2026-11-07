@@ -26,10 +26,10 @@ describe('selecting a ticket never changes the active view (D-6)', () => {
       documents: { registerHomeViewRule },
     } as unknown as DreyPluginApi;
     const off = registerWorkView(api);
-    expect(api.ui.registerViewPreset).toHaveBeenCalledTimes(1);
+    expect(api.ui.registerViewPreset).toHaveBeenCalledTimes(2); // Work and Crew
     expect(registerHomeViewRule).not.toHaveBeenCalled();
     off();
-    expect(offPreset).toHaveBeenCalled();
+    expect(offPreset).toHaveBeenCalledTimes(2);
   });
 
   it('the Flow tab (opened from a selected ticket) names no home view', () => {

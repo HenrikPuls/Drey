@@ -70,51 +70,14 @@
         }
       }
       @case ('layout') {
-        <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="save()">
-          <span class="row-text">
-            <span class="row-label">{{ 'views.save_layout' | t }}</span>
-            <span class="row-desc">{{ 'views.save_layout.desc' | t }}</span>
-          </span>
-          @if (keys.hint('view.save'); as key) {
-            <span class="ctx-key">{{ key }}</span>
-          }
-        </button>
-        <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="reset()">
-          <span class="row-text">
-            <span class="row-label">{{ 'views.reset_layout' | t }}</span>
-            <span class="row-desc">{{ 'views.reset_layout.desc' | t }}</span>
-          </span>
-          @if (keys.hint('view.revert'); as key) {
-            <span class="ctx-key">{{ key }}</span>
-          }
-        </button>
+        <span class="menu-head">{{ 'views.layout_head' | t: { view: views.active().label } }}</span>
+        <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="save()">{{ 'views.save_layout' | t }}</button>
+        <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="reset()">{{ 'views.reset_layout' | t }}</button>
         <div class="ctx-sep" role="separator"></div>
-        <button type="button" role="menuitem" (click)="saveAs()">
-          <span class="row-text">
-            <span class="row-label">{{ 'views.save_as' | t }}</span>
-            <span class="row-desc">{{ 'views.save_as.desc' | t }}</span>
-          </span>
-          @if (keys.hint('view.saveAs'); as key) {
-            <span class="ctx-key">{{ key }}</span>
-          }
-        </button>
-        <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="rename(views.active())">
-          <span class="row-text">
-            <span class="row-label">{{ 'views.rename' | t }}</span>
-            <span class="row-desc">{{ 'views.rename.desc' | t: { view: views.active().label } }}</span>
-          </span>
-        </button>
-        <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="remove(views.active())">
-          <span class="row-text">
-            <span class="row-label">{{ 'views.delete' | t }}</span>
-            <span class="row-desc">{{ 'views.delete.desc' | t }}</span>
-          </span>
-        </button>
-        <div class="ctx-sep" role="separator"></div>
-        <button type="button" role="menuitem" (click)="editViews()">
-          <span class="row-label">{{ 'views.edit' | t }}</span>
-        </button>
-        <p class="foot">{{ 'views.never_changes' | t }}</p>
+        <button type="button" role="menuitem" (click)="saveAs()">{{ 'views.save_as' | t }}</button>
+        <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="rename(views.active())">{{ 'views.rename' | t }}</button>
+        <button type="button" role="menuitem" class="danger" [disabled]="views.active().builtin" (click)="remove(views.active())">{{ 'views.delete' | t }}</button>
+        <span class="menu-foot">{{ 'views.delete_note' | t }}</span>
       }
       @case ('view') {
         @if (m.view; as v) {
@@ -122,27 +85,6 @@
           <button type="button" role="menuitem" (click)="remove(v)">{{ 'views.delete' | t }}</button>
         }
       }
-    }
-  </div>
-}
-
-@if (editing()) {
-  <div class="ctx-backdrop" appOverlayGuard (click)="closeEditor()"></div>
-  <div class="edit-pop" role="dialog" [attr.aria-label]="'views.edit.title' | t">
-    <div class="edit-head">
-      <span>{{ 'views.edit.title' | t }}</span>
-      <button type="button" class="icon-btn" [attr.title]="'common.close' | t" [attr.aria-label]="'common.close' | t" (click)="closeEditor()">
-        <app-icon name="x" [size]="12" />
-      </button>
-    </div>
-    @for (view of views.views(); track view.id) {
-      <div class="edit-row">
-        <span class="edit-name">{{ view.label }}</span>
-        @if (!view.builtin) {
-          <button type="button" class="edit-act" (click)="rename(view)">{{ 'common.rename' | t }}</button>
-          <button type="button" class="edit-act" (click)="remove(view)">{{ 'common.delete' | t }}</button>
-        }
-      </div>
     }
   </div>
 }

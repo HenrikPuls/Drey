@@ -19,6 +19,24 @@ export const WORK_PANELS = {
   bottom: ['tickets-capacity'],
 } as const;
 
+/** The Crew view (boards 9a, 7h: Notes · Work · Crew): the tickets panel and the Assistant, the Board's and Crew's tabs are opened from the panel. */
+export const CREW_VIEW_ID = 'tickets.crew';
+
+export const CREW_VIEW_LABEL = 'Crew';
+
+export function createCrewPreset(): ViewPresetContrib {
+  return {
+    id: CREW_VIEW_ID,
+    label: CREW_VIEW_LABEL,
+    layout: {
+      left: [...WORK_PANELS.left],
+      right: [...WORK_PANELS.right],
+      bottom: [],
+      folded: ['right'],
+    },
+  };
+}
+
 export function createWorkPreset(): ViewPresetContrib {
   return {
     id: WORK_VIEW_ID,
@@ -39,5 +57,10 @@ export function createWorkPreset(): ViewPresetContrib {
  * Ctrl+N, "Go to the Work view").
  */
 export function registerWorkView(api: DreyPluginApi): () => void {
-  return api.ui.registerViewPreset(createWorkPreset());
+  const work = api.ui.registerViewPreset(createWorkPreset());
+  const crew = api.ui.registerViewPreset(createCrewPreset());
+  return () => {
+    work();
+    crew();
+  };
 }

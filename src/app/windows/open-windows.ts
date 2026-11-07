@@ -44,6 +44,27 @@ export class OpenWindows {
       }));
   });
 
+  /** Which glyph a tab's row draws: the file's, the Board's, the Crew's or a Review's. */
+  protected kindOf(key: string): 'file' | 'board' | 'crew' | 'review' {
+    const path = key.includes('::') ? key.slice(key.indexOf('::') + 2) : key;
+    if (path.startsWith('board://')) {
+      return 'board';
+    }
+    if (path.startsWith('team://') || path.startsWith('crew://')) {
+      return 'crew';
+    }
+    return path.startsWith('review://') ? 'review' : 'file';
+  }
+
+  /** The views that show a tab, as the row's second line. */
+  protected whereOf(key: string): string {
+    const labels = new Map(this.views.views().map((v) => [v.id, v.label]));
+    return this.views
+      .viewsOfTab(key)
+      .map((id) => labels.get(id) ?? id)
+      .join(', ');
+  }
+
   protected onClose(event: MouseEvent, path: string): void {
     event.stopPropagation();
     void this.editor.closeTab(path);

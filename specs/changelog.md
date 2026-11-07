@@ -1,3 +1,53 @@
+### Milestone 194 — wave 4.2: the Work panel, Board, Crew, Layout menu and Open windows match their boards
+
+**Not yet manually verified by the owner.** Wave row 4.2 `desk-work-board-crew`, boards 7a, 7e, 7f, 7h, 7i. Fidelity is not feature work (owner, via
+the integrator): what the boards draw and the app lacks is a deviation row, not a build. Persona setup (7k) is row 4.9.
+
+- **Work panel (7a).** Group heads 28 px with a chevron icon, count grey at the right, an attention dot after *Needs you*; rich rows are the title (14/20)
+  over one grey meta line `id · phase · what · age` with the cost at the right end; Prioritized and Inbox rows are one line, the id grey at the right of a
+  Prioritized row, the title alone for an Inbox row; two rows then `<n> more` (also for Prioritized). Persona, track chip, queue chip and the squirrel left the
+  rows. The footer is `Crew · …` with a chevron. The header's hover actions are *Capture by voice*, *New idea*, *Open Board tab*, then the filter, issues chip,
+  chain controls and the overflow; **the title bar carries no capture button any more** (9a), the action moved into the panel header
+  (`plugins/tickets/renderer/index.ts`, `work.capture_by_voice_title`).
+- **Board (7e).** Six columns in the board's measures, head `title count cost`, cards with the id, what waits on the owner in peach (`Question`, `Accept`, `Plan to
+  accept`; peach border), title, persona or `unassigned`, cost; parts under a card; `<n> more`; one Done column, *Done this week* (the pipeline's last phase and the
+  archive); *New idea* moved to the board header. The sub line is gone (decision 6).
+- **Capacity band (7e).** One button per agent persona (avatar 32 with two initials, slot dots, what it does), the budget block, *Crew*; header status
+  `2 of 5 slots busy`, one hover action *Pause all*. **The band shows on the Board tab only** (`decisions.md`: board 7f has none; reverses E12-15's "Board and Crew").
+- **Crew (7f).** Head with the budget block and the pause / stop icon buttons; five card slots (the owner's persona has none), a stuck card's three icon buttons and the
+  inline *Stop `<name>`?* ask; the selected persona's detail under the cards (first persona by default): list *Setup · Memory · 1:1*, Setup draws the model pool in
+  order and today's cost. The Crew view is registered (`Notes · Work · Crew`).
+- **Layout menu (7h)** (`src/app/titlebar/view-switcher.*`): head line, five rows, the deletion note; no key hints, row descriptions or *Edit views…*; opens under the whole
+  group; the changed dot is 7 px, `--status-modified` with the board's glow. **Open windows (7i)** (`src/app/windows/`): group rows, 36 px entries with the glyph and the
+  view(s) under the name, `Show here` 24 px, the note.
+- **Specs.** `work-panel`, `team-view` (Crew, Capacity, Board), `team-model`, `board-model`, `view-preset`, `view-switcher`, `open-windows` follow the new DOM; e2e
+  `work-panel`, `desk-board-team`, `views-chrome`, `work-view`, `tickets-dricket-sweep` follow the three views and the lean rows (the Board no longer scrolls sideways: its
+  scroll-keeps-place step went). New opt-in `e2e/fidelity-desk-work.spec.ts` (`DREY_FIDELITY_SHOTS=1`). **`desk.css`** hunks: everything from `Boards 7e (Board, Capacity)
+  and 7f (Crew)` down (the Board, Capacity and Crew rules; the generic `.desk-btn` family above it is untouched).
+- **Roadmap:** nothing of this row was listed; E12-16 / E13-19 / req-113 stay.
+
+**Fidelity:** boards `DeskWork`, `DeskBoard`, `DeskTeam`, `DeskViews`, `DeskTabs`, screenshots `test-results/fidelity/<Board>.png` (hover state
+`DeskWork.header-hover.png`); built app, 1440×900, scale factor 1, theme Anthrazit; `DeskPersona` (7k) is row 4.9. Fixed in the build: every Work row, group head and footer,
+the Board's head, columns and cards, the Capacity band, the Crew head, cards and detail, the Layout menu, the Open windows panel. Open: none. Justified:
+
+| Region | Board | Build | Justification |
+|---|---|---|---|
+| Bottom dock (7e) | band directly under the Board, ~103 px | a 37 px icon strip over the band, dock minimum 140 px | belongs to the frame (4.0 follow-up): strip 37 px, band ~103 px, `HEIGHT.min` 140 → ~100 |
+| View tab *Work* (7h, 7i) | 7 px orange dot "something needs you" | no dot (the dot means "layout changed", restyled in `view-switcher.css` to the board's look) | SDK gap: view preset badge signal |
+| Crew view | opens the Crew tab | opens empty | SDK gap: `ViewPresetLayout.openTabs` |
+| Running row cost (7a) | orange at 82 % of a $2.50 allowance | grey | feature not yet built — req-113 |
+| Board header (7e) | *Filter: all personas*, *Cost by column* | *New idea* only | feature not yet built — E13-17 / E12-16 |
+| Crew head and cards (7f) | Autopilot chip; fifth card *New persona* | neither (the slot stays empty) | Autopilot chip: belongs to 4.4; New persona: feature not yet built — E13-19 |
+| Crew detail (7f) | *Edit persona*, *Talk to Ben 1:1*, *Friction*, Runs after, Notify, slot bars, Week and Typical-run cost, *Remove from crew* | absent; the list keeps *1:1* (the thread) where the board has *Friction* | feature not yet built — E13-19 (slot share needs an engine count, G-14) |
+| Capacity slot dots | all of a persona's slots | one filled dot per live run | feature not yet built — E13-19 (G-14) |
+| Persona page (7k) | whole page | none | row 4.9 |
+| Layout menu (7h) | Rename and Delete enabled | disabled on *Notes* (a built-in view) | data: the board's view is a user view (ADR-0089 keeps Notes) |
+| Tab bar, tab and strip heights, title bar, status bar | 4 px lower docks | one line at y 77 | owner decision 2026-11-07 (`decisions.md`, milestone 192) |
+| Strip glyph for Tickets | ticket glyph | `layers` | owner decision 2026-11-07: our set stands in |
+| Counts, names, ages, costs, ticket text, estimates (`$3.00–5.20`), `Prioritized`/`Inbox` totals, the Tasks icon in both docks | sample | the seeded English vault; settled costs, not estimates | data |
+| Model chip, stop-confirm buttons (7f) | radius 6 px | 4 px (`--radius-chip`) | owner decision (`notes.md` 4): radii are 4 / 8 / 16 |
+| Row title text | canvas export | Electron | text rasterization: same font, size, weight, line height; no CSS difference found |
+
 ### Milestone 193 — D-43: e2e engines left by an aborted run are swept
 
 **Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): five tickets engines from the

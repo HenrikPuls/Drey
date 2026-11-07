@@ -196,318 +196,141 @@
   font-size: 13px;
 }
 
-/* ---- Team ---- */
-.desk-team-body {
-  display: flex;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
+/*
+ * Boards 7e (Board, Capacity) and 7f (Crew), measured from the boards'
+ * HTML (wave 4.2). 13/18 type, tokens only; the board draws its borders
+ * on top of the stated height, the app is border-box, so heights below
+ * are the boards' own.
+ */
+.desk-board,
+.desk-team,
+.desk-capacity {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
 }
 
-.desk-team-main {
-  display: flex;
-  flex-direction: column;
+.desk-board,
+.desk-team {
+  padding: 12px 16px;
+  gap: 8px;
+}
+
+.desk-team {
+  padding: 14px 16px;
+  gap: 12px;
+}
+
+.desk-board .desk-head,
+.desk-team .desk-head {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
   gap: 10px;
+}
+
+.desk-team .desk-head {
+  gap: 12px;
+}
+
+.desk-board .desk-h,
+.desk-team .desk-h {
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.desk-head-title {
+  display: contents;
+}
+
+.desk-head-sub {
+  color: var(--text-4);
+}
+
+.desk-head-spacer {
   flex: 1;
-  min-width: 0;
-  overflow: auto;
 }
 
-.desk-persona-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
-  align-content: start;
-}
-
-.desk-persona {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+/* A button on the boards: h30, padding 0 14, radius 8, 13 px, hairline border. */
+.desk-board .desk-btn,
+.desk-team .desk-btn,
+.desk-capacity .desk-btn {
+  height: 30px;
+  padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  cursor: pointer;
-}
-
-.desk-persona:hover {
-  background: var(--hover-bg);
-}
-
-.desk-persona:focus-visible {
-  outline: 2px solid var(--accent);
-}
-
-.desk-persona-selected {
-  border-color: var(--persona-color, var(--accent));
-}
-
-.desk-persona-stuck {
-  border-color: var(--status-modified);
-}
-
-.desk-persona-top,
-.desk-detail-head,
-.desk-run-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.desk-persona-name,
-.desk-detail-name {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex: 1;
-  min-width: 0;
-  gap: 8px;
-}
-
-.desk-persona-title {
-  font-weight: 600;
-  color: var(--text-1, var(--text-2));
-}
-
-.desk-persona-state {
-  color: var(--text-3);
-}
-
-.desk-persona-running .desk-persona-state {
-  color: var(--status-added);
-}
-
-.desk-persona-waiting .desk-persona-state,
-.desk-persona-stuck .desk-persona-state {
-  color: var(--status-modified);
-}
-
-.desk-persona-role {
-  color: var(--text-3);
-}
-
-.desk-run {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: var(--radius-chip);
-  background: var(--hover-bg);
-}
-
-.desk-run-stuck {
-  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
-}
-
-.desk-run-head {
-  justify-content: space-between;
-}
-
-.desk-run-ticket {
-  font: inherit;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-1, var(--text-2));
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
   white-space: nowrap;
-  min-width: 0;
 }
 
-.desk-run-ticket:hover {
-  text-decoration: underline;
-}
-
-.desk-run-activity,
-.desk-run-stuckline {
-  color: var(--text-3);
-}
-
-.desk-run-stuckline {
-  color: var(--status-modified);
-}
-
-.desk-persona-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-3);
-}
-
-.desk-over {
-  color: var(--status-deleted);
-}
-
-.desk-bar {
-  flex: 1;
-  height: 4px;
-  border-radius: var(--radius-chip);
-  background: var(--hover-bg);
-  overflow: hidden;
-}
-
-.desk-bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--persona-color, var(--accent));
-}
-
-/* detail */
-.desk-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 340px;
-  flex: none;
-  min-height: 0;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
-}
-
-.desk-detail-close {
-  margin-left: auto;
-}
-
-.desk-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-}
-
-.desk-tab {
-  font: inherit;
-  padding: 4px 10px;
+.desk-board .desk-btn.desk-btn-primary,
+.desk-team .desk-btn.desk-btn-primary {
   border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-3);
-  cursor: pointer;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
 }
 
-.desk-tab-on {
-  color: var(--text-1, var(--text-2));
-  border-bottom-color: var(--accent);
+.desk-team .desk-btn-danger {
+  color: var(--status-deleted);
+  border-color: var(--status-deleted);
 }
 
-.desk-detail-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+.desk-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  padding: 0 !important;
 }
 
-.desk-thread,
-.desk-memory {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-  min-height: 80px;
-  overflow: auto;
-}
-
-.desk-msg {
-  padding: 6px 8px;
-  border-radius: var(--radius-chip);
-  background: var(--hover-bg);
-}
-
-.desk-msg-text,
-.desk-memory-text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.desk-memory-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.desk-memory-pinned .desk-memory-text {
-  color: var(--text-1, var(--text-2));
-}
-
-.desk-input {
-  font: inherit;
-  box-sizing: border-box;
-  width: 100%;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--text-1, var(--text-2));
-  resize: vertical;
-}
-
-.desk-composer {
-  align-items: flex-end;
-  flex-wrap: nowrap;
-}
-
-.desk-setup {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 12px;
-  margin: 0;
-}
-
-.desk-setup dt {
-  color: var(--text-3);
-}
-
-.desk-setup dd {
-  margin: 0;
+.desk-btn-peach {
+  color: var(--accent-peach) !important;
 }
 
 /* ---- Board ---- */
 .desk-cols {
   display: flex;
-  gap: 12px;
   flex: 1;
   min-height: 0;
-  overflow-x: auto;
-  align-items: stretch;
+  gap: 10px;
+  overflow: hidden;
 }
 
 .desk-col {
   display: flex;
+  flex: 1 1 0;
+  min-width: 0;
   flex-direction: column;
-  flex: 1 0 215px;
-  max-width: 290px;
-  min-height: 0;
   gap: 8px;
 }
 
 .desk-col-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 2px;
+  gap: 6px;
+  height: 32px;
+  min-width: 0;
 }
 
 .desk-col-title {
-  font-weight: 600;
-  color: var(--text-1, var(--text-2));
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.desk-col-count {
-  color: var(--text-3);
+.desk-col-count,
+.desk-col-cost {
+  color: var(--text-4);
+  white-space: nowrap;
+  font-variant-numeric: normal;
 }
 
 .desk-col-cost {
-  margin-left: auto;
-}
-
-.desk-col-new {
   margin-left: auto;
 }
 
@@ -515,107 +338,134 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .desk-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 10px;
+  background: var(--active-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   cursor: pointer;
 }
 
-.desk-card:hover {
-  background: var(--hover-bg);
+.desk-card-need {
+  border-color: var(--accent-peach);
 }
 
 .desk-card:focus-visible,
 .desk-part:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ring, var(--accent));
+  outline-offset: 1px;
 }
 
-.desk-card-running {
-  border-color: var(--status-added);
-}
-
-.desk-card-top {
+.desk-card-top,
+.desk-card-foot {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .desk-card-id {
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.desk-card-kind {
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: var(--accent-peach);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desk-card-title {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.desk-card-who {
+  color: var(--text-4);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desk-card-cost {
   margin-left: auto;
-}
-
-.desk-card-title {
-  color: var(--text-1, var(--text-2));
+  color: var(--text-4);
+  white-space: nowrap;
+  font-variant-numeric: normal;
 }
 
 .desk-parts {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 4px;
-  padding-left: 8px;
-  border-left: 2px solid var(--border);
 }
 
 .desk-part {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
-  font-size: 12px;
+  min-height: 26px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
 }
 
-.desk-part-open {
-  cursor: pointer;
-}
-
-.desk-part-open:hover .desk-part-title {
-  text-decoration: underline;
-}
-
-.desk-part-plan .desk-part-title {
-  color: var(--text-3);
-}
-
-.desk-part-handle,
-.desk-part-state {
-  color: var(--text-3);
+.desk-part-handle {
+  flex: none;
+  width: 18px;
+  color: var(--text-4);
 }
 
 .desk-part-title {
   flex: 1;
-  min-width: 80px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.desk-done {
+.desk-part-who {
+  color: var(--text-4);
+}
+
+.desk-more {
   display: flex;
-  gap: 8px;
-  padding: 3px 2px;
-  color: var(--text-3);
+  align-items: center;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-/* ---- Capacity band ---- */
+/* ---- Capacity band (the bottom dock, board 7e) ---- */
 .desk-capacity {
   display: flex;
   align-items: center;
-  gap: 18px;
-  height: 100%;
-  padding: 8px 14px;
-  overflow: auto;
+  gap: 4px;
+  height: 56px;
+  padding: 0 8px 6px;
+  overflow: hidden;
 }
 
 .desk-capacity[hidden] {
@@ -636,62 +486,604 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
   height: auto !important;
 }
 
-/* One line (board 7e): nothing wraps, the people row gives way first. */
-.desk-capacity .desk-cap-lead,
-.desk-capacity .desk-cap-tail {
-  flex-wrap: nowrap;
-  flex: none;
-}
-
-.desk-capacity .desk-cap-people {
-  flex-wrap: nowrap;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.desk-cap-slots {
-  font-weight: 600;
-  color: var(--text-1, var(--text-2));
-  white-space: nowrap;
-}
-
-.desk-cap-people {
-  display: flex;
-  gap: 18px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
 .desk-cap-person {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.desk-cap-person:hover {
+  background: var(--hover-bg);
+}
+
+.desk-cap-avatar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--persona-color, var(--border));
+  color: var(--on-pastel);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.desk-cap-stuckdot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  box-sizing: content-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--bg-dock);
+  border-radius: 50%;
+  background: var(--status-modified);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-modified) 70%, transparent);
+}
+
+.desk-cap-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.desk-cap-nameline {
   display: flex;
   align-items: center;
   gap: 6px;
-  white-space: nowrap;
-}
-
-.desk-cap-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--persona-color, var(--text-4));
-  opacity: 0.5;
-}
-
-.desk-cap-running .desk-cap-dot,
-.desk-cap-waiting .desk-cap-dot,
-.desk-cap-stuck .desk-cap-dot {
-  opacity: 1;
-}
-
-.desk-cap-stuck .desk-cap-line {
-  color: var(--status-modified);
 }
 
 .desk-cap-name {
-  color: var(--text-1, var(--text-2));
+  font-weight: 600;
 }
 
-.desk-cap-line,
+.desk-cap-slots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.desk-cap-slot {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--field-border);
+  border-radius: 50%;
+}
+
+.desk-cap-slot-busy {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+}
+
+.desk-cap-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+
+.desk-cap-sep {
+  flex: none;
+  width: 1px;
+  height: 32px;
+  margin: 0 6px;
+  background: var(--border);
+}
+
+.desk-cap-budget {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  width: 180px;
+  padding: 0 8px;
+}
+
+.desk-cap-budget-row {
+  display: flex;
+}
+
+.desk-cap-budget-label {
+  flex: 1;
+  color: var(--text-4);
+}
+
 .desk-cap-today {
-  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.desk-cap-crew {
+  flex: none;
+  margin-left: 4px;
+}
+
+/* A thin bar, shared by the Crew head and the band. */
+.desk-bar {
+  display: block;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: var(--radius-chip);
+  background: var(--bg-dock);
+}
+
+.desk-cap-budget .desk-bar {
+  margin-top: 0;
+  background: var(--active-bg);
+}
+
+.desk-bar-fill {
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+}
+
+/* ---- Crew ---- */
+.desk-budget {
+  flex: none;
+  width: 220px;
+}
+
+.desk-budget-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-4);
+}
+
+.desk-budget-row b {
+  color: var(--text-primary);
+}
+
+.desk-persona-grid {
+  display: flex;
+  gap: 12px;
+}
+
+/* Five slots, as board 7f: the fifth (New persona, E13-19) stays empty. */
+.desk-persona {
+  display: flex;
+  flex: 0 0 calc((100% - 48px) / 5);
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.desk-persona-selected {
+  background: var(--active-bg);
+  border-color: var(--accent);
+}
+
+.desk-persona-ghost {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.desk-persona:focus-visible {
+  outline: 2px solid var(--accent-ring, var(--accent));
+  outline-offset: 1px;
+}
+
+.desk-persona-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desk-persona-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.desk-persona-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--field-border);
+}
+
+.desk-persona-running .desk-persona-dot {
+  background: var(--accent);
+}
+
+.desk-persona-waiting .desk-persona-dot {
+  background: var(--status-added);
+}
+
+.desk-persona-stuck .desk-persona-dot {
+  background: var(--accent-peach);
+}
+
+.desk-persona-state {
+  color: var(--text-4);
+}
+
+.desk-persona-headline {
+  font-weight: 600;
+}
+
+.desk-nowrap {
+  white-space: nowrap;
+}
+
+.desk-persona-role {
+  color: var(--text-4);
+}
+
+.desk-persona-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.desk-persona-controls .desk-btn {
+  border-color: var(--border);
+}
+
+.desk-persona-controls .desk-btn:first-child {
+  border-color: var(--field-border);
+}
+
+.desk-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--bg-editor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.desk-confirm-row {
+  display: flex;
+  gap: 6px;
+}
+
+.desk-confirm .desk-btn {
+  flex: 1 1 0;
+  height: 28px;
+  border-radius: var(--radius-chip);
+  border-color: var(--field-border);
+}
+
+.desk-confirm .desk-btn-danger {
+  border-color: var(--status-deleted);
+}
+
+.desk-persona-ghost .desk-btn {
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 10px;
+  margin-top: 4px;
+}
+
+.desk-persona-newtag {
+  padding: 0 6px;
+  border: 1px solid var(--text-4);
+  border-radius: var(--radius-chip);
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* The persona silhouette the cards use while there is no picture. */
+.desk-silhouette {
+  display: block;
+  flex: none;
+  border-radius: 50%;
+}
+
+.desk-avatar {
+  background: var(--persona-color, var(--border));
+  border: 0;
+  color: var(--on-pastel);
+  font-weight: 700;
+}
+
+.desk-avatar-lg {
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+}
+
+/* The detail under the cards: head, list of panes at the left, the pane. */
+.desk-detail {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.desk-detail-head {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.desk-detail-name {
+  display: contents;
+}
+
+.desk-detail-name .desk-persona-title {
+  font-weight: 700;
+}
+
+.desk-detail-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.desk-tabs {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 150px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+}
+
+.desk-tab {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.desk-tab-on {
+  background: var(--active-bg);
+  color: var(--accent);
+}
+
+.desk-detail-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  overflow-y: auto;
+}
+
+.desk-pane-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.desk-setup {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.desk-setup-col {
+  display: flex;
+  flex: 3;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desk-label {
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+  text-transform: uppercase;
+}
+
+.desk-pool {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.desk-pool-n {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.desk-pool-first .desk-pool-n {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.desk-pool-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.desk-pool-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desk-pool-model {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--active-bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.desk-pool-note {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+.desk-pool-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 11px;
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+.desk-pool-link::before {
+  content: '';
+  width: 2px;
+  height: 14px;
+  border-radius: 0;
+  background: var(--border);
+}
+
+.desk-costs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.desk-cost {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.desk-cost-label,
+.desk-cost-note {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+.desk-cost-value {
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.desk-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* The 1:1 and Memory panes keep their own content. */
+.desk-note {
+  padding: 8px 2px;
+  color: var(--text-4);
+}
+
+.desk-note-error {
+  color: var(--status-deleted);
+}
+
+.desk-thread,
+.desk-memory {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.desk-msg {
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  background: var(--active-bg);
+}
+
+.desk-msg-at {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+.desk-memory-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--active-bg);
+}
+
+.desk-memory-text {
+  flex: 1;
+}
+
+.desk-memory-pinned .desk-memory-text {
+  color: var(--accent-peach);
+}
+
+.desk-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.desk-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: var(--active-bg);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.desk-btn-small {
+  height: 24px !important;
+  padding: 0 8px !important;
 }

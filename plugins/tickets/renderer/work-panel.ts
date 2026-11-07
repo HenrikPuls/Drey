@@ -24,9 +24,8 @@ import {
 } from '../shared/tickets';
 import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { ChainAlert, ChainAlertAction } from './chain-alerts';
-import { ageWords, needKindLabel, runningStepOf, statusLineOf, workGroups, type WorkGroupId, type WorkRow } from './work-groups';
+import { ageWords, needKindLabel, runningStepOf, workGroups, type WorkGroupId, type WorkRow } from './work-groups';
 import { applyWorkFilter, isFilterActive, NO_WORK_FILTER, type FilteredGroup, type WorkFilterState } from './work-filter';
-import { setSquirrelPose, squirrelNode, squirrelPose } from './squirrel';
 
 export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
   critical: 'Critical',
@@ -48,8 +47,11 @@ const GROUP_TITLE: Readonly<Record<WorkGroupId, string>> = {
 /** The fold key of the ideas' "<n> more" tail. */
 const IDEAS_ALL = 'ideas-all';
 
+/** The fold key of the prioritized group's "<n> more" tail. */
+const PRIORITIZED_ALL = 'prioritized-all';
+
 /** How many ideas show before the "<n> more" row. */
-const IDEAS_SHOWN = 5;
+const IDEAS_SHOWN = 2;
 
 /** The groups in display order (T-0084 made it a constant): what runs
  *  stays above the backlog — Needs you first, then Running. */
@@ -98,7 +100,7 @@ export function createGroupFoldStore(storage: Storage | null): GroupFoldStore {
     }
   };
   // Nothing saved yet: Done this week and the ideas' tail start folded.
-  let folded = read() ?? new Set<string>(['done', IDEAS_ALL]);
+  let folded = read() ?? new Set<string>(['done', IDEAS_ALL, PRIORITIZED_ALL]);
   return {
     isFolded: (id) => folded.has(id),
     setFolded: (id, value) => {
@@ -177,6 +179,7 @@ function setAge(node: HTMLElement, text: string): void {
   const age = node.querySelector<HTMLElement>('.work-row-age');
   if (age !== null) {
     age.textContent = text;
+    age.hidden = text === '';
   }
 }
 
@@ -208,10 +211,6 @@ export function workListLivePaint(
       if (row.need !== null) {
         // Needs you: the age follows the need, the line may turn shaped.
         setAge(node, ageWords(row.need.since, nowMs));
-        const line = node.querySelector<HTMLElement>('.work-row-line');
-        if (line !== null) {
-          line.textContent = statusLineOf(row, snap);
-        }
         continue;
       }
       // Shaping and Running share the top line; the sub line differs.
@@ -227,23 +226,9 @@ export function workListLivePaint(
       }
       const step = runningStepOf(row, snap);
       setAge(node, step.live ? ageWords(row.run?.startedAt ?? null, nowMs) : '');
-      const dot = node.querySelector<HTMLElement>('.work-run-dot');
-      if (dot !== null) {
-        dot.className = `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`;
-      }
-      // A live row's glyph is the squirrel; its pose follows the run's pulse.
-      const squirrel = node.querySelector<HTMLElement>('.tickets-squirrel');
-      if (squirrel !== null) {
-        setSquirrelPose(squirrel, squirrelPose(row.run, nowMs));
-      }
       const stepWord = node.querySelector<HTMLElement>('.work-run-step');
       if (stepWord !== null) {
         stepWord.textContent = step.step;
-      }
-      const line = node.querySelector<HTMLElement>('.work-run-line');
-      if (line !== null) {
-        line.textContent = step.line;
-        line.hidden = step.line === '';
       }
       continue;
     }
@@ -288,14 +273,8 @@ function alertsNode(deps: WorkPanelDeps, alerts: readonly ChainAlert[]): HTMLEle
 /** The head's count (T-0084): the visible rows, `<visible>/<total>` while
  *  a filter is active; Running adds its live runs. */
 function groupHeadCount(id: WorkGroupId, group: FilteredGroup, filterActive: boolean): string {
-  let text = filterActive ? `${group.rows.length}/${group.total}` : `${group.rows.length}`;
-  if (id === 'running') {
-    const running = group.rows.filter((row) => row.run !== null).length;
-    if (running > 0) {
-      text += ` · ${running} running`;
-    }
-  }
-  return text;
+  void id;
+  return filterActive ? `${group.rows.length}/${group.total}` : `${group.rows.length}`;
 }
 
 function groupNode(
@@ -310,11 +289,11 @@ function groupNode(
   const folded = folds.isFolded(id);
   const section = el('section', `work-group work-group-${id}`);
   section.dataset['group'] = id;
-  section.append(groupHead(id, groupHeadCount(id, group, filterActive), folded, folds, rerender));
+  section.append(groupHead(deps, id, groupHeadCount(id, group, filterActive), folded, folds, rerender));
   if (!folded) {
     const body = el('div', 'work-group-rows');
-    if (id === 'ideas') {
-      appendIdeas(deps, snap, body, group.rows, group.total, folds, rerender, filterActive);
+    if (id === 'ideas' || id === 'prioritized') {
+      appendIdeas(deps, snap, id, body, group.rows, group.total, folds, rerender, filterActive);
     } else {
       for (const row of group.rows) {
         body.append(
@@ -322,9 +301,7 @@ function groupNode(
             ? shapingRowNode(deps, row)
             : id === 'running'
               ? runningRowNode(deps, snap, row)
-              : id === 'prioritized'
-                ? prioritizedRowNode(deps, row)
-                : rowNode(deps, snap, row),
+              : rowNode(deps, snap, row),
         );
       }
       if (group.rows.length === 0) {
@@ -350,6 +327,7 @@ function groupNode(
 
 /** The head every group shares: chevron, bold title, count as a badge. */
 function groupHead(
+  deps: WorkPanelDeps,
   id: WorkGroupId,
   count: string,
   folded: boolean,
@@ -361,10 +339,17 @@ function groupHead(
   head.setAttribute('aria-expanded', String(!folded));
   head.title = folded ? `Show ${GROUP_TITLE[id]}` : `Fold ${GROUP_TITLE[id]}`;
   const chevron = el('span', 'work-group-chevron');
-  chevron.append(folded ? '▸' : '▾');
+  chevron.append(deps.api.ui.icon(folded ? 'chevron-right' : 'chevron-down', 12));
   const title = el('span', 'work-group-title', GROUP_TITLE[id]);
-  const badge = el('span', `work-group-count${['needs', 'shaping', 'running'].includes(id) ? ' work-group-badge' : ''}`, count);
-  head.append(chevron, title, badge);
+  head.append(chevron, title);
+  if (id === 'needs') {
+    // Board 7a: the attention dot right after the title.
+    const dot = el('span', 'work-attn-dot');
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', GROUP_TITLE[id]);
+    head.append(dot);
+  }
+  head.append(el('span', 'work-group-count', count));
   head.addEventListener('click', () => {
     folds.setFolded(id, !folded);
     rerender();
@@ -376,6 +361,7 @@ function groupHead(
 function appendIdeas(
   deps: WorkPanelDeps,
   snap: BoardSnapshot,
+  id: 'ideas' | 'prioritized',
   body: HTMLElement,
   rows: readonly WorkRow[],
   total: number,
@@ -399,19 +385,20 @@ function appendIdeas(
     }
     return;
   }
-  const allOpen = !folds.isFolded(IDEAS_ALL);
+  const tailKey = id === 'ideas' ? IDEAS_ALL : PRIORITIZED_ALL;
+  const allOpen = !folds.isFolded(tailKey);
   const shown = allOpen ? rows : rows.slice(0, IDEAS_SHOWN);
   for (const row of shown) {
-    body.append(ideaRowNode(deps, snap, row));
+    body.append(id === 'ideas' ? ideaRowNode(deps, snap, row) : prioritizedRowNode(deps, row));
   }
   if (rows.length > IDEAS_SHOWN) {
     const more = el('button', 'work-ideas-more');
     more.type = 'button';
     const rest = rows.length - shown.length;
     more.textContent = allOpen ? 'Show fewer' : `${rows.length - IDEAS_SHOWN} more`;
-    more.title = allOpen ? `Fold the Inbox back to the first ${IDEAS_SHOWN}` : `Show ${rest} more idea${rest === 1 ? '' : 's'}`;
+    more.title = allOpen ? `Fold back to the first ${IDEAS_SHOWN}` : `Show ${rest} more`;
     more.addEventListener('click', () => {
-      folds.setFolded(IDEAS_ALL, allOpen);
+      folds.setFolded(tailKey, allOpen);
       rerender();
     });
     body.append(more);
@@ -488,31 +475,10 @@ function metaLine(...parts: readonly HTMLElement[]): HTMLElement {
   return meta;
 }
 
-/** The persona a row belongs to: the live run's, the ticket's pin, else the column's. */
-function personaIdOf(row: WorkRow): string | null {
-  const id = row.run?.persona ?? row.card.meta.persona ?? row.phase.persona ?? null;
-  return id === null || id === '' ? null : id;
-}
-
-function personaLabel(deps: WorkPanelDeps, id: string): string {
-  return deps.personaName?.(id) ?? id;
-}
-
 /** The ticket's settled cost as the mobile list writes it (`$1.20`); null = none known. */
 function costNode(row: WorkRow): HTMLElement | null {
   const cost = row.card.usage?.cost;
   return typeof cost === 'number' && Number.isFinite(cost) ? el('span', 'work-row-cost', usd(cost)) : null;
-}
-
-/** The persona's name as grey meta text (mobile list parity, E13-8); null = none. */
-function personaNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement[] {
-  const who = personaIdOf(row);
-  if (who === null) {
-    return [];
-  }
-  const text = el('span', 'work-row-persona', personaLabel(deps, who));
-  text.title = `Persona: ${personaLabel(deps, who)}`;
-  return [text];
 }
 
 /** The cost, grey, at the line's right end; its title says it is the cost so far. */
@@ -525,30 +491,47 @@ function costNodes(row: WorkRow): HTMLElement[] {
   return [cost];
 }
 
-/** A Needs-you row: title + age, then the phase chip, the kind chip and why it waits. */
-function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
-  const { card, need } = row;
-  const { node, more } = baseRow(deps, card);
-  if (need !== null) {
-    node.dataset['need'] = need.kind;
+/** The rich rows' second line, board 7a: id · phase · what it is · age, the cost at the right end. */
+function richSub(row: WorkRow, parts: readonly HTMLElement[], age: string): HTMLElement {
+  const sub = el('div', 'work-row-sub');
+  const pieces = [idNode(row.card.id), ...parts];
+  if (age !== '') {
+    pieces.push(el('span', 'work-row-age', age));
+  } else {
+    // The live paint fills the age when the run starts; the span stays so it can.
+    const empty = el('span', 'work-row-age');
+    empty.hidden = true;
+    pieces.push(empty);
   }
+  sub.append(metaLine(...pieces), ...costNodes(row));
+  return sub;
+}
+
+/** A rich row's first line: the title, then the hover-only menu button. */
+function richTop(card: TicketCard, more: HTMLElement): HTMLElement {
   const top = el('div', 'work-row-top');
-  top.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   const issues = issuesBadge(card);
   if (issues !== null) {
     top.append(issues);
   }
-  top.append(el('span', 'work-row-age', ageWords(need?.since ?? null, Date.now())), more);
-  node.append(top);
+  top.append(more);
+  return top;
+}
+
+/** A Needs-you row: the title, then id · phase · what it waits for · age and the cost. */
+function rowNode(_deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
+  const { card, need } = row;
+  const { node, more } = baseRow(_deps, card);
   if (need !== null) {
-    const line = el('div', 'work-row-sub');
+    node.dataset['need'] = need.kind;
+  }
+  node.append(richTop(card, more));
+  if (need !== null) {
     const kind = needKindLabel(need, snap);
-    line.append(
-      // The phase word is dropped when the kind already says it (*Review* in Review).
-      metaLine(...(kind === row.phase.title ? [] : [phaseChipNode(row)]), el('span', 'work-kind', kind), el('span', 'work-row-line', statusLineOf(row, snap)), ...personaNode(deps, row)),
-      ...costNodes(row),
-    );
-    node.append(line);
+    // The phase word is dropped when the kind already says it (*Ready to try* in Ready to try).
+    const parts = kind === row.phase.title ? [phaseChipNode(row)] : [phaseChipNode(row), el('span', 'work-kind', kind.toLowerCase())];
+    node.append(richSub(row, parts, ageWords(need.since, Date.now())));
   }
   return node;
 }
@@ -559,35 +542,21 @@ function shapingDialogLine(row: WorkRow): string {
   return row.run === null ? 'Dialog not started' : `${row.run.turn === 'busy' ? 'Dialog running' : 'Dialog paused'} · ${turns} turns`;
 }
 
-/** A Shaping row: title + age, then the phase chip and the dialog's pulse. */
+/** A Shaping row: the title, then id · phase · the dialog's pulse · age. */
 function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   const { card } = row;
   const { node, more } = baseRow(deps, card);
   if (row.run !== null) {
     node.dataset['running'] = 'true';
   }
-  const top = el('div', 'work-row-top');
-  top.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
-  const issues = issuesBadge(card);
-  if (issues !== null) {
-    top.append(issues);
-  }
-  top.append(el('span', 'work-row-age', ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())), more);
-  node.append(top);
-  const sub = el('div', 'work-row-sub');
-  sub.append(metaLine(phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row)), ...personaNode(deps, row)), ...costNodes(row));
-  node.append(sub);
+  node.append(richTop(card, more));
+  node.append(
+    richSub(row, [phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row))], ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())),
+  );
   return node;
 }
 
-/** A live Running row's glyph: the squirrel, posed from the run's pulse. */
-function runSquirrel(run: RunInfo | null): HTMLElement {
-  const node = squirrelNode(12);
-  setSquirrelPose(node, squirrelPose(run, Date.now()));
-  return node;
-}
-
-/** A Running row: title + the run's age, then the glyph, the phase chip, the step and the worker's line. */
+/** A Running row: the title, then id · phase · step · age (while it lives) and the cost. */
 function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
   const { card } = row;
   const { node, more } = baseRow(deps, card);
@@ -595,66 +564,36 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
   if (step.live) {
     node.dataset['running'] = 'true';
   }
-  const top = el('div', 'work-row-top');
-  top.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
-  const issues = issuesBadge(card);
-  if (issues !== null) {
-    top.append(issues);
-  }
-  top.append(el('span', 'work-row-age', step.live ? ageWords(row.run?.startedAt ?? null, Date.now()) : ''), more);
-  node.append(top);
-  const sub = el('div', 'work-row-sub work-run');
-  // The line span is always there (hidden while empty), so the live
-  // paint can fill it without touching the row's bones (T-0086).
-  const line = el('span', 'work-run-line', step.line);
-  line.hidden = step.line === '';
-  sub.append(
-    step.live ? runSquirrel(row.run) : el('span', 'work-run-dot work-run-dot-queued'),
-    metaLine(phaseChipNode(row), el('span', 'work-run-step', step.step), line, ...personaNode(deps, row)),
-    ...costNodes(row),
-  );
-  node.append(sub);
+  node.append(richTop(card, more));
+  // The step word is dropped when it only repeats the phase (board 7a: "Building · queued").
+  const stepWord = el('span', 'work-run-step', step.step);
+  stepWord.hidden = step.step.toLowerCase() === row.phase.title.toLowerCase();
+  node.append(richSub(row, [phaseChipNode(row), stepWord], step.live ? ageWords(row.run?.startedAt ?? null, Date.now()) : ''));
   return node;
 }
 
-/** An Idea row: one line — priority chip when it matters, title, track chip. */
+/** An Inbox row (board 7a): the title alone; the menu button shows on hover. A priority that matters earns its chip. */
 function ideaRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
   const { card } = row;
   const { node, more } = baseRow(deps, card);
   node.classList.add('work-row-idea');
+  node.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   // The vocabulary's jump class earns the chip (`urgent`/`high` in the
   // default list); an id outside the label map shows as itself.
   if (priorityClass(card.meta.priority, snap.priorities ?? DEFAULT_PRIORITY_CONFIG) === 0) {
     const label = PRIORITY_LABEL[card.meta.priority] ?? card.meta.priority;
     node.append(el('span', `work-prio-mini work-prio-mini-${card.meta.priority}`, label));
   }
-  node.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
-  if (row.queued) {
-    const queued = el('span', 'work-row-queued', 'Queued');
-    queued.title = 'Queued for the fleet — the next free worker takes it';
-    node.append(queued);
-  }
-  const track = card.meta.track;
-  const chip = el('span', `work-track work-track-${track ?? 'triage'}`, track === 'auto' ? 'Auto' : track === 'shape' ? 'Shape' : 'Triage');
-  chip.title =
-    track === null
-      ? 'Not triaged yet — pick a track from the menu'
-      : `Track: ${track === 'auto' ? 'Auto — runs on its own' : 'Shape — a plan-mode dialog with you'}`;
-  node.append(chip, ...costNodes(row), more);
+  node.append(more);
   return node;
 }
 
-/** A Prioritized row (E13-8): queued for the fleet - id, title, who it waits for, the cost so far. */
+/** A Prioritized row (board 7a): the title, the ticket id grey at the right end. */
 function prioritizedRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   const { card } = row;
   const { node, more } = baseRow(deps, card);
   node.classList.add('work-row-idea');
-  node.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
-  const who = personaIdOf(row);
-  const wait = el('span', 'work-row-queued', who === null ? 'Queued' : `waits for ${personaLabel(deps, who)}`);
-  wait.title = 'Queued for the fleet - the next free worker takes it';
-  node.append(wait);
-  node.append(...costNodes(row), more);
+  node.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'), idNode(card.id), more);
   return node;
 }
 
@@ -662,7 +601,7 @@ function prioritizedRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
 function doneGroupNode(deps: WorkPanelDeps, snap: BoardSnapshot, folds: GroupFoldStore, rerender: () => void): HTMLElement {
   const section = el('section', 'work-group work-group-done');
   section.dataset['group'] = 'done';
-  section.append(groupHead('done', String(snap.recentDone.length), folds.isFolded('done'), folds, rerender));
+  section.append(groupHead(deps, 'done', String(snap.recentDone.length), folds.isFolded('done'), folds, rerender));
   if (!folds.isFolded('done')) {
     const body = el('div', 'work-group-rows');
     for (const done of snap.recentDone) {

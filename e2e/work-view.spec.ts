@@ -60,7 +60,7 @@ test.use({
 test.describe('The Work view (E13-13)', () => {
   test('switches between Notes and Work and opens tickets in Work', async ({ page }, testInfo) => {
     const tabs = page.locator('[role="tablist"][aria-label="Views"] [role="tab"]');
-    await expect(tabs).toHaveText(['Notes', 'Work']);
+    await expect(tabs).toHaveText(['Notes', 'Work', 'Crew']);
     await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
     await page.screenshot({ path: testInfo.outputPath('view-notes.png') });
 

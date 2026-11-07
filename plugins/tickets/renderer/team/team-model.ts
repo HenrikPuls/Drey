@@ -15,8 +15,18 @@ const LIVE_STATES: readonly string[] = ['starting', 'running', 'stopping', 'deta
 /** A provider id as the pool chips name it (the mobile client's labels). */
 const POOL_LABEL: Readonly<Record<string, string>> = { opencode: 'Local', 'claude-code': 'Claude Code', kimi: 'Kimi Code' };
 
+/** A worker provider as the pool names it (`opencode` -> `Local`); an unknown id stands for itself. */
+export function poolLabelOf(provider: string): string {
+  return POOL_LABEL[provider] ?? provider;
+}
+
 /** The context fill from which a stuck run's line mentions it. */
 const CONTEXT_WARN_PCT = 60;
+
+/** A budget as the boards write it: `$15` for a whole amount, `$4.10` otherwise. */
+export function usdBudget(value: number): string {
+  return Number.isInteger(value) ? `$${value}` : usd(value);
+}
 
 /** Dollars with two decimals, the way the mobile client writes money. */
 export function usd(value: number): string {
@@ -28,12 +38,16 @@ export function roleLabel(role: string): string {
   return role === '' ? '' : role[0]!.toUpperCase() + role.slice(1);
 }
 
-/** Two initials for an avatar (`Claude Code` -> `CC`, `Ben` -> `B`). */
+/** Two initials for an avatar, as boards 7e and 7k write them (`Claude Code` -> `CC`, `Ben` -> `BE`). */
 export function initialsOf(title: string): string {
-  return title
+  const words = title
     .trim()
     .split(/\s+/)
-    .filter((word) => word !== '')
+    .filter((word) => word !== '');
+  if (words.length === 1) {
+    return [...words[0]!].slice(0, 2).join('').toUpperCase();
+  }
+  return words
     .slice(0, 2)
     .map((word) => [...word][0]!.toUpperCase())
     .join('');
@@ -57,6 +71,8 @@ export interface RunRowModel {
   /** What the worker is doing now; '' = nothing reported. */
   readonly activity: string;
   readonly stuck: boolean;
+  /** Whole minutes without output; null = unknown. */
+  readonly quietMinutes: number | null;
   /** The amber line of a flagged run; '' otherwise. */
   readonly stuckLine: string;
   readonly waiting: boolean;
@@ -84,6 +100,8 @@ export interface PersonaCardModel {
   readonly budgetPct: number | null;
   readonly overBudget: boolean;
   readonly paused: boolean;
+  /** The owner as a team member (`kind: human`); the boards draw agents only. */
+  readonly human: boolean;
   readonly runs: readonly RunRowModel[];
 }
 
@@ -158,6 +176,7 @@ function runRowOf(run: RunInfo, titleOf: (ticketId: string) => string | null, no
     age: ageOf(run.startedAt, nowMs),
     activity: run.activity ?? '',
     stuck: run.stuck === true,
+    quietMinutes: minutesSince(run.lastActivity, nowMs),
     stuckLine: run.stuck === true ? stuckLineOf(run, nowMs) : '',
     waiting: run.waiting !== undefined,
     provider: run.provider,
@@ -224,6 +243,7 @@ export function personaCardOf(
     budgetPct: budgetPctOf(dailyCost, budget),
     overBudget: dailyCost !== null && budget !== null && dailyCost > budget,
     paused,
+    human: persona.kind === 'human',
     runs: rows,
   };
 }
@@ -269,7 +289,8 @@ export function teamModelOf(
   nowMs: number,
 ): TeamModel {
   const paused = chain?.pausedPersonas ?? [];
-  const cards = personas.map((persona) => personaCardOf(persona, runs, paused, titleOf, nowMs));
+  // The boards (7e, 7f) show the agents; the owner's own persona has no card and no slots.
+  const cards = personas.filter((persona) => persona.kind !== 'human').map((persona) => personaCardOf(persona, runs, paused, titleOf, nowMs));
   const costs = cards.map((card) => card.dailyCost).filter((cost): cost is number => cost !== null);
   const budgets = cards.map((card) => card.budget).filter((budget): budget is number => budget !== null);
   const capacity = capacityOf(chain, runs);
@@ -285,11 +306,10 @@ export function teamModelOf(
   };
 }
 
-/** The Crew tab's header: `5 personas · 1 running · 1 stuck · today $1.59`; idle says nothing. */
+/** The Crew tab's header line (board 7f): `5 personas · 1 running · 1 stuck`; idle says nothing. The day's cost has its own block. */
 export function teamHeadOf(model: TeamModel): string {
   const count = `${model.personas.length} ${model.personas.length === 1 ? 'persona' : 'personas'}`;
-  const parts = [count, ...(model.summary === 'All idle' ? [] : [model.summary])];
-  return (model.todayCost === null ? parts : [...parts, `today ${usd(model.todayCost)}`]).join(' · ');
+  return [count, ...(model.summary === 'All idle' ? [] : [model.summary])].join(' · ');
 }
 
 /** The capacity band's head: `2 of 5 slots busy`; '' without pool sizes. */
