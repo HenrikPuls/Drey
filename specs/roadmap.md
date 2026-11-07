@@ -124,12 +124,12 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 - **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
   T-0030's `R-20261104T13124-2vrn`, `detached`, its pid gone since before the cut-over.
 
-- **D-35 — the runner still commits to the legacy vault after the cut-over** (cut-over smoke, 2026-11-06). On its start at 20:53:20Z the
+- **D-42 — the runner still commits to the legacy vault after the cut-over** (cut-over smoke, 2026-11-06). On its start at 20:53:20Z the
   runner removed T-0030's stale `run:` stamp from `tickets/10-inbox/T-0030.md`, added "the runner restarted" to its Log and committed
   that to the meta vault (`b5b60c3`), though T-0030 lives in the store. Its run `R-20261104T13124-2vrn` from before the freeze is the
   one D-34 counts. Possibly the same route as D-30; not checked. Harmless for the store, but the legacy tree should stop changing.
 
-- **D-36 — a Prioritized ticket starts on its own with the Autopilot off, blocks the owner's round** (cut-over smoke, 2026-11-06; owner: "it was
+- **D-41 — a Prioritized ticket starts on its own with the Autopilot off; the owner put the fix off on 2026-11-07, Prioritized was emptied instead** (cut-over smoke, 2026-11-06; owner: "it was
   pulled in automatically", he started none of them; the source is not found). T-0091 started three times on the real board, each time around
   the owner's work on T-0092: 20:53:40Z, 18 s after T-0092's run, master on; 21:00:56Z and 21:39:11Z after `autopilot: off` (20:57:45Z in
   `runner.log`), 38 s before an Accept. Together 3.7M tokens in, eight uncommitted files, each stopped by hand. The runner logs "explicit fresh
