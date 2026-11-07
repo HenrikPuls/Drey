@@ -215,6 +215,7 @@
   "views.list": "Views",
   "views.unsaved": "Unsaved layout changes",
   "views.unsaved_title": "{view} · unsaved changes",
+  "views.needs_you": "Something needs you in {view}",
   "views.layout": "Layout",
   "views.save_layout": "Save layout",
   "views.reset_layout": "Reset to saved layout",

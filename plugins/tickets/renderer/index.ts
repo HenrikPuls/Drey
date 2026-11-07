@@ -46,7 +46,7 @@ import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, t
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, showsTicketDocument, ticketLogFold, ticketTabTitle } from './ticket-header';
-import { WORK_VIEW_ID, registerWorkView } from './view-preset';
+import { BOARD_KEY, BOARD_KIND, TEAM_KEY, TEAM_KIND, WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
 import { shapeMarksOf } from './ticket-document/shape';
@@ -386,6 +386,8 @@ const refreshStatusItem = (): void => {
     autopilot: snapshot === null || snapshot.vaultId === null ? null : (autopilotViewOf(chain)?.state ?? 'off'),
     inNotesView: statusApi.ui.activeViewId() === 'notes',
   });
+  // Board 7h: the dot on the Work view's tab while something needs the owner there (SDK 1.50).
+  statusApi.ui.setViewBadge(WORK_VIEW_ID, needs > 0);
 };
 
 /** Keeps the header's master switch in step (the buttons live outside the board). */
@@ -1676,10 +1678,6 @@ let threadFocusRun: string | null = null;
 
 // --- the desk surfaces (E13-8): Board and Team tabs, the Capacity band ------------
 
-const BOARD_KIND = 'tickets-board';
-const BOARD_KEY = 'board://all';
-const TEAM_KIND = 'tickets-team';
-const TEAM_KEY = 'team://all';
 
 let deskDepsMemo: DeskDeps | null = null;
 let teamStoreMemo: TeamStore | null = null;

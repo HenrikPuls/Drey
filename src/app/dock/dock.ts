@@ -76,6 +76,8 @@ export class Dock implements OnInit {
 
   protected readonly ids = computed<PanelId[]>(() => this.dock.idsFor(this.side()));
   protected readonly isEmpty = computed(() => this.ids().length === 0);
+  /** The bottom dock with one panel draws no icon strip (board 7e); `DockService.soloBottom` keeps that panel open. */
+  protected readonly soloBottom = computed(() => this.side() === 'bottom' && this.ids().length === 1);
   /** The pane docked in this dock's editor band, if any (ADR-0038). */
   protected readonly bandPaneId = computed(() => this.panes.dockPane(this.side()));
   /** A side dock is width-sized; the bottom dock is height-sized. */

@@ -151,8 +151,12 @@ const plugin: PluginRendererModule = {
     api.ui.registerViewPreset({
       id: 'sample.view',
       label: 'Sample',
-      layout: { left: ['sample'], right: ['files'] },
+      // openTabs (SDK 1.50): the view brings this tab back on every visit it
+      // does not hold it -- opened through the kind's restore(path, null).
+      layout: { left: ['sample'], right: ['files'], openTabs: [{ kind: 'sample-clock', path: 'sample://clock' }] },
     });
+    // api.ui.setViewBadge('sample.view', true) puts the needs-you dot on the
+    // view's tab in the switcher (SDK 1.50); only your own presets.
 
     // … a settings page (api.ui.registerSettingsPage), a document tab kind
     // (api.ui.registerDocKind -- with `homeView: 'sample.view'` its tabs

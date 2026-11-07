@@ -303,6 +303,14 @@ export interface ViewPresetLayout {
   readonly open?: readonly string[];
   /** Side docks folded away at first. */
   readonly folded?: readonly ('left' | 'right')[];
+  /**
+   * Tabs the view opens for itself (SDK 1.50): each is a contributed doc
+   * kind and the path/key the kind's `restore` opens. Applied every time
+   * the view is switched to, for each tab that is not open in the view
+   * (so a closed tab comes back on the next visit, as the view's own
+   * layout -- board 7h: a view owns its tabs).
+   */
+  readonly openTabs?: readonly { readonly kind: string; readonly path: string }[];
 }
 
 /**
@@ -1038,6 +1046,14 @@ export interface DreyPluginApi {
      * lands in Notes). A taken id is refused with a logged warning.
      */
     registerViewPreset(preset: ViewPresetContrib): Unsubscribe;
+    /**
+     * Flag or unflag one of this plugin's own view presets in the view
+     * switcher (SDK 1.50): a dot on the view's tab, "something needs you
+     * in <view>" (board 7h). The host attaches no meaning beyond the dot;
+     * a view of another plugin or a user view is ignored with a logged
+     * warning.
+     */
+    setViewBadge(id: string, on: boolean): void;
     /** Make the view `id` (a preset's id, `notes`, or a user view) the active one. Unknown ids are a no-op. */
     switchView(id: string): void;
     /** The active view's id (`notes`, a preset's id or a user view, SDK 1.46). */

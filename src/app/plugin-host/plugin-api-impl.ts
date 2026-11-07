@@ -356,7 +356,14 @@ export class PluginApiFactory {
         registerSettingsPage: (page: PluginSettingsPageContrib) =>
           track(this.settingsPages.registerPluginPage(page, PluginSettingsHost)),
         registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),
-        registerViewPreset: (preset) => track(this.views.registerPreset(pluginId, preset)),
+        registerViewPreset: (preset) =>
+          track(
+            this.views.registerPreset(pluginId, preset, (kind, path) => {
+              // The preset's own tabs (SDK 1.50) open the way a restored session opens them.
+              this.docKinds.get(kind)?.restore(path, null);
+            }),
+          ),
+        setViewBadge: (id, on) => this.views.setBadge(pluginId, id, on),
         switchView: (id) => this.views.switchTo(id),
         activeViewId: () => this.views.activeId(),
         onActiveViewChange: (listener) => track(this.views.onActiveChange(listener)),

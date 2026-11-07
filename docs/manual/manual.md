@@ -1204,8 +1204,8 @@ the Work panel's **⋯** menu (*Board*, *Crew*) or the command palette
 - **Capacity** (a panel for the bottom dock) — one line: how many of the
   worker slots are busy, the pool chips, what each persona is doing right
   now, today's cost, **Pause all** and **Open Crew ›**. It shows only while
-  the Board or Crew tab is active; otherwise the bottom dock folds to its
-  icon strip.
+  the Board tab is active. As the only panel of the bottom dock it has no
+  icon strip above it; the chevron in its header folds it to the header.
 
 **Pause and stuck workers.** **Pause** (on the thread and on a Crew
 run) waits for the current action — a command or an edit — to finish and

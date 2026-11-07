@@ -6,6 +6,9 @@ import { EditorService } from '../services/editor.service';
 import { HomeViewRouter } from '../services/home-view-router.service';
 import { LogService } from '../services/log.service';
 
+/** Opens a contributed doc kind's tab by its path/key (the kind's `restore`); handed in by the plugin host. */
+export type TabOpener = (kind: string, path: string) => void;
+
 /** One view: a named, saved layout (ADR-0089). */
 export interface ViewDef {
   readonly id: string;
@@ -65,7 +68,10 @@ export class ViewService {
   private readonly log = inject(LogService);
 
   private readonly user = signal<readonly ViewDef[]>(this.read());
-  private readonly presets = signal<readonly (ViewDef & { readonly preset: ViewPresetContrib })[]>([]);
+  private readonly presets = signal<readonly (ViewDef & { readonly preset: ViewPresetContrib; readonly opener?: TabOpener })[]>([]);
+
+  /** The views flagged by their plugin (SDK 1.50, `ui.setViewBadge`): a dot on the switcher's tab. */
+  private readonly badges = signal<Readonly<Record<string, true>>>({});
   readonly views = computed<readonly ViewDef[]>(() => [NOTES, ...this.presets(), ...this.user()]);
   private readonly _activeId = signal<string>(DEFAULT_VIEW_ID);
   readonly activeId = this._activeId.asReadonly();
@@ -150,7 +156,7 @@ export class ViewService {
    * after this one. Disposing removes the view; if it was active the owner
    * lands in Notes.
    */
-  registerPreset(pluginId: string, preset: ViewPresetContrib): Unsubscribe {
+  registerPreset(pluginId: string, preset: ViewPresetContrib, opener?: TabOpener): Unsubscribe {
     const id = preset.id.trim();
     const label = preset.label.trim();
     if (id === '' || label === '' || this.views().some((v) => v.id === id)) {
@@ -164,6 +170,7 @@ export class ViewService {
       pluginId,
       ...(preset.assistantTarget !== undefined ? { assistantTarget: preset.assistantTarget } : {}),
       preset,
+      ...(opener !== undefined ? { opener } : {}),
     };
     this.presets.update((list) => [...list, entry]);
     return () => {
@@ -171,7 +178,58 @@ export class ViewService {
         this.switchTo(DEFAULT_VIEW_ID);
       }
       this.presets.update((list) => list.filter((p) => p !== entry));
+      this.setBadgeState(id, false);
     };
+  }
+
+  /** True while the plugin behind view `id` flags it (SDK 1.50, `ui.setViewBadge`). */
+  badge(id: string): boolean {
+    return this.badges()[id] === true;
+  }
+
+  /** `ui.setViewBadge`: only the plugin that registered the preset may flag it. */
+  setBadge(pluginId: string, id: string, on: boolean): void {
+    const entry = this.presets().find((p) => p.id === id);
+    if (entry === undefined || entry.pluginId !== pluginId) {
+      this.log.record('warn', `setViewBadge("${id}") by plugin "${pluginId}" ignored: not one of its view presets`);
+      return;
+    }
+    this.setBadgeState(id, on);
+  }
+
+  private setBadgeState(id: string, on: boolean): void {
+    this.badges.update((all) => {
+      if ((all[id] === true) === on) {
+        return all;
+      }
+      const { [id]: _was, ...rest } = all;
+      return on ? { ...rest, [id]: true } : rest;
+    });
+  }
+
+  /**
+   * The preset's own tabs (SDK 1.50, `ViewPresetLayout.openTabs`): each
+   * one that the view does not hold is opened through its doc kind's
+   * `restore`, after the panes have switched so the tab lands in this view.
+   * A kind that is not registered or throws costs only a log line.
+   */
+  private openPresetTabs(id: string): void {
+    const entry = this.presets().find((p) => p.id === id);
+    const tabs = entry?.preset.layout?.openTabs ?? [];
+    if (entry?.opener === undefined || tabs.length === 0) {
+      return;
+    }
+    const held = new Set(this.panes.tabsOfView(id));
+    for (const tab of tabs) {
+      if (held.has(tab.path)) {
+        continue;
+      }
+      try {
+        entry.opener(tab.kind, tab.path);
+      } catch (error) {
+        this.log.record('warn', `view "${id}": opening ${tab.kind} ${tab.path} failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   /** Switches the whole workspace: docks and panes together. */
@@ -187,6 +245,7 @@ export class ViewService {
     this.panes.switchView(id);
     this._activeId.set(id);
     this.adoptBaseline(id);
+    this.openPresetTabs(id);
   }
 
   /** `Ctrl+1`…`Ctrl+9`: the view at 0-based `index`; a missing one does nothing. */

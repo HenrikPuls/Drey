@@ -1,3 +1,29 @@
+### Milestone 199 — req-126: the frame follow-ups of wave 4.2 — no icon strip on a one-panel bottom dock, a badge on a view tab, a view's own tabs (SDK 1.50)
+
+**Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): wave 4.2 could not draw three
+board elements from its own files and handed them to the frame; the owner ruled "all three". No board changed meaning;
+4.2's rows "belongs to the frame" / "SDK gap" close with this. Milestone numbers 197 and 198 are 4.4's and 4.6's.
+
+- **Bottom dock with one panel: no icon strip, never closed** (board 7e; ADR-0019 later change). `Dock` skips the strip
+  when `side === 'bottom'` and one panel lives there; `DockService.soloBottom(id)` makes `closed(id)` false for it (a
+  strip toggle recorded earlier counts again once a second panel arrives), `noneOpen` follows `closed`. The band's
+  minimum height is 100 px (`HEIGHT.min`, the drag-target CSS), down from 140. The header's chevron (milestone 192)
+  is how the lone panel gets small.
+- **SDK 1.50 `ui.setViewBadge(id, on)`** (board 7h; ADR-0089 later change): a plugin flags one of its own view presets;
+  the switcher draws the 7 px dot (the token the status bar's attention dot uses) with `aria-label` "Something needs
+  you in {view}" (catalog `views.needs_you`), also on the folded switcher. Another plugin's preset or a user view is
+  refused with a logged warning; unregistering the preset clears it. The tickets plugin sets it from
+  `refreshStatusItem`: on while the Work panel's needs-you count is above zero.
+- **SDK 1.50 `ViewPresetLayout.openTabs: [{ kind, path }]`** (boards 7h/7i): on every switch to the view, each listed
+  tab the view does not hold opens through the doc kind's `restore(path, null)` — the plugin host hands
+  `ViewService.registerPreset` that opener, so the views module stays free of the plugin host. The Crew preset lists
+  its Crew tab (the sample plugin shows the field in `plugins/TUTORIAL.md` only: a second clock tab would trip its e2e).
+- **Specs:** `view.service.spec` (badge ownership, badge dropped with the preset, openTabs on every visit and only for
+  tabs not held, a throwing opener), `view-switcher.spec` (the badge dot and its name), `dock.service.spec` (the lone
+  bottom panel never closes; two earlier tests now use two bottom panels). SDK docs: `plugins/AUTHORING.md` 1.50,
+  docs/05 §5.0, the manual's Capacity paragraph.
+- **Roadmap:** req-126 entered and left with this change.
+
 ### Milestone 196 — wave 4.3: the ticket pages match boards 7b, 7c, 7d, 7j and the 9a card; E13-10 / E12-17 Parts block, E12-19 Review splitter
 
 **Not yet manually verified by the owner.** Wave row 4.3 (`desk-ticket-pages`), rulings of the integrator on Q1–Q5 of the measure sheet.

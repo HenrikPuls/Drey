@@ -636,7 +636,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   leaves only the active view while another still shows it. The switcher is
   title-bar chrome; `Ctrl+1`–`9`, "Switch view" and "Save current layout as
   a view…" are commands registered in `App`. Plugin **view presets** (SDK
-  1.39, `ui.registerViewPreset`, E13-2) join the list after Notes
+  1.39, `ui.registerViewPreset`, E13-2; SDK 1.50 adds `layout.openTabs` --
+  opened through the kind's `restore` on every switch the view does not hold
+  them -- and `setViewBadge`, the dot on the view's tab) join the list after Notes
   (`registerPreset`, not persisted -- the plugin re-registers at every start;
   `settleStartup()` runs at the head of `SessionService.restore` and sends an
   active preset whose plugin is gone back to Notes); the preset's layout is
