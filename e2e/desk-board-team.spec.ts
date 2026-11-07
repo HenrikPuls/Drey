@@ -148,8 +148,8 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
   test('shows the board, the team and the capacity band', async ({ page, electronApp }, testInfo) => {
     // The Work view exists once the plugin has registered it; Ctrl+2 before that does nothing.
     await expect(page.locator('[role="tablist"][aria-label="Views"] [role="tab"]')).toHaveText(['Notes', 'Work'], { timeout: 30_000 });
-    // The title-bar capture button runs the same command as its chord (E13-16).
-    await expect(page.locator('app-titlebar .tb-action', { hasText: 'Capture by voice' })).toHaveAttribute('title', 'Capture by voice (Ctrl Alt T)');
+    // The title bar carries no capture button (board 9a); it is the Work panel's first header action (board 7a).
+    await expect(page.locator('app-titlebar .tb-action')).toHaveCount(0);
     // The status items (E12-15): today's cost and what waits, "in Work" from the Notes view.
     const statusBar = page.locator('app-status-bar');
     await expect(statusBar).toContainText(/\$\d+\.\d\d of \$\d+ today/, { timeout: 15_000 });
@@ -209,10 +209,10 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await openFromMenu('Board');
     const board = page.locator('.desk-board').filter({ visible: true });
     await expect(board).toBeVisible({ timeout: 15_000 });
-    await expect(board.locator('.desk-col-title')).toHaveText(['Inbox', 'Prioritized', 'Plan', 'Build', 'Review', 'Commit', 'Done']);
+    await expect(board.locator('.desk-col-title')).toHaveText(['Inbox', 'Prioritized', 'Plan', 'Build', 'Review', 'Commit', 'Done this week']);
     const build = board.locator('[data-phase="build"]');
     await expect(build.locator('.desk-col-cost')).toHaveText('$3.61');
-    await expect(build.locator('[data-id="T-0121"] .desk-persona-chip')).toHaveText('Ben');
+    await expect(build.locator('[data-id="T-0121"] .desk-card-who')).toContainText('Ben');
     await expect(build.locator('[data-id="T-0121"] .desk-card-cost')).toHaveText('$1.20');
     // The released part hangs under its ticket; the plan's unreleased parts too.
     const plan = board.locator('[data-id="T-0130"]');
@@ -241,32 +241,28 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await openFromMenu('Crew');
     const team = page.locator('.desk-team').filter({ visible: true });
     await expect(team).toBeVisible({ timeout: 15_000 });
-    await expect(team.locator('.desk-head-sub')).toHaveText('5 personas · 1 waiting · 1 stuck · today $4.22');
-    await expect(team.locator('.desk-chips')).toHaveText('Local 2/2Claude Code 0/3');
+    await expect(team.locator('.desk-head-sub')).toHaveText('4 personas · 1 waiting · 1 stuck');
+    await expect(team.locator('.desk-budget')).toContainText('of $19 today');
     await expect(team.locator('[data-persona="ben"] .desk-persona-state')).toHaveText('waiting');
     await expect(team.locator('[data-persona="tessa"] .desk-persona-state')).toHaveText('stuck');
-    await expect(team.locator('[data-persona="tessa"] .desk-run-stuckline')).toHaveText(
-      'No progress for 9 minutes and the context is filling up (78%).',
-    );
-    await expect(team.locator('[data-persona="tessa"] .desk-run-controls button')).toHaveText(['Nudge', 'Hand to Claude Code', 'Stop']);
-    await expect(team.locator('[data-persona="ben"] .desk-persona-cost')).toHaveText('$3.25 of $5.00 today');
-    // The persona detail opens beside the grid.
-    await team.locator('[data-persona="ben"]').click();
-    await expect(team.locator('.desk-tab')).toHaveText(['1:1', 'Memory', 'Setup']);
-    await team.locator('.desk-tab', { hasText: 'Setup' }).click();
-    await expect(team.locator('.desk-setup')).toContainText('qwen3-coder');
+    await expect(team.locator('[data-persona="tessa"] .desk-persona-headline')).toHaveText('No output for 9 min on T-0126');
+    await expect(team.locator('[data-persona="tessa"] .desk-persona-controls button')).toHaveAttribute('aria-label', /Nudge the worker|Hand to Claude Code|Stop/);
+    await expect(team.locator('[data-persona="ben"] .desk-persona-role')).toHaveText('Builder · $3.25 today');
+    // The persona detail sits under the cards: the first persona is selected, Setup first.
+    await expect(team.locator('.desk-tab')).toHaveText(['Setup', 'Memory', '1:1']);
+    await expect(team.locator('.desk-pool-model')).toHaveText('qwen3-coder');
     await page.screenshot({ path: testInfo.outputPath('desk-team.png') });
 
-    // --- Capacity band in the bottom dock
+    // --- Capacity band in the bottom dock: only on the Board tab (board 7e; the Crew tab, 7f, has none)
+    await expect(page.locator('.desk-capacity')).toBeHidden();
+    await openFromMenu('Board');
     const band = page.locator('.desk-capacity').filter({ visible: true });
     await expect(band).toBeVisible({ timeout: 15_000 });
-    await expect(band.locator('.desk-cap-slots')).toHaveText('2 of 5 slots busy');
     await expect(band.locator('.desk-cap-person').filter({ hasText: 'Tessa' })).toContainText('stuck on T-0126');
-    await expect(band.locator('.desk-cap-today')).toHaveText('Today $4.22 of $19.00');
+    await expect(band.locator('.desk-cap-today')).toHaveText('$4.22 of $19 today');
     await page.screenshot({ path: testInfo.outputPath('desk-capacity.png') });
 
-    // The band rule (E12-15, board 7e): visible on the Crew tab, hidden once
-    // another tab (a ticket) is the active one.
+    // The band rule (E12-15, board 7e): hidden once another tab (a ticket) is the active one.
     await panel.locator('.work-row[data-id="T-0121"]').click();
     await expect(page.locator('.desk-capacity')).toBeHidden({ timeout: 15_000 });
     stopEngine();

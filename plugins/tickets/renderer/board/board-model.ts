@@ -19,6 +19,7 @@ import type { PlanPartCard } from '../../../../packages/tickets-engine/src/contr
 import type { RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import { isLiveRun, usd } from '../team/team-model';
+import { needKindLabel, workGroups } from '../work-groups';
 
 /** A part of a ticket: another ticket (`parent:`) or a plan part not released yet. */
 export interface BoardPartModel {
@@ -39,7 +40,7 @@ export interface BoardCardModel {
   readonly card: TicketCard;
   readonly id: string;
   readonly title: string;
-  /** The status word beside the id (`Question`, `Plan`, `Running`, ...); '' = none. */
+  /** What waits on the owner, beside the id (`Question`, `Plan to accept`, `Accept`); '' = nothing waits (board 7e). */
   readonly kind: string;
   readonly personaId: string | null;
   readonly cost: number | null;
@@ -57,6 +58,8 @@ export interface BoardColumnModel {
   readonly cost: number | null;
   /** True for the first column, where "New idea" lands. */
   readonly first: boolean;
+  /** True for the last column: its tickets are done (the board's own Done column shows the archive). */
+  readonly terminal: boolean;
 }
 
 export interface BoardModel {
@@ -114,6 +117,15 @@ export function boardModelOf(
       childrenOf.set(parent, list);
     }
   }
+  // What waits on the owner is the one thing a card says about itself (board 7e);
+  // the Work panel's own reading of a need, so the two surfaces agree.
+  const needWord = new Map<string, string>();
+  for (const row of workGroups(snap, runs).needs) {
+    if (row.need !== null) {
+      const label = needKindLabel(row.need, snap);
+      needWord.set(row.card.id, label === 'Ready to try' ? 'Accept' : label);
+    }
+  }
   const terminal = configured.length > 0 ? configured[configured.length - 1]!.phase.id : null;
   const columnPersonaOf = new Map<string, string | null>();
   for (const column of snap.columns) {
@@ -155,12 +167,11 @@ export function boardModelOf(
             card: null,
           }));
         const parts = [...children, ...planned];
-        const waiting = run?.waiting !== undefined;
         return {
           card,
           id: card.id,
           title: card.meta.title ?? '(untitled)',
-          kind: planned.length > 0 ? 'Plan' : waiting ? 'Waiting' : run !== null ? 'Running' : '',
+          kind: needWord.get(card.id) ?? '',
           personaId: personaOf(card),
           cost: costOf(card),
           line: run?.activity ?? (card.blocked.length > 0 ? `blocked by ${card.blocked.join(', ')}` : ''),
@@ -169,7 +180,7 @@ export function boardModelOf(
         };
       });
     const cost = sumKnown(cards.flatMap((entry) => [entry.cost, ...entry.parts.map((part) => part.cost)]));
-    return { id: column.phase.id, title: column.phase.title, cards, cost, first: index === 0 };
+    return { id: column.phase.id, title: column.phase.title, cards, cost, first: index === 0, terminal: index === configured.length - 1 };
   });
   return {
     columns,

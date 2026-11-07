@@ -49,19 +49,14 @@ describe('ViewSwitcher', () => {
     expect(dots[0].closest('.vs-btn')?.textContent).toContain('Notes');
   });
 
-  it('Layout opens one menu: save, reset, save as new view, rename, delete, then Edit views…', () => {
+  it('Layout opens one menu (board 7h): a head line, save, reset, save as new view, rename, delete, a note', () => {
     q<HTMLButtonElement>('.vs-layout')!.click();
     fixture.detectChanges();
-    const labels = Array.from(root().querySelectorAll('.ctx-menu .row-label')).map((e) => e.textContent?.trim());
-    expect(labels).toEqual([
-      'Save layout',
-      'Reset to saved layout',
-      'Save as new view…',
-      'Rename view…',
-      'Delete view',
-      'Edit views…',
-    ]);
-    expect(root().querySelectorAll('.ctx-menu .row-desc').length).toBe(5);
+    expect(q('.ctx-menu .menu-head')?.textContent?.trim()).toBe('Notes · docks, panels, panes and tabs');
+    const labels = rows().map((e) => e.textContent?.trim());
+    expect(labels).toEqual(['Save layout', 'Reset to saved layout', 'Save as new view…', 'Rename view…', 'Delete view…']);
+    expect(q('.ctx-menu .menu-foot')?.textContent?.trim()).toBe('Deleting asks first. Tabs that only lived in this view close; their files stay.');
+    expect(root().querySelectorAll('.ctx-menu .row-desc').length).toBe(0);
   });
 
   it('Save layout and Reset are disabled until the layout changed; Rename and Delete not on Notes', () => {
@@ -70,7 +65,7 @@ describe('ViewSwitcher', () => {
     expect(rowByLabel('Save layout').disabled).toBe(true);
     expect(rowByLabel('Reset to saved layout').disabled).toBe(true);
     expect(rowByLabel('Rename view…').disabled).toBe(true);
-    expect(rowByLabel('Delete view').disabled).toBe(true);
+    expect(rowByLabel('Delete view…').disabled).toBe(true);
   });
 
   it('Save layout keeps the working layout and clears the dot', () => {
@@ -84,16 +79,14 @@ describe('ViewSwitcher', () => {
     expect(root().querySelectorAll('.vs-dot').length).toBe(0);
   });
 
-  it('Rename and Delete act on a user view, and Edit views… lists the views', async () => {
+  it('Rename and Delete act on a user view', async () => {
     views.switchTo(views.views()[1].id);
     fixture.detectChanges();
     q<HTMLButtonElement>('.vs-layout')!.click();
     fixture.detectChanges();
     expect(rowByLabel('Rename view…').disabled).toBe(false);
-    rowByLabel('Edit views…').click();
-    fixture.detectChanges();
-    expect(Array.from(root().querySelectorAll('.edit-name')).map((e) => e.textContent)).toEqual(['Notes', 'Review']);
-    q<HTMLButtonElement>('.edit-act')!.click(); // Rename (Review)
+    expect(rowByLabel('Delete view…').classList.contains('danger')).toBe(true);
+    rowByLabel('Rename view…').click();
     fixture.detectChanges();
     expect(views.prompt()?.mode).toBe('rename');
     views.cancelPrompt();

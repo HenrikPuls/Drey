@@ -75,14 +75,7 @@ test.describe('Views chrome (E12-18)', () => {
     // The one Layout menu.
     await page.locator('app-view-switcher .vs-layout').click();
     const menu = page.locator('app-view-switcher .ctx-menu');
-    await expect(menu.locator('.row-label')).toHaveText([
-      'Save layout',
-      'Reset to saved layout',
-      'Save as new view…',
-      'Rename view…',
-      'Delete view',
-      'Edit views…',
-    ]);
+    await expect(menu.locator('button')).toHaveText(['Save layout', 'Reset to saved layout', 'Save as new view…', 'Rename view…', 'Delete view…']);
     await page.screenshot({ path: testInfo.outputPath('layout-menu.png') });
     await page.keyboard.press('Escape');
     await page.locator('.ctx-backdrop').first().click({ position: { x: 5, y: 5 } });

@@ -51,10 +51,10 @@
   gap: 12px;
   min-width: 0;
   height: auto;
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 12px;
   border-top: 1px solid var(--border);
-  font-size: 0.75rem;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -141,7 +141,6 @@
   gap: 4px;
   flex-wrap: nowrap;
   min-width: 0;
-  height: 40px;
 }
 
 /* New idea · Open Board tab: the two actions that follow the filter (E12-11). */
@@ -2014,7 +2013,7 @@ details[open] > summary > .tickets-tx-think-preview {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 0 8px;
+  padding: 0 0 4px;
 }
 
 /* The fleet's alerts (chain alerts fix): what stops the machine, above every group. */
@@ -2086,23 +2085,21 @@ details[open] > summary > .tickets-tx-think-preview {
   background: var(--hover-bg);
 }
 
-.work-group + .work-group {
-  margin-top: 4px;
-}
-
+/* Board 7a: a group head is 28 px, 4 px apart from what is above it. */
 .work-group-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  height: var(--row-h, 28px);
-  padding: 0 10px;
+  height: 28px;
+  margin-top: 4px;
+  padding: 0 12px 0 8px;
   border: 0;
   background: transparent;
-  color: var(--text-heading);
+  color: var(--text-4);
   font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 13px;
+  line-height: 18px;
   text-align: left;
   cursor: pointer;
 }
@@ -2115,39 +2112,29 @@ details[open] > summary > .tickets-tx-think-preview {
   flex: none;
   display: inline-flex;
   width: 12px;
-  color: var(--text-5);
+  color: var(--text-4);
+}
+
+.work-group-title {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .work-group-count {
   margin-left: auto;
-  color: var(--text-5);
-  font-weight: 400;
+  color: var(--text-4);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
-/* The attention groups count on a filled badge (the canvas); Ideas and
-   Done this week stay a plain muted number. */
-.work-group-badge {
-  min-width: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-chip);
-  text-align: center;
-  font-weight: 600;
-}
-
-.work-group-needs .work-group-badge {
-  background: var(--accent-peach);
-  color: var(--on-pastel);
-}
-
-.work-group-shaping .work-group-badge {
-  background: var(--accent-pink);
-  color: var(--on-pastel);
-}
-
-.work-group-running .work-group-badge {
-  background: var(--accent);
-  color: var(--on-accent, var(--accent-contrast));
+/* The attention dot after "Needs you" (board 7a). */
+.work-attn-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-modified);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-modified) 70%, transparent);
 }
 
 .work-group-empty,
@@ -2157,13 +2144,16 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--text-5);
 }
 
+/* A rich row (board 7a): title 14/20, one grey meta line 13/18, a hairline under it. */
 .work-row {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 0 4px;
-  padding: 5px 8px 6px;
-  border-radius: var(--radius-control);
+  gap: 1px;
+  margin: 0;
+  padding: 6px 12px 6px 26px;
+  border-bottom: 1px solid var(--active-bg);
+  border-radius: 0;
   cursor: pointer;
 }
 
@@ -2177,8 +2167,7 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .work-row.work-row-open {
-  background: var(--active-bg, var(--hover-bg-strong));
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--active-bg);
 }
 
 .work-row-top {
@@ -2194,26 +2183,30 @@ details[open] > summary > .tickets-tx-think-preview {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text-heading);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--text-primary);
 }
 
-/* The ticket id left of the title (req-85): the stable handle, muted
-   like the age so the title stays the lead. */
+/* The ticket id: grey, tabular. */
 .work-row-id {
   flex: none;
-  color: var(--text-5);
-  font-size: 0.75rem;
+  color: var(--text-4);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
 /* The muted age right of a title (the canvas rows' second column). */
 .work-row-age {
   flex: none;
-  color: var(--text-5);
-  font-size: 0.75rem;
+  color: var(--text-4);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+.work-row-age[hidden] {
+  display: none;
 }
 
 /* The second line: a kind chip plus muted text, a dialog's pulse, or the
@@ -2221,18 +2214,17 @@ details[open] > summary > .tickets-tx-think-preview {
 .work-row-sub {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  padding-left: 2px;
-  font-size: 0.75rem;
+  font-size: 13px;
+  line-height: 18px;
   color: var(--text-4);
 }
 
 /* The kind of what waits, as words in the needs-you orange (no chip, E12-11). */
 .work-kind {
   flex: none;
-  color: var(--accent-peach);
-  font-weight: 600;
+  color: var(--text-4);
 }
 
 /* The phase as plain grey words (E12-11); the name carries the meaning. */
@@ -2323,12 +2315,20 @@ details[open] > summary > .tickets-tx-think-preview {
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  height: var(--row-h, 28px);
-  padding: 0 6px 0 10px;
+  height: 28px;
+  padding: 0 12px 0 26px;
 }
 
 .work-row-idea .work-row-title {
   font-weight: 400;
+}
+
+/* A plain row's menu button sits over its right end, so the id keeps its column. */
+.work-row-idea .work-row-more {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  background: var(--hover-bg);
 }
 
 /* The triage chip: Auto (accent), Shape (the accent's soft pink), Triage muted. */
@@ -2353,15 +2353,16 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .work-ideas-more {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
-  height: var(--row-h, 28px);
-  padding: 0 6px 0 10px;
+  height: 24px;
+  padding: 0 12px 0 26px;
   border: 0;
   background: transparent;
-  color: var(--text-5);
+  color: var(--text-4);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
@@ -2376,8 +2377,9 @@ details[open] > summary > .tickets-tx-think-preview {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: var(--row-h, 28px);
-  padding: 0 10px 0 22px;
+  height: 28px;
+  padding: 0 12px 0 26px;
+  border-bottom: 1px solid var(--active-bg);
 }
 
 .work-done-title {
@@ -2386,8 +2388,8 @@ details[open] > summary > .tickets-tx-think-preview {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
-  color: var(--text-5);
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 .work-row-queued {
@@ -3414,13 +3416,26 @@ details[open] > summary > .tickets-tx-think-preview {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-4);
-  font-size: 0.75rem;
+  font-size: 13px;
+}
+
+.tickets-statusbar-fleet-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.tickets-statusbar-fleet-go {
+  flex: none;
+  display: inline-flex;
 }
 
 /* The settings submenus' radio rows (Track ›, Priority ›). */
@@ -3689,7 +3704,7 @@ details[open] > summary > .tickets-tx-think-preview {
   flex: none;
   margin-left: auto;
   color: var(--text-4);
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3733,7 +3748,7 @@ button.tickets-statusbar-fleet {
   background: transparent;
   padding: 0;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 13px;
   cursor: pointer;
 }
 
