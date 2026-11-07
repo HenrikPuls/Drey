@@ -1,3 +1,37 @@
+### Milestone 189 — D-36: the desktop Autopilot popover matches its board
+
+**Not yet manually verified by the owner.** Owner request, outside the list. Board: `docs/design/work-panel/boards/Autopilot.png`,
+section "Desktop · status bar". Built on milestone 188 (D-35), without which the item vanishes on any fleet event.
+
+- **Popover.** `plugins/tickets/renderer/autopilot/popover.ts` and `autopilot.css`: 340 px, above the status item (8 px over the
+  bar, its right edge 51 px past the item's, as on the board), title row with the chord, segmented On | Paused | Off with the board's
+  glyphs, the state's one sentence (`autopilot.sentence.*`, new in the catalog), chips for the resume time and today's cost, a divider,
+  Stop with its glyph. A refusal still shows in words, now below Stop. The DOM is built once and only updated, so a fleet event never takes a
+  button from under the pointer. Arrow keys move through the segments; the focus returns on close.
+- **Behaviour changed.** A state pick no longer closes the popover, the sentence is the confirmation. Clicking the status item while
+  the popover is open now closes it; the outside-press used to close it and the click then reopened it. The resume time is set from its
+  chip, which turns into a time field: Enter or leaving it writes, Escape drops it, an emptied field removes the time.
+- **24-hour clock.** `formatTime` in `shared/i18n/intl.ts` writes `18:00` as all three board sections do, not `6:00 PM`. Only the
+  Autopilot reads it, so Mission Control's resume time changes with it.
+- **SDK 1.49.** `StatusItemSpec.expanded` (the item opens a popup: `aria-haspopup`, `aria-expanded`, lit at the bar's full height
+  while open) and `StatusItemHandle.element()` (the item on screen, to anchor to). The status dot is 8 px, as on every board.
+- **Differs from the board, on purpose.** (1) The board's On state shows "Resume at 18:00"; the engine accepts a resume time on
+  Paused only (`parseAutopilotSet`), so the chip appears on Paused alone. (2) The board draws the popover at radius 12 and the
+  segments and Stop at 6; the design-scale guard (`shared/design-scale.spec.ts`, canvas decision 2026-11-04) allows only 4 / 8 / 16 in
+  the tickets plugin, so the build uses dialog 16 and control 8. **The owner decides:** the guard or the board moves. (3) The chord
+  reads `Mod+Alt+P` as on the board, and does not follow a rebinding (`AUTOPILOT_CHORD`, like the item's tooltip).
+- **Seen in the built app on a scratch store** (isolated home, a seeded persona budget and ledger line for the cost chip; screenshots of
+  On, Paused, editing, armed and Off compared with the board): placement, segments, sentences, chips, the lit item. **A real resume
+  time:** set through the chip for two minutes ahead, written as `resumeAt` in `chain.json`; the runner went back to On by itself within
+  16 s of that minute and the open popover and the item followed; no console errors. **Not seen:** a real `Mod+Alt+P` press (the chord
+  is registered with the OS) and the second click of Stop all. The armed Stop still says "Tap again", the phone's key.
+- **Tests:** `popover.spec.ts` rewritten for the board (22), `status-slot.spec.ts`, `status-bar.spec.ts` (expanded, `element()`),
+  `intl.spec.ts`, `facade.spec.ts`, `i18n.spec.ts` (mission-ui); `e2e/tickets-fleet-snapshot.spec.ts` follows the popover staying open.
+- **Gate and e2e:** `test:all` green (renderer 1054, mission-control 185, mission-ui 728, markdown-surface 260, out-of-Angular 4362 passed,
+  1 skipped). `tickets-fleet-snapshot.spec.ts` alone: failed once on its first run, cause not diagnosed (a scratch-store reset ran
+  beside it), then 5 of 5 passed. The full `npm run e2e` was not run.
+- **Left open:** D-38 (roadmap), Mission Control's iPad and phone Autopilot against the same board.
+
 ### Milestone 188 — D-35: the fleet event carries the fleet again
 
 **Not yet manually verified by the owner.** Owner request, outside the list; found by checking the Autopilot item in the

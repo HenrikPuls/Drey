@@ -47,15 +47,19 @@ describe('createStatusSlots', () => {
         specs.push(spec);
         const own: Partial<StatusItemSpec>[] = [];
         updates.push(own);
-        return { update: (patch: Partial<StatusItemSpec>) => void own.push(patch), dispose };
+        return { update: (patch: Partial<StatusItemSpec>) => void own.push(patch), element: () => (spec.expanded === undefined ? null : anchor), dispose };
       },
     };
+    const anchor = {} as HTMLElement;
     const slots = createStatusSlots(host, 'tickets.showBoard', t);
     // The Autopilot item sits left of the cost item (higher priority = further left).
     expect(Math.max(...specs.map((s) => s.priority ?? 0))).toBe(specs[2]!.priority);
     expect(specs.map((s) => s.commandId)).toEqual([undefined, 'tickets.showBoard', 'tickets.autopilot']);
     slots.update({ cost: 4.1, budget: 15, needsYou: 3, autopilot: 'on', inNotesView: false });
     expect(updates.map((u) => u[0]!.text)).toEqual(['$4.10 of $15 today', '3 need you', 'Autopilot · On']);
+    expect(slots.autopilotElement()).toBe(anchor);
+    slots.setAutopilotExpanded(true);
+    expect(updates[2]!.at(-1)).toEqual({ expanded: true });
     slots.dispose();
     expect(dispose).toHaveBeenCalledTimes(3);
   });

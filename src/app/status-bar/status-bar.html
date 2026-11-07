@@ -13,7 +13,16 @@
 <div class="slots">
 @for (item of statusItems(); track item.key) {
   @if (item.spec.commandId; as cmd) {
-    <button type="button" class="slot slot-btn" [title]="item.spec.tooltip ?? ''" (click)="runItem(cmd)">
+    <button
+      type="button"
+      class="slot slot-btn"
+      [class.slot-open]="item.spec.expanded === true"
+      [attr.data-status-item]="item.key"
+      [attr.aria-haspopup]="item.spec.expanded === undefined ? null : 'dialog'"
+      [attr.aria-expanded]="item.spec.expanded ?? null"
+      [title]="item.spec.tooltip ?? ''"
+      (click)="runItem(cmd)"
+    >
       @if (item.spec.dot; as dot) {
         <span class="slot-dot" [class]="'slot-dot dot-' + dot" aria-hidden="true"></span>
       }
@@ -25,7 +34,7 @@
       }
     </button>
   } @else {
-    <span class="slot" [title]="item.spec.tooltip ?? ''">
+    <span class="slot" [attr.data-status-item]="item.key" [title]="item.spec.tooltip ?? ''">
       @if (item.spec.dot; as dot) {
         <span class="slot-dot" [class]="'slot-dot dot-' + dot" aria-hidden="true"></span>
       }

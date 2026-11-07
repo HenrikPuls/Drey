@@ -693,6 +693,11 @@ export interface StatusItemSpec {
    * on). Absent = no dot. The host attaches no meaning to either.
    */
   readonly dot?: 'attention' | 'positive';
+  /**
+   * The item opens a popup (SDK 1.49): `false` closed, `true` open, drawn
+   * highlighted the full height of the bar. Absent = the item opens nothing.
+   */
+  readonly expanded?: boolean;
 }
 
 /**
@@ -711,6 +716,8 @@ export interface TitlebarActionSpec {
 export interface StatusItemHandle {
   /** Replaces the given fields; the rest stay as they are. */
   update(patch: Partial<StatusItemSpec>): void;
+  /** The item on screen, to anchor a popup to (SDK 1.49); null while it is hidden. */
+  element(): HTMLElement | null;
   dispose(): void;
 }
 

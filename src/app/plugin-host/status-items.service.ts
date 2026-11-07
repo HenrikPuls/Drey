@@ -46,6 +46,7 @@ export class StatusItemsService {
           list.map((e) => (e.key === key ? withSpec(key, { ...e.spec, ...patch }) : e)),
         );
       },
+      element: () => document.querySelector<HTMLElement>(`[data-status-item="${key}"]`),
       dispose: remove,
       remove,
     };

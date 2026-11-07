@@ -74,7 +74,8 @@ describe('dates and times', () => {
     expect(formatDate('en', date)).toBe('Nov 6, 2026');
     expect(formatDate('en', date, 'short')).toBe('11/6/26');
     expect(formatDate('en', date, 'long')).toBe('November 6, 2026');
-    expect(formatTime('en', date)).toBe('3:05 PM');
+    expect(formatTime('en', date)).toBe('15:05');
+    expect(formatTime('en', new Date(2026, 10, 6, 0, 5))).toBe('00:05');
     expect(formatDateTime('en', date)).toBe('Nov 6, 2026, 3:05 PM');
   });
 

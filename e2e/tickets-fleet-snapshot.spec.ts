@@ -70,11 +70,13 @@ test('the Autopilot item and popover follow the runner across fleet events', asy
   const popover = page.locator('.tickets-autopilot-pop');
   await popover.locator('[data-state="paused"]').click();
   await expect(status.getByText('Autopilot · Paused')).toBeVisible({ timeout: 10_000 });
-  // Paused stays open for its resume time: the popover keeps its rows through the event.
+  // The popover keeps its segments through the event.
   await page.waitForTimeout(3_000);
   await expect(popover.locator('[data-state="paused"]')).toHaveAttribute('aria-checked', 'true');
 
   await popover.locator('[data-state="off"]').click();
   await expect(status.getByText('Autopilot · Off')).toBeVisible({ timeout: 10_000 });
+  await expect(popover.locator('[data-state="off"]')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
   await expect(popover).toHaveCount(0);
 });

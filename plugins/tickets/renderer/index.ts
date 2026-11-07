@@ -32,7 +32,7 @@ import { createThreadComments } from './thread-comments';
 import { THREAD_KEY } from './ticket-page';
 import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
-import { AUTOPILOT_COMMAND_ID, createStatusSlots, type StatusSlotController } from './status-slot';
+import { AUTOPILOT_COMMAND_ID, costSlotOf, createStatusSlots, type StatusSlotController } from './status-slot';
 import { createAutopilotCommand } from './autopilot/command';
 import { autopilotViewOf } from '../../../shared/autopilot';
 import { ageWords, checkpointActionOf, crewLineOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
@@ -3033,10 +3033,23 @@ const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
     statusApi = api;
-    statusSlots = createStatusSlots(api.ui, 'tickets.showBoard', (key, params) => api.i18n.t(key, params));
+    const slots = createStatusSlots(api.ui, 'tickets.showBoard', (key, params) => api.i18n.t(key, params));
+    statusSlots = slots;
     fleetListeners.add(refreshStatusItem);
-    const autopilotCommand = createAutopilotCommand({ api, view: () => autopilotViewOf(chain), applyStatus: applyChainStatus });
+    const autopilotCommand = createAutopilotCommand({
+      api,
+      view: () => autopilotViewOf(chain),
+      applyStatus: applyChainStatus,
+      costText: () => {
+        const team = teamModelOf(teamStore(api).personas(), fleetRuns, chain, () => null, Date.now());
+        const { text } = costSlotOf(team.todayCost, team.todayBudget, (key, params) => api.i18n.t(key, params));
+        return text === '' ? null : text;
+      },
+      anchor: () => slots.autopilotElement(),
+      onOpenChange: (open) => slots.setAutopilotExpanded(open),
+    });
     fleetListeners.add(() => autopilotCommand.refresh());
+    teamStore(api).subscribe(() => autopilotCommand.refresh());
     api.commands.register({
       id: AUTOPILOT_COMMAND_ID,
       label: api.i18n.t('autopilot.command'),

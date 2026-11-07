@@ -72,7 +72,7 @@ export interface I18n {
   /** The calendar date: `Nov 6, 2026` (medium), `11/6/26` (short), `November 6, 2026` (long). */
   formatDate(date: Date, style?: DateStyle): string;
 
-  /** The wall-clock time: `3:05 PM`. */
+  /** The wall-clock time on a 24-hour clock: `15:05`. */
   formatTime(date: Date): string;
 
   /** Date and time together, `medium` date with the short time. */

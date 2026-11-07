@@ -1109,7 +1109,11 @@ every step. It reads the same everywhere: a status-bar item *● Autopilot · On
 left of today's cost (click it or press `Mod+Alt+P`), the chip in the iPad
 header, the play icon in the phone's app bar (Work, Crew and the chat) and the
 *Autopilot* row of the phone menu. A green dot means On, orange Paused, grey
-Off. *Stop all running steps now…* under the three states aborts every live
+Off. On the desktop the item opens a popover above it: the three states, a
+sentence on what the current one means, and chips for the resume time and
+today's cost. While Paused, click *Resume time* (or *Resume at 18:00*) to type
+a time, Enter takes it; a time already past today means tomorrow, an emptied
+field removes it. *Stop all running steps now…* at the foot aborts every live
 run and halts the chain; it asks twice. A device paired read-only sees the
 state but cannot change it. After a restart the state is Off. The same switch
 is in Settings → Tickets → *Budget and runners*.

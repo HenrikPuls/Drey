@@ -9,6 +9,7 @@
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { AutopilotView } from '../../../../shared/autopilot';
 import type { ChainStatus } from '../../../../packages/tickets-engine/src/fleet/protocol';
+import { AUTOPILOT_CHORD } from '../status-slot';
 import { stopAllNow, writeAutopilot, type AutopilotOutcome } from './controller';
 import { openAutopilotPopover, type AutopilotPopover } from './popover';
 
@@ -18,6 +19,12 @@ export interface AutopilotCommandDeps {
   readonly view: () => AutopilotView | null;
   /** A reply's fresh chain status goes to the plugin's one chain state. */
   readonly applyStatus: (status: ChainStatus) => void;
+  /** The status item's today's-cost text; null = nothing known. */
+  readonly costText: () => string | null;
+  /** The status item the popover sits above. */
+  readonly anchor: () => HTMLElement | null;
+  /** Told when the popover opens and closes: the status item shows it. */
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 export interface AutopilotCommand {
@@ -54,11 +61,16 @@ export function createAutopilotCommand(deps: AutopilotCommandDeps): AutopilotCom
           set: async (record) => applied(await writeAutopilot(io, t, record)),
           stopAll: async () => applied(await stopAllNow(io, t)),
           formatTime: (date) => api.i18n.formatTime(date),
+          chord: AUTOPILOT_CHORD,
+          costText: deps.costText,
+          anchor: deps.anchor,
         },
         () => {
           open = null;
+          deps.onOpenChange(false);
         },
       );
+      deps.onOpenChange(true);
     },
     refresh() {
       open?.refresh();
