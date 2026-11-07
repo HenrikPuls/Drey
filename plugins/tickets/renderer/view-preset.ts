@@ -19,6 +19,9 @@ export const WORK_PANELS = {
   bottom: ['tickets-capacity'],
 } as const;
 
+/** Board 7e: the Capacity band's first height. */
+export const WORK_CAPACITY_HEIGHT = 103;
+
 /** The Crew view (boards 9a, 7h: Notes · Work · Crew): the tickets panel and the Assistant, the Board's and Crew's tabs are opened from the panel. */
 export const CREW_VIEW_ID = 'tickets.crew';
 
@@ -53,6 +56,7 @@ export function createWorkPreset(): ViewPresetContrib {
       left: [...WORK_PANELS.left],
       right: [...WORK_PANELS.right],
       bottom: [...WORK_PANELS.bottom],
+      bottomH: WORK_CAPACITY_HEIGHT,
     },
   };
 }

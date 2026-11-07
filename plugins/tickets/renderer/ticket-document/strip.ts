@@ -47,13 +47,6 @@ export interface TicketStrip {
   mount(input: TicketStripInput): { readonly node: HTMLElement; paint(): void };
 }
 
-const initialsOf = (name: string): string =>
-  name
-    .split(/\s+/)
-    .filter((word) => word !== '')
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
-    .join('');
 
 /** The validator's real findings; `noise` (a missing stamp) is not worth a badge on the card. */
 const issuesBadge = (all: readonly TicketIssue[]): CardFacts['issues'] => {
@@ -157,7 +150,7 @@ export function createTicketStrip(deps: TicketStripDeps): TicketStrip {
           workerNote: shape === 'early' && own.worker !== null ? `· ${own.persona ?? deps.i18n.t('ticket.card.default')}` : '',
           avatar:
             card.phase === 'shaping' && !planToAccept && worker !== null
-              ? { initials: initialsOf(worker.who), color: pinned?.color ?? '', name: worker.who }
+              ? { color: pinned?.color ?? '', name: worker.who }
               : null,
           repo: own.repo ?? deps.i18n.t('ticket.card.none'),
           branch: own.branch ?? '',

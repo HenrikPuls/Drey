@@ -3,6 +3,9 @@ import * as path from 'node:path';
 import type { DocumentRoute, DocumentRouteSaveResult } from '../../../shared/plugin-api';
 import type { DocumentSaveReply, TicketDocumentLocation } from '../../../packages/tickets-engine/src/contracts/replies';
 import { TICKETS_DIR, documentTitle } from '../../../packages/tickets-engine/src/store/document-paths';
+import { ticketPathParts } from '../../../packages/tickets-engine/src/core/ticket-files';
+import { parseDocument } from 'yaml';
+import { splitFrontmatter } from '../../../shared/frontmatter';
 
 /**
  * Ticket documents of a dricket store in the editor (E14-4c, ADR-0090).
@@ -93,6 +96,27 @@ export async function askToAddCheckout<W extends PromptWindow>(deps: CheckoutPro
   return true;
 }
 
+/**
+ * The files store's ticket as a tab name, `T-0017 · A8 large modules`. Only a file whose
+ * header carries the id its name says: a note that happens to sit under `tickets/` keeps its name.
+ */
+export function fileTicketTitle(relPath: string, content: string): string | null {
+  const parts = ticketPathParts(relPath);
+  if (parts === null) {
+    return null;
+  }
+  const { yamlText, hadFence } = splitFrontmatter(content);
+  if (!hadFence || yamlText === null) {
+    return null;
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0 || doc.get('id') !== parts.stem) {
+    return null;
+  }
+  const title = doc.get('title');
+  return typeof title === 'string' && title.trim() !== '' ? `${parts.stem} · ${title.trim()}` : parts.stem;
+}
+
 export class TicketDocuments {
   private owned: readonly Owned[] = [];
   private checkoutPath: string | null = null;
@@ -110,11 +134,11 @@ export class TicketDocuments {
     };
   }
 
-  /** The tab's name of a ticket document (D-15); null for anything else in the tree. */
+  /** The tab's name of a ticket document, either store (D-15, fidelity ruling O6); null for anything else. */
   private title(vaultId: string, p: string, content: string): string | null {
     const normal = p.split('\\').join('/');
     const owned = this.owned.find((o) => o.vaultId === vaultId && normal.startsWith(`${o.prefix}${TICKETS_DIR}/`));
-    return owned === undefined ? null : documentTitle(normal.slice(owned.prefix.length), content);
+    return owned === undefined ? fileTicketTitle(normal, content) : documentTitle(normal.slice(owned.prefix.length), content);
   }
 
   private askOnce(checkout: string): Promise<boolean> {

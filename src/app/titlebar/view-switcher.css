@@ -69,7 +69,7 @@
   gap: 6px;
 }
 
-/* The layout of this view differs from its saved one (D-6). */
+/* Orange means needs you, and nothing else. */
 .vs-dot {
   flex: none;
   width: 7px;
@@ -77,6 +77,12 @@
   border-radius: 50%;
   background: var(--needs-you, var(--status-modified));
   box-shadow: 0 0 6px color-mix(in srgb, var(--needs-you, var(--status-modified)) 70%, transparent);
+}
+
+/* The layout of this view differs from its saved one (D-6). */
+.vs-dot-layout {
+  background: var(--text-4);
+  box-shadow: none;
 }
 
 .vs-layout {

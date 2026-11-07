@@ -194,6 +194,23 @@ describe('workListNode', () => {
     expect(sub.querySelector('.work-row-line')?.textContent).toBe('Dialog not started');
   });
 
+  it('a ticket that only sits in the Shaping stage has its group, without a dialog pulse (fidelity ruling O2)', () => {
+    const six = {
+      columns: ['inbox', 'shaping', 'prioritized', 'building', 'done'].map((id) => ({
+        phase: phase(id, id === 'building' ? 'agent build-default' : 'manual'),
+        unknown: false,
+        tickets: id === 'shaping' ? [card('T-0119', 'shaping')] : [],
+      })),
+      checkpoints: [],
+      recentDone: [],
+    } as unknown as BoardSnapshot;
+    const list = workListNode(deps(), six, [], createGroupFoldStore(null), () => undefined);
+    const sub = list.querySelector('.work-group-shaping .work-row-sub')!;
+    expect(sub.querySelector('.work-meta-phase')?.textContent).toBe('Shaping');
+    expect(sub.querySelector<HTMLElement>('.work-row-line')?.hidden).toBe(true);
+    expect(list.querySelector('.work-group-prioritized')).toBeNull();
+  });
+
   it('lists the queued ideas under Prioritized with the id at the right end; an Inbox row is its title alone (board 7a)', () => {
     const placed = {
       // Same priority and stamp: newest id first inside Ideas.

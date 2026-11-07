@@ -528,6 +528,35 @@ describe('crewLineOf', () => {
   });
 });
 
+describe('the Work panel groups by stage (fidelity ruling O2, board 7a, decision 15)', () => {
+  const STAGES: readonly PipelinePhase[] = ['inbox', 'shaping', 'prioritized'].map((id) => phase(id, 'manual'));
+  const staged = (placed: Record<string, readonly TicketCard[]>): BoardSnapshot =>
+    ({
+      columns: [...STAGES, phase('building', 'agent build-default'), phase('done', 'none')].map(
+        (p): BoardColumn => ({ phase: p, unknown: false, tickets: placed[p.id] ?? [] }),
+      ),
+      checkpoints: [],
+      recentDone: [],
+    }) as unknown as BoardSnapshot;
+
+  it('a Shaping ticket has its group without any dialog, and is no queued idea', () => {
+    const groups = workGroups(staged({ inbox: [card('T-0001', 'inbox')], shaping: [card('T-0002', 'shaping')], prioritized: [card('T-0003', 'prioritized')] }), []);
+    expect(ids(groups.shaping)).toEqual(['T-0002']);
+    expect(groups.shaping[0]!.queued).toBe(false);
+    expect(ids(groups.ideas).sort()).toEqual(['T-0001', 'T-0003']);
+    expect(groups.ideas.filter((row) => row.queued).map((row) => row.card.id)).toEqual(['T-0003']);
+  });
+
+  it('a need still wins over the stage', () => {
+    const waiting = card('T-0002', 'shaping');
+    const groups = workGroups(staged({ shaping: [waiting] }), [
+      run({ id: 'a', ticketId: 'T-0002', waiting: { kind: 'question', text: 'Which one?', since: '2026-11-07T10:00:00Z' } }),
+    ]);
+    expect(ids(groups.needs)).toEqual(['T-0002']);
+    expect(groups.shaping).toEqual([]);
+  });
+});
+
 describe('the six stages (req-99b)', () => {
   const SIX: readonly PipelinePhase[] = [
     phase('inbox', 'manual'),

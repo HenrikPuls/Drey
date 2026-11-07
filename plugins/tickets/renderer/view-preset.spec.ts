@@ -9,7 +9,7 @@ describe('the Work preset', () => {
     const preset = createWorkPreset();
     expect(preset.id).toBe(WORK_VIEW_ID);
     expect(preset.label).toBe('Work');
-    expect(preset.layout).toEqual({ left: ['tickets'], right: ['assistant'], bottom: ['tickets-capacity'] });
+    expect(preset.layout).toEqual({ left: ['tickets'], right: ['assistant'], bottom: ['tickets-capacity'], bottomH: 103 });
   });
 
   it('names no Assistant target until E13-5 gives it one', () => {

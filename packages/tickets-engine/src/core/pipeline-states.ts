@@ -11,6 +11,7 @@
 /** The six stages in board order. `ready` is titled "Ready to try". */
 export const STATE_IDS = ['inbox', 'shaping', 'prioritized', 'building', 'ready', 'done'] as const;
 
+export const SHAPING_STATE = 'shaping';
 export const BUILDING_STATE = 'building';
 export const READY_STATE = 'ready';
 

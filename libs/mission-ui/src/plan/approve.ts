@@ -18,6 +18,7 @@ import {
   estimateLineOf,
   flowNoteOf,
   flowSegmentsOf,
+  padFlowLineOf,
   gateLineOf,
   moveRoomOf,
   partBadgeOf,
@@ -417,6 +418,12 @@ export class PlanApprove {
       : { amount: this.amountOf(estimate.costLow, estimate.costHigh, estimate.cost), basis: this.i18n.t('plan.pad.basis', { n: estimate.runs }) };
   }
 
+  /** The iPad's Flow row, the desktop card's line (board 5c, fidelity ruling O10); the phone keeps `flowLine` (10j). */
+  protected readonly padFlow = computed(() => {
+    const first = this.approval()?.parts[0];
+    return first === undefined ? null : padFlowLineOf(first.flow, this.proposal().approveLabel !== null, this.i18n);
+  });
+
   /** The part's second line: when it starts, and why it is a part. */
   protected partSub(card: McPartCard): string {
     return [card.start, card.reason ?? ''].filter((bit) => bit !== '').join(' · ');
@@ -425,7 +432,11 @@ export class PlanApprove {
   /** The flow card's steps: the first open part's flow, the parts share it unless changed. */
   protected readonly flowSteps = computed<string | null>(() => {
     const flow = this.firstCard()?.flow ?? [];
-    return flow.length === 0 ? null : flow.filter((step) => !step.skipped).map((step) => step.title).join(', ');
+    if (flow.length === 0) {
+      return null;
+    }
+    const steps = flow.filter((step) => !step.skipped).map((step) => step.title).join(', ');
+    return this.i18n.t(flow.some((step) => step.inserted || step.skipped) ? 'plan.pad.flow_edited' : 'plan.pad.flow_standard', { steps });
   });
 
   private readonly acceptPick = signal<number | null>(null);

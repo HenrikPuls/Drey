@@ -36,13 +36,23 @@ export class DocumentRoutes {
     return null;
   }
 
-  /** What the owner calls this document on screen, or null: no owner, no title, or a title that failed. */
+  /**
+   * What this document is called on screen, or null: no route names it, or a title
+   * failed. Every route is asked, not only an owner: a route may name files it does not
+   * route (the tickets plugin's files store).
+   */
   titleOf(vaultId: string, path: string, content: string): string | null {
-    try {
-      return this.routeFor(vaultId, path)?.route.title?.(vaultId, path, content) ?? null;
-    } catch {
-      return null; // a read never fails over a label
+    for (const entry of this.routes.values()) {
+      try {
+        const title = entry.route.title?.(vaultId, path, content) ?? null;
+        if (title !== null) {
+          return title;
+        }
+      } catch {
+        // A read never fails over a label.
+      }
     }
+    return null;
   }
 
   /** Why a document may not be changed by a plain vault write, or null when it may. */

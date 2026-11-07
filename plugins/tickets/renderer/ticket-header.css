@@ -254,16 +254,9 @@
   display: inline-block;
   overflow: hidden;
   flex: none;
-  box-sizing: border-box;
-  text-align: center;
   width: var(--avatar-size, 24px);
   height: var(--avatar-size, 24px);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--persona-color, var(--accent)) 30%, var(--active-bg));
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: var(--avatar-size, 24px);
 }
 
 .tickets-doc-gate {

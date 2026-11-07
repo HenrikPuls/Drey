@@ -856,9 +856,9 @@ its heading (remembered across restarts):
   Building, Merging or the phase — and the worker's current action in
   one short line. Without a worker it is queued and says what it waits
   for. The heading counts how many are running.
-- **Shaping** — the tickets you reserved for a dialog with a worker
-  (interactive); the row says whether the dialog runs, pauses or has
-  not started, and how many turns it has.
+- **Shaping** — the tickets in the Shaping stage, and those you reserved
+  for a dialog with a worker (interactive); with a dialog, the row says
+  whether it runs, pauses or has not started, and how many turns it has.
 - **Inbox** — the backlog before the machine, highest priority first
   (a blocker before what it blocks, as in Running; a small *Urgent*/*High* chip marks the ones that matter), newest
   first within a priority. The chip on the right is its track —
@@ -877,27 +877,24 @@ Every ticket sits in exactly one group — Needs you wins. A row
 leads with the ticket's id, the title and an age; under it sits **one grey
 line** — the phase, what waits on you or what the worker does, the
 persona — and at its right end the ticket's cost in grey (hover it: *So
-far*). The open ticket's row is marked with an accent bar. Click a row to open the ticket. **What opens depends on the
-run:** the ticket document while no run has happened yet (and once the run
-is over), the **thread** — the worker's page — while the runner is active or
-waiting on a question, a gate or a permission. The ticket's card has
-**Thread** and, once the ticket has passed a step, **Open Review**; the thread
-has a **Ticket | Thread | Review** control on top. The choice is per ticket and
-never touches a saved view. The thread's header shows the run's light and who is working,
+far*). The open ticket's row is marked with an accent bar. Click a row to open the ticket: its **document**, whatever the run is
+doing, and a click never touches a saved view. The ticket's card has
+**Thread** — the worker's page — and, once the ticket has passed a step,
+**Open Review**. The thread's header shows the run's light and who is working,
 and above its composer sits the **decision bar** (Accept, or Accept → next
 phase on a board with other checkpoints). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
-never as an automatic split. A ticket picked in the Files panel opens as
-a plain file tab. The row's menu **Open ticket** opens the same default. The panel's footer is the **crew line** — the fleet's worst light and who
+never as an automatic split. A ticket's tab reads `T-0121 · title`, however you opened it: the panel,
+the Files panel or a link. The row's menu **Open ticket** opens the same document. The panel's footer is the **crew line** — the fleet's worst light and who
 is out there, `Crew · Ben, Tessa busy` (`Crew · idle` when nothing runs);
 a click opens the Crew tab, and its tooltip carries tokens in flight and
 the oldest run's age. A halted chain, a held column, a tripped breaker or a
-provider out of quota show as an alert row above the groups. The header
-is one row: the filter, **New idea** (captures a new idea), **Open Board
+provider out of quota show as an alert row above the groups. The header's controls show while you point at it or a control has focus; in a narrow dock the rest shows on a second row over the list: the filter, **New idea** (captures a new idea), **Open Board
 tab**, then run/halt, abort and **⋯** (refresh, Mission Control, Board,
 Crew, clean up worktrees); the project menu appears only with a second
 project. When the tickets vault is not a git repository, a one-line note at
-the foot says so — dismiss it with its ×.
+the foot says so — dismiss it with its ×. Errors and leftover worktree folders
+show there too; on a ticket store, the foot's tooltip names the store.
 
 **The step card** (req-75 W3, reworked in req-86). At the end of a
 step, the thread shows a card above the transcript that follows where the
@@ -1824,9 +1821,9 @@ automatically.
   the view you are in (*Notes* is always there and cannot be renamed or
   deleted), and *Edit views…* lists them all. Tabs belong to
   views: another view's tabs are hidden, and one tab can be shown in
-  several views — its context menu has *Go to the Work view* (for each
-  other view that shows the tab) and *Show this tab in ›* with a check
-  per view. The Open windows panel reads *2 here · 3 elsewhere*, with the
+  several views — its context menu lists *Show this tab in* with a check
+  per view, then *Go to the Work view* (one row for each other view),
+  *Close tab* and the tab's other actions. The Open windows panel reads *2 here · 3 elsewhere*, with the
   tabs *In this view* above those *In other views*, each with *Show here*.
   Closing a tab only takes it out of the current
   view while another view still shows it; it closes for good (asking

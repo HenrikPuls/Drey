@@ -228,6 +228,7 @@
   "views.name.rejected": "Pick an unused name.",
   "views.go_to": "Go to the {view} view",
   "views.show_tab_in": "Show this tab in",
+  "views.close_tab": "Close tab",
 
   "settings.scope.all_devices": "All devices",
   "settings.scope.device": "This device",
@@ -519,6 +520,8 @@
   "plan.pad.first_run": "first run",
   "plan.pad.basis": "from {n, plural, one {# run} other {# runs}}",
   "plan.pad.change_flow": "Change flow ›",
+  "plan.pad.flow_standard": "standard · {steps}",
+  "plan.pad.flow_edited": "edited · {steps}",
   "plan.pad.foot": "Change the split by editing the plan above or asking {name}. A part that is running cannot be moved.",
   "plan.pad.accept_q": "Accept it as it stands?",
   "plan.pad.accept": "Accept plan",

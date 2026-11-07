@@ -25,6 +25,7 @@ import {
   type RunRowModel,
   type TeamModel,
 } from './team-model';
+import { personaPictureNode } from './persona-picture';
 import type { TeamStore } from './team-store';
 
 /** How long "Stop all" stays armed after the first press. */
@@ -71,33 +72,6 @@ const GLYPH_BELL = ['M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4
 const GLYPH_TERMINAL = ['M4 17l6-5-6-5M12 19h8'];
 const GLYPH_PAUSE = ['M8 5v14M16 5v14'];
 const GLYPH_PLAY = ['M7 5l12 7-12 7z'];
-
-/** The silhouette a card shows while a persona has no picture: the persona colour, a head and shoulders. */
-function silhouetteNode(color: string, title: string): SVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', title);
-  svg.setAttribute('width', '20');
-  svg.setAttribute('height', '20');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('class', 'desk-silhouette');
-  const bg = document.createElementNS(SVG_NS, 'rect');
-  bg.setAttribute('width', '24');
-  bg.setAttribute('height', '24');
-  bg.setAttribute('fill', color);
-  const head = document.createElementNS(SVG_NS, 'circle');
-  head.setAttribute('cx', '12');
-  head.setAttribute('cy', '9.5');
-  head.setAttribute('r', '4.2');
-  const body = document.createElementNS(SVG_NS, 'path');
-  body.setAttribute('d', 'M3.5 24c0-5 3.8-8 8.5-8s8.5 3 8.5 8z');
-  for (const part of [head, body]) {
-    part.setAttribute('fill', 'var(--on-pastel)');
-    part.setAttribute('fill-opacity', '0.78');
-  }
-  svg.append(bg, head, body);
-  return svg;
-}
 
 function iconButton(label: string, title: string, icon: SVGElement, extra: string, onClick: () => void): HTMLButtonElement {
   const button = h('button', `desk-btn desk-btn-icon ${extra}`);
@@ -191,7 +165,7 @@ function personaCardNode(
   });
   const top = h('div', 'desk-persona-top');
   const title = h('span', 'desk-persona-title');
-  title.append(silhouetteNode(card.color, card.title), card.title);
+  title.append(personaPictureNode(card.color, card.title), card.title);
   top.append(title, h('span', 'desk-head-spacer'), h('span', 'desk-persona-dot'), h('span', 'desk-persona-state', card.stateWord));
   node.append(top, headlineNode(card), h('div', 'desk-persona-role', subLineOf(card)));
   const stuck = card.runs.find((run) => run.stuck);

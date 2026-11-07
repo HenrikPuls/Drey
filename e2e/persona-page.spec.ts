@@ -52,6 +52,7 @@ test.beforeEach(({ vaultDir }) => {
 async function openPersona(page: Page, id: string): Promise<void> {
   await expect(page.locator('app-titlebar [role="tab"]', { hasText: 'Work' })).toBeVisible({ timeout: 30_000 });
   await page.keyboard.press('Control+2');
+  await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
   await page.locator('button[aria-label="More actions"]:visible').click({ force: true });
   await page.getByRole('menuitem', { name: 'Crew', exact: true }).click();
   await page.locator(`.desk-team [data-persona="${id}"]`).first().click();

@@ -52,7 +52,21 @@
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
     @if (views.views().length > 1) {
-      @for (target of otherViewsOf(m.path); track target.view.id) {
+      <div class="ctx-label">{{ 'views.show_tab_in' | t }}</div>
+      @for (view of views.views(); track view.id) {
+        <button
+          type="button"
+          class="ctx-view"
+          role="menuitemcheckbox"
+          [attr.aria-checked]="inView(m.path, view.id)"
+          (click)="toggleView(m.path, view.id)"
+        >
+          <span class="ctx-check">{{ inView(m.path, view.id) ? '✓' : '' }}</span>
+          <span class="ctx-grow">{{ view.label }}</span>
+        </button>
+      }
+      <div class="ctx-sep" role="separator"></div>
+      @for (target of otherViewsOf(); track target.view.id) {
         <button type="button" role="menuitem" (click)="goToView(m.path, target.view.id)">
           <span class="ctx-grow">{{ 'views.go_to' | t: { view: target.view.label } }}</span>
           @if (keys.hint('view.switch.' + (target.index + 1)); as key) {
@@ -60,42 +74,8 @@
           }
         </button>
       }
-      <div class="ctx-sub-wrap" (mouseleave)="subOpen.set(false)">
-        <button
-          type="button"
-          role="menuitem"
-          aria-haspopup="menu"
-          [attr.aria-expanded]="subOpen()"
-          (click)="subOpen.set(!subOpen())"
-          (mouseenter)="subOpen.set(true)"
-        >
-          <span class="ctx-grow">{{ 'views.show_tab_in' | t }}</span>
-          <span class="ctx-chev" aria-hidden="true">›</span>
-        </button>
-        @if (subOpen()) {
-          <div class="ctx-menu ctx-sub" role="menu" aria-label="Show this tab in">
-            @for (view of views.views(); track view.id) {
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                [attr.aria-checked]="inView(m.path, view.id)"
-                (click)="toggleView(m.path, view.id)"
-              >
-                <span class="ctx-check">{{ inView(m.path, view.id) ? '✓' : '' }}</span>
-                <span class="ctx-grow">{{ view.label }}</span>
-              </button>
-            }
-          </div>
-        }
-      </div>
-      <div class="ctx-sep" role="separator"></div>
     }
-    @if (pinnable(m.path)) {
-      <button type="button" (click)="togglePin(m.path)">
-        {{ editor.docFor(m.path)?.pinned ? 'Unpin tab' : 'Pin tab' }}
-      </button>
-      <div class="ctx-sep" role="separator"></div>
-    }
+    <button type="button" (click)="closeTab(m.path)">{{ 'views.close_tab' | t }}</button>
     @if (docked()) {
       @if (region() !== 'dock-left') {
         <button type="button" (click)="moveToDock('left')">Move to left dock</button>
@@ -105,6 +85,11 @@
       }
       @if (region() !== 'dock-bottom') {
         <button type="button" (click)="moveToDock('bottom')">Move to bottom dock</button>
+      }
+      @if (pinnable(m.path)) {
+        <button type="button" (click)="togglePin(m.path)">
+          {{ editor.docFor(m.path)?.pinned ? 'Unpin tab' : 'Pin tab' }}
+        </button>
       }
       <div class="ctx-sep" role="separator"></div>
       @if (region() !== 'center') {
@@ -127,8 +112,13 @@
           <span class="ctx-key">{{ key }}</span>
         }
       </button>
+      <div class="ctx-sep" role="separator"></div>
+      @if (pinnable(m.path)) {
+        <button type="button" (click)="togglePin(m.path)">
+          {{ editor.docFor(m.path)?.pinned ? 'Unpin tab' : 'Pin tab' }}
+        </button>
+      }
       @if (editor.isMarkdown(editor.docFor(m.path)?.path ?? '')) {
-        <div class="ctx-sep" role="separator"></div>
         <button type="button" (click)="exportPdf(m.path)">Export as PDF…</button>
       }
       @if (history.canShow(m.path)) {

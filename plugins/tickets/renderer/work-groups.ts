@@ -1,7 +1,7 @@
 /**
  * The Work panel's groups (req-75 W1, W1b; ADR-0087): the board snapshot
  * and the fleet's runs folded into four lists — **Needs you** (everything
- * that waits on the owner), **Shaping** (the interactive dialogs), **Running**
+ * that waits on the owner), **Shaping** (the Shaping stage and the interactive dialogs), **Running**
  * (the rest on its way through the pipeline) and **Ideas** (the backlog
  * before the machine). Pure, so the panel and its specs share it; the
  * phases stay the storage format and are only shown as a row's status.
@@ -14,7 +14,7 @@
  * phase's `color:` in pipeline.md or the default palette by position —
  * the panel draws it as the row's phase chip.
  */
-import { BUILDING_STATE, READY_STATE } from '../shared/pipeline-states';
+import { BUILDING_STATE, READY_STATE, SHAPING_STATE } from '../shared/pipeline-states';
 import type { NeedItem } from '../shared/remote-protocol';
 import {
   DEFAULT_PRIORITY_CONFIG,
@@ -228,7 +228,8 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     phase: column.phase,
     phaseColor: phaseColorOf(column.phase, positionOf.get(column.phase.id) ?? 0),
     need,
-    queued: need === null && ideaIds.has(column.phase.id) && column.phase.id !== firstPhaseId,
+    // The Shaping stage has its own group (board 7a, decision 15): not yet a queue.
+    queued: need === null && ideaIds.has(column.phase.id) && column.phase.id !== firstPhaseId && column.phase.id !== SHAPING_STATE,
     run: liveRunOf(card.id, runs),
   });
 
@@ -275,9 +276,10 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     if (seen.has(card.id) || (signsOffBeforeTerminal && column.phase.id === terminal)) {
       continue;
     }
-    // Shaping: the owner works this ticket in an interactive dialog —
-    // the reservation stands or a live dialog run carries it.
-    if (card.meta.interactive || liveRunOf(card.id, runs)?.interactive !== undefined) {
+    // Shaping: the ticket's stage (board 7a, decision 15), or the owner works
+    // it in an interactive dialog -- the reservation stands or a live dialog
+    // run carries it.
+    if (column.phase.id === SHAPING_STATE || card.meta.interactive || liveRunOf(card.id, runs)?.interactive !== undefined) {
       const position = column.unknown ? -1 : pipeline.findIndex((phase) => phase.id === column.phase.id);
       shaping.push({ row: row(card, column, null), position, index });
       continue;

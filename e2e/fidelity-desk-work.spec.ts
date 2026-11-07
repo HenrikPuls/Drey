@@ -180,12 +180,6 @@ async function shoot(page: Page, name: string): Promise<void> {
   await page.mouse.move(700, 880);
   await page.evaluate(() => {
     (document.activeElement as HTMLElement | null)?.blur();
-    // A forced click on a hover-only control scrolls its dock sideways; the boards never are.
-    for (const el of document.querySelectorAll<HTMLElement>('app-dock, app-dock *')) {
-      if (el.scrollLeft > 0) {
-        el.scrollLeft = 0;
-      }
-    }
   });
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(OUT, `${name}.png`) });
@@ -291,6 +285,7 @@ test('boards 7a 7e 7f 7h 7i: the desk screens', async ({ page, electronApp }) =>
   await page.waitForTimeout(800);
 
   const openFromMenu = async (label: string): Promise<void> => {
+    await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
     await page.locator('button[aria-label="More actions"]:visible').click({ force: true });
     await page.getByRole('menuitem', { name: label, exact: true }).click();
   };
@@ -303,7 +298,7 @@ test('boards 7a 7e 7f 7h 7i: the desk screens', async ({ page, electronApp }) =>
   // The board forces the header's hover actions on; shown here for real.
   await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).locator('.head').hover();
   await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(OUT, 'DeskWork.header-hover.png'), clip: { x: 0, y: 78, width: 300, height: 36 } });
+  await page.screenshot({ path: path.join(OUT, 'DeskWork.header-hover.png'), clip: { x: 0, y: 78, width: 300, height: 66 } });
 
   // Boards 7e and 7f work with the right dock folded away.
   await page.keyboard.press('Control+Alt+B');
@@ -323,4 +318,26 @@ test('boards 7a 7e 7f 7h 7i: the desk screens', async ({ page, electronApp }) =>
   await arrangeDocks(page, { left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tasks', 'Tickets', 'Open windows'], right: ['Search', 'Assistant'], bottom: [], shown: ['Open windows', 'Assistant'], folded: ['Search'], rightW: 380 });
   await reloadSized(page, electronApp);
   await shoot(page, 'DeskTabs');
+  // 7i's tab menu: a note of the Notes view only.
+  await openFile(page, 'Outline ideas');
+  await page.locator('app-tab-bar .tab', { hasText: 'Outline ideas' }).first().click({ button: 'right' });
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: path.join(OUT, 'DeskTabs.menu.png') });
+  await page.keyboard.press('Escape');
+
+  // Board 7f's cards with the Assistant open: they wrap (fidelity ruling O7), the frame stays put (D-48).
+  await page.keyboard.press('Control+2');
+  await page.waitForTimeout(500);
+  await arrangeDocks(page, { ...WORK_DOCKS, shown: ['Tickets', 'Assistant', 'Capacity'] });
+  await reloadSized(page, electronApp);
+  await expect(panel.locator('.work-row[data-id="T-0121"]')).toBeVisible({ timeout: 30_000 });
+  await pushFleet(electronApp);
+  await page.waitForTimeout(800);
+  await openFromMenu('Crew');
+  await expect(page.locator('.desk-team').filter({ visible: true })).toBeVisible({ timeout: 15_000 });
+  await page.locator('.desk-team .desk-persona-stuck button[aria-label="Stop"], .desk-team .desk-persona-stuck button[title^="Stop"]').first().click();
+  await page.waitForTimeout(300);
+  await page.mouse.move(700, 880);
+  await page.screenshot({ path: path.join(OUT, 'DeskTeam.assistant-open.png') });
+  expect(await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).evaluate((node) => node.scrollLeft)).toBe(0);
 });

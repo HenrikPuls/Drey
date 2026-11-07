@@ -10,6 +10,9 @@ import { Icon, type IconName } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { ViewService, type ViewDef } from '../views';
 
+/** The tab menu's width, board 7i. */
+const TAB_MENU_WIDTH = 300;
+
 interface TabMenu {
   x: number;
   y: number;
@@ -21,8 +24,8 @@ interface TabMenu {
  * `PaneService.pane(paneId)` for membership/order/active, `EditorService`
  * for each tab's name/dirty state and to close it. A plain press activates
  * the tab within this pane, the X closes (a dirty tab confirms first, in
- * the service). Right-click opens a small menu with "Split right/down" and
- * "Close all" / "Close others", scoped to *this pane only*. The "+" opens a
+ * the service). Right-click opens the tab menu (board 7i): the views inline, Go to,
+ * then the tab's rows, scoped to *this pane only*. The "+" opens a
  * blank scratch note; it lands here because clicking anywhere in a pane
  * focuses it first (`PaneLeaf`'s host `mousedown`).
  *
@@ -129,34 +132,37 @@ export class TabBar {
   protected openMenu(event: MouseEvent, path: string): void {
     event.preventDefault();
     event.stopPropagation();
-    this.subOpen.set(false);
+    const views = this.views.views().length;
+    // Board 7i: 300 px wide, 30 px rows. The fixed rows (Close tab, the dock moves, the splits, pin, export, history, close others / all) plus the view list, a Go to per other view and the separators.
+    const rows = 11 + (views > 1 ? views * 2 : 0);
     this.menu.set({
-      // Room on the right for the "Show this tab in ›" flyout (ADR-0089).
-      x: Math.min(event.clientX, window.innerWidth - (this.views.views().length > 1 ? 330 : 168)),
-      // The menu grew to eight rows with the dock-move and pin entries (ADR-0038),
-      // plus the view rows (ADR-0089).
-      y: Math.min(event.clientY, window.innerHeight - 270 - (this.views.views().length > 1 ? 60 : 0)),
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - TAB_MENU_WIDTH - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - rows * 30 - 60)),
       path,
     });
   }
 
-  /** The "Show this tab in ›" flyout. */
-  protected readonly subOpen = signal(false);
-
-  /** The other views that show the tab, with their position (their `Ctrl+n`). */
-  protected otherViewsOf(path: string): Array<{ view: ViewDef; index: number }> {
-    const holding = this.views.viewsOfTab(path);
+  /** The other views with their position (their `Ctrl+n`): each row reaches that view, board 7i. */
+  protected otherViewsOf(): Array<{ view: ViewDef; index: number }> {
     return this.views
       .views()
       .map((view, index) => ({ view, index }))
-      .filter((v) => v.view.id !== this.views.activeId() && holding.includes(v.view.id));
+      .filter((v) => v.view.id !== this.views.activeId());
   }
 
-  /** "Go to the <view> view": switches there and brings the tab forward. */
+  /** "Go to the <view> view": switches there and brings the tab forward when that view shows it. */
   protected goToView(path: string, viewId: string): void {
+    const shownThere = this.views.viewsOfTab(path).includes(viewId);
     this.closeMenu();
     this.views.switchTo(viewId);
-    this.editor.activate(path);
+    if (shownThere) {
+      this.editor.activate(path);
+    }
+  }
+
+  protected closeTab(path: string): void {
+    this.closeMenu();
+    void this.editor.closeTab(path);
   }
 
   protected closeMenu(): void {

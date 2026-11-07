@@ -210,6 +210,7 @@ test('board 7k: the Persona page', async ({ page, electronApp }) => {
   await pushFleet(electronApp);
 
   const openFromMenu = async (label: string): Promise<void> => {
+    await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
     await page.locator('button[aria-label="More actions"]:visible').click({ force: true });
     await page.getByRole('menuitem', { name: label, exact: true }).click();
   };
@@ -237,12 +238,6 @@ test('board 7k: the Persona page', async ({ page, electronApp }) => {
   await page.mouse.move(700, 880);
   await page.evaluate(() => {
     (document.activeElement as HTMLElement | null)?.blur();
-    // A forced click on a hover-only control scrolls its dock sideways; the boards never are.
-    for (const el of document.querySelectorAll<HTMLElement>('app-dock, app-dock *')) {
-      if (el.scrollLeft > 0) {
-        el.scrollLeft = 0;
-      }
-    }
   });
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(OUT, 'DeskPersona.png') });

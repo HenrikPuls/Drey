@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePersonaFile, personaFileText, personaMigrationFor, personaModelFor, personaRef, resolvePersona } from './persona';
+import { inPipelineOrder, parsePersonaFile, personaFileText, personaMigrationFor, personaModelFor, personaRef, resolvePersona } from './persona';
 
 const PIA = `---
 title: Pia
@@ -14,6 +14,21 @@ skills: [repo-recherche, fragen-formulieren]
 ---
 Pia plant. Ton: knapp, fragt lieber einmal mehr.
 `;
+
+describe('inPipelineOrder (fidelity ruling O12)', () => {
+  it('reads plan to test whatever the ids sort to, custom roles after, the human last', () => {
+    const list = [
+      { id: 'ben', role: 'builder', kind: 'agent' },
+      { id: 'you', role: 'custom', kind: 'human' },
+      { id: 'tessa', role: 'tester', kind: 'agent' },
+      { id: 'zed', role: 'custom', kind: 'agent' },
+      { id: 'anna', role: 'custom', kind: 'agent' },
+      { id: 'paul', role: 'planner', kind: 'agent' },
+      { id: 'ralf', role: 'reviewer', kind: 'agent' },
+    ] as const;
+    expect(inPipelineOrder(list).map((persona) => persona.id)).toEqual(['paul', 'ben', 'ralf', 'tessa', 'anna', 'zed', 'you']);
+  });
+});
 
 describe('parsePersonaFile', () => {
   it('reads the frontmatter with the concept defaults', () => {

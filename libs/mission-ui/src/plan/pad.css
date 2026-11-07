@@ -167,6 +167,15 @@
   .pd-flowcard {
     gap: 8px;
   }
+  .pd-flowline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+  .pd-flownow {
+    font-weight: 600;
+    color: var(--text);
+  }
   .pd-flowcard:disabled {
     cursor: default;
   }

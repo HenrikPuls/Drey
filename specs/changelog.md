@@ -1,3 +1,35 @@
+### Milestone 203 — req-146: the fidelity review's rulings (SDK 1.51), D-39 and D-48
+
+**Not yet manually verified by the owner.** The owner's rulings on the open rows of milestone 202, O1–O13 without O9 and O11 (those are req-147–149), plus D-48. The rows are updated in [fidelity-review-2026-11.md](../docs/design/work-panel/fidelity-review-2026-11.md).
+
+- **O1, one ticket document.** Every Work row, *Open ticket* and the OS notification open the ticket's document, whatever its run does (`openTicketPage`). The Thread is the card's button; past-runs rows and a run started with *open* still reach it. The thread tab's **Ticket · Thread · Review** strip is gone, as board 9a's note says (`ticket-faces.ts` and its spec removed). Reverses E13-20's "the thread while a run is active".
+- **O2, groups by stage.** A ticket in the `shaping` phase is in the Shaping group with or without a dialog, and no longer counts as queued; a need still wins. Without a run or reservation the row has no dialog pulse. New engine constant `SHAPING_STATE`.
+- **O3, the foot.** The store path moved into the foot's tooltip; errors, the orphan chip and the git warning stay visible.
+- **O4, the status bar.** The items already stood in 10t's order (Autopilot, cost, needs you) without frames; checked in the shots. The running summary got its id, req-150, not built.
+- **O5, dots.** The layout-changed dot is grey (`--text-4`, no glow); orange means needs you only.
+- **O6, tab titles.** A ticket's tab is `id · title` from the panel, Files or a link, on both stores: `DocumentRoutes.titleOf` now asks every route, not only the owner (no new field, the widened meaning is part of SDK 1.51), and the tickets route names a files-store ticket whose header carries the id its file name says (`fileTicketTitle`). The tab's maximum width grew from 240 to 320 px so the board's title fits. The Assistant's chip reads the same name (SDK 1.48), see the table.
+- **O7, SDK 1.51.** `ViewPresetLayout.bottomH`, clamped by `DockService` like a resize and used when the layout is seeded; Work sets 103. An already seeded Work view keeps its height. The Crew tab does not fold the right dock; the cards wrap below 190 px, so the state and Stop confirmation fit.
+- **O8, one persona picture.** `team/persona-picture.ts` draws the Crew cards, the ticket card and the Parts rows; the initials there are gone. Capacity and the Persona page keep initials, as 7e and 7k draw them.
+- **O10, the iPad's Flow.** The plan page reads `✓ Shape  Plan  (waits for you) · Build · …` and its flow card `standard · …` (`edited · …` with a changed part), phone template untouched.
+- **O12, persona order. The engine ordered them**, not the fixture: `BoardService.listPersonas` sorted by id. It now returns pipeline order by role (`inPipelineOrder`: planner, builder, reviewer, tester, custom, the human last), because the stock pipeline names no persona per step of Building. Desktop and Mission Control both read it.
+- **O13, the tab menu (D-39 goes with it).** The flyout is gone: head *Show this tab in*, the views inline with ticks, *Go to the <view> view*, new *Close tab*, then the longer menu; 300 px wide, 30 px rows as 7i. A Go-to row now stands for every other view, not only those that show the tab; it switches, and activates the tab only where it is shown.
+- **D-48, the sideways scroll.** Cause: the Tickets panel's header row was 375 px in a 300 px frame (a `nowrap` row, E12-11), so Emergency stop and ⋯ lay past the clip, a pointer could not reach them, and focusing them scrolled the frame by 75. Fix: the frame is `overflow-x: clip` and never scrolls; the row wraps, and its second row shows over the panel on hover or keyboard focus, so the header stays 28 px and nothing below moves (`panel-frame.css`, `board.css`). A first version that grew the header made rows jump under the pointer, and a click after the ⋯ menu missed; `desk-board-team` caught it. Specs that click a header control hover first; the fidelity specs' reset of `scrollLeft` is removed.
+- **e2e `work-panel`, its first test (reported as failing at `d24d09b5`).** Not traced to a commit: a fresh build of `d24d09b5` passed it 6 of 6 with its one push, this tree 10 of 10, and a trace of the frames main sends showed no second `fleet-changed`. The failure the integrator's checkout recorded (three rows, then `T-0105` first, so `T-0104` lost its run between two assertions) fits an engine round replacing the pushed state. The test no longer depends on that timing: it holds its state, pushed every 100 ms.
+- **Specs:** `work-groups`, `work-panel`, `persona`, `ticket-documents`, new `document-routes`, `dock.service.views`, `view-preset`, `dom`, `tab-bar`; e2e `work-panel` (O1, O6, D-48, and the pushed fleet state is held so an engine round cannot overwrite it, the old flake of its first test), `work-view` (the seeded 103), `views-chrome` (O5, O13), `fidelity-desk-work` (hand states `DeskTabs.menu`, `DeskTeam.assistant-open`).
+
+**Fidelity:** boards `DeskWork`, `DeskShape`, `DeskPlan`, `DeskReview`, `DeskReady`, `DeskBoard`, `DeskTeam`, `DeskViews`, `DeskTabs`, `DeskClean`, `Autopilot`, `PadPlan`, `MPhonePlan`; screenshots `test-results/fidelity/<Board>.png` (hand states `DeskTabs.menu.png`, `DeskTeam.assistant-open.png`), copies in the shared notes folder `req-146/`; built app, 1440×900 / 1194×834 / 390×844, scale factor 1, Anthrazit. Read side by side and region by region; the `.diff` captures of `compare.html` come from `fidelity-desk-tickets` and `-assistant`.
+
+| Board | Region | Board shows | Build shows | Verdict |
+|---|---|---|---|---|
+| 7a–7d, 9a | Assistant chip | `T-0121.md` | `T-0121 · title` | owner ruling O6: one name per document, SDK 1.48 (to be confirmed by the integrator; the file name is `ticket.md` on a store) |
+| 7a, 7b | Shaping row | `plan v3` | Nothing | feature not yet built — req-151 |
+| 7a | Header on hover | One row | Second row at 300 px: the build's filter and chain controls (milestone 194) | feature beyond the board, all reachable; at rest 28 px as drawn |
+| 5c | Flow | `… Review · Accept` | `… Review · Test · Accept` | data instead of sample content: the fixture's flow carries Test, 10j draws it too |
+| 7i | Menu | Six rows | Longer menu, a Go to per other view (Crew exists) | owner ruling O13 |
+| 7i | Rows | Medium grey text on the board's weight | Same size and width, Electron's stroke | text rasterization, no CSS difference found |
+| 7f (hand) | Cards with the Assistant open | Dock folded | Wrapped, three and one | owner ruling O7 |
+| 10t | `2 running · 1 stuck · 1 queued` | Shown | None | feature not yet built — req-150 |
+
 ### Milestone 202 — wave 4.7: the fidelity review
 
 **Not yet manually verified by the owner.** Row 4.7 of the fidelity wave: one session compared 39 of the 40 boards (9b is not a target) against the built app and wrote one deviation table, [fidelity-review-2026-11.md](../docs/design/work-panel/fidelity-review-2026-11.md); the open-for-owner list comes first there. Entered and left the roadmap with this change.
