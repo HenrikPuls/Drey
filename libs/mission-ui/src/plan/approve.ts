@@ -1,15 +1,17 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { effect, ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { effect, ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal, untracked } from '@angular/core';
 import { AppBar } from '../app-bar/app-bar';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { AnswerCard } from '../phone/answer-card';
 import { PhoneIcon } from '../phone/icon';
-import { touchFaceSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
+import { PadCards, type PadCard } from '../shell/pad-card';
+import { Panes } from '../shell/panes';
 import { MC_WORK_STATE, questionCardOf, questionNeedOf, type QuestionCardVm } from '../work/work.model';
 import { planChaptersOf, planSectionOf } from './plan.model';
 import { costSoFarText, estimateText as estimateRangeText } from '../../../../shared/cost-text';
 import { McI18n } from '../i18n/i18n.service';
-import type { McPartCard } from '../api/dto';
+import type { McEstimate, McPartCard } from '../api/dto';
 import {
   MC_APPROVE_STATE,
   builderOf,
@@ -39,7 +41,7 @@ import {
   selector: 'mc-plan-approve',
   imports: [AnswerCard, AppBar, McI18nPipe, NgTemplateOutlet, PhoneIcon],
   templateUrl: './approve.html',
-  styleUrls: ['../phone/kit.css', './approve.css'],
+  styleUrls: ['../phone/kit.css', './approve.css', './pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlanApprove {
@@ -51,6 +53,10 @@ export class PlanApprove {
   // --- the phone's plan to accept (board 10j) ----------------------------------
 
   protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
+  private readonly panes = inject(Panes);
+  private readonly padCards = inject(PadCards);
+  protected readonly moreOpen = signal(false);
   protected readonly goal = signal<string | null>(null);
   protected readonly reply = signal('');
   protected readonly qSelected = signal<number | null>(null);
@@ -326,6 +332,166 @@ export class PlanApprove {
   protected changeSplit(): void {
     this.state.changeSplit();
   }
+
+  // --- the iPad's plan to accept (board 5c) ------------------------------------
+
+  protected goToCard(): void {
+    this.panes.setRight(true);
+  }
+
+  /** The grey paragraph with its mono `### Parts` token cut out of the sentence. */
+  protected readonly introParts = computed(() => {
+    const mark = '\u0000';
+    const [before, after] = this.i18n.t('plan.pad.intro', { code: mark }).split(mark);
+    return { before: before ?? '', code: this.i18n.t('plan.pad.parts_code'), after: after ?? '' };
+  });
+
+  /** The parts still to release (a released part has its own ticket). */
+  private readonly openParts = computed(() => this.cards().filter((card) => !card.locked));
+  protected readonly firstCard = computed<McPartCard | null>(() => this.openParts()[0] ?? null);
+  protected readonly firstOpen = computed(() => this.firstCard()?.index ?? -1);
+
+  private readonly openEstimates = computed<readonly McEstimate[]>(() => {
+    const approval = this.approval();
+    if (approval === null) {
+      return [];
+    }
+    return this.openParts()
+      .map((card) => {
+        const builder = builderOf(card, approval);
+        return builder === null ? null : this.state.estimate(approval.gate, builder.id);
+      })
+      .filter((estimate): estimate is McEstimate => estimate !== null);
+  });
+
+  private amountOf(low: number | null, high: number | null, cost: number): string {
+    if (low !== null && high !== null) {
+      const range = this.i18n.currencyRange(low, high);
+      if (range.high !== '') {
+        return this.i18n.t('plan.pad.range', { low: range.low, high: range.high });
+      }
+    }
+    return this.i18n.formatCurrency(cost);
+  }
+
+  private readonly estimateSum = computed<McEstimate | null>(() => {
+    const known = this.openEstimates();
+    if (known.length === 0) {
+      return null;
+    }
+    const ranged = known.every((estimate) => estimate.costLow !== null && estimate.costHigh !== null);
+    return {
+      ...known[0]!,
+      runs: Math.min(...known.map((estimate) => estimate.runs)),
+      cost: known.reduce((sum, estimate) => sum + estimate.cost, 0),
+      costLow: ranged ? known.reduce((sum, estimate) => sum + estimate.costLow!, 0) : null,
+      costHigh: ranged ? known.reduce((sum, estimate) => sum + estimate.costHigh!, 0) : null,
+    };
+  });
+
+  /** `Typical total $3.00–5.20`: the parts that have a basis, summed. */
+  protected readonly padTotal = computed(() => {
+    const sum = this.estimateSum();
+    return sum === null ? this.i18n.t('plan.pad.no_estimate') : this.amountOf(sum.costLow, sum.costHigh, sum.cost);
+  });
+
+  /** The Cost row: what was spent, then the estimate with its basis. */
+  protected readonly padCost = computed<string | null>(() => {
+    const spent = this.state.spent?.(this.approval()?.ticket ?? '') ?? null;
+    const sum = this.estimateSum();
+    const bits = [spent === null ? '' : costSoFarText(this.i18n, spent), sum === null ? '' : this.i18n.t('cost.amount.estimate', { estimate: estimateRangeText(this.i18n, sum) })];
+    const line = bits.filter((bit) => bit !== '').join(' · ');
+    return line === '' ? null : line;
+  });
+
+  /** A part's cost column: the amount and what it rests on; a released part has none. */
+  protected partCost(card: McPartCard): { readonly amount: string; readonly basis: string } | null {
+    const approval = this.approval();
+    const builder = approval === null ? null : builderOf(card, approval);
+    if (approval === null || builder === null || card.locked) {
+      return null;
+    }
+    const estimate = this.state.estimate(approval.gate, builder.id);
+    return estimate === null
+      ? { amount: this.i18n.t('plan.pad.no_estimate'), basis: this.i18n.t('plan.pad.first_run') }
+      : { amount: this.amountOf(estimate.costLow, estimate.costHigh, estimate.cost), basis: this.i18n.t('plan.pad.basis', { n: estimate.runs }) };
+  }
+
+  /** The part's second line: when it starts, and why it is a part. */
+  protected partSub(card: McPartCard): string {
+    return [card.start, card.reason ?? ''].filter((bit) => bit !== '').join(' · ');
+  }
+
+  /** The flow card's steps: the first open part's flow, the parts share it unless changed. */
+  protected readonly flowSteps = computed<string | null>(() => {
+    const flow = this.firstCard()?.flow ?? [];
+    return flow.length === 0 ? null : flow.filter((step) => !step.skipped).map((step) => step.title).join(', ');
+  });
+
+  private readonly acceptPick = signal<number | null>(null);
+  private readonly noLine = computed<string | null>(() => null);
+
+  /** What the Assistant draws for this plan (Q9): its open question, else Accept it as it stands. */
+  private readonly publishCard = effect(() => {
+    const approval = this.approval();
+    if (!this.pad() || approval === null || this.readOnly()) {
+      untracked(() => this.padCards.card.set(null));
+      return;
+    }
+    const question = this.questionCard();
+    if (question !== null) {
+      const card: PadCard = {
+        question: question.question,
+        why: this.questionWhy(),
+        options: question.options,
+        selected: this.qSelected,
+        busy: this.qBusy,
+        error: this.qError,
+        done: this.noLine,
+        pick: (index) => this.qSelected.set(index),
+        send: () => void this.qSend(question),
+      };
+      untracked(() => this.padCards.card.set(card));
+      return;
+    }
+    if (this.proposal().approveLabel === null) {
+      untracked(() => this.padCards.card.set(null));
+      return;
+    }
+    const n = this.openParts().length;
+    const names = [...new Set(this.openParts().map((part) => builderOf(part, approval)?.title ?? '').filter((name) => name !== ''))];
+    const consequence =
+      names.length === 1
+        ? this.i18n.t('plan.pad.accept_all_with', { n, name: names[0]! })
+        : names.length > 1
+          ? this.i18n.t('plan.pad.accept_with', { n, names: names.join(', ') })
+          : this.i18n.t('plan.pad.accept_parts', { n });
+    const card: PadCard = {
+      question: this.i18n.t('plan.pad.accept_q'),
+      why: null,
+      options: [
+        { label: this.i18n.t('plan.pad.accept'), consequence, recommended: true },
+        { label: this.i18n.t('plan.pad.change_first'), consequence: this.i18n.t('plan.pad.change_first_line'), recommended: false },
+      ],
+      selected: this.acceptPick,
+      busy: this.busy,
+      error: this.message,
+      done: this.noLine,
+      pick: (index) => this.acceptPick.set(index),
+      send: () => {
+        const pick = this.acceptPick();
+        if (pick === 0) {
+          void this.release('all');
+        } else if (pick === 1) {
+          this.acceptPick.set(null);
+          this.changeSplit();
+        }
+      },
+    };
+    untracked(() => this.padCards.card.set(card));
+  });
+
+  private readonly clearCard = inject(DestroyRef).onDestroy(() => this.padCards.card.set(null));
 
   protected close(): void {
     this.state.close();

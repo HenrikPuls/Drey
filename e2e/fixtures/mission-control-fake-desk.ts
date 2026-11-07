@@ -142,18 +142,18 @@ export interface FakeDeskOptions {
 function boardsRoute(pathname: string, pad: boolean): unknown {
   const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\//.exec(pathname);
   if (estimate !== null) {
-    return BOARDS.ESTIMATES[`${estimate[1]}/${estimate[2]}`] ?? { ok: false, error: 'no basis' };
+    return (pad ? BOARDS.PAD_ESTIMATES : BOARDS.ESTIMATES)[`${estimate[1]}/${estimate[2]}`] ?? { ok: false, error: 'no basis' };
   }
   const ticket = /^\/api\/tickets\/([^/]+)(\/parts|\/plan)?$/.exec(pathname);
   if (ticket !== null) {
     const id = decodeURIComponent(ticket[1]!);
     if (ticket[2] === '/parts') {
-      return id === 'T-0130' ? BOARDS.PARTS_130 : id === 'T-0121' ? BOARDS.PARTS_121 : { ok: false, error: 'no parts' };
+      return id === 'T-0130' ? (pad ? BOARDS.PAD_PARTS_130 : BOARDS.PARTS_130) : id === 'T-0121' ? BOARDS.PARTS_121 : { ok: false, error: 'no parts' };
     }
     if (ticket[2] === '/plan') {
-      return id === 'T-0130' ? BOARDS.PLAN_130 : { ok: true, version: null, edits: 0, summary: null, marks: [] };
+      return id === 'T-0130' ? (pad ? BOARDS.PAD_PLAN_130 : BOARDS.PLAN_130) : { ok: true, version: null, edits: 0, summary: null, marks: [] };
     }
-    const found = BOARDS.BOARD.columns.flatMap((c) => c.tickets).find((t) => t.id === id);
+    const found = (pad ? BOARDS.PAD_BOARD : BOARDS.BOARD).columns.flatMap((c) => c.tickets).find((t) => t.id === id);
     return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: (pad ? BOARDS.PAD_TICKET_TEXT[id] : undefined) ?? BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
   }
   const session = /^\/api\/chat\/sessions\/(.+)$/.exec(pathname);
@@ -163,7 +163,7 @@ function boardsRoute(pathname: string, pad: boolean): unknown {
   }
   switch (pathname) {
     case '/api/board':
-      return BOARDS.BOARD;
+      return pad ? BOARDS.PAD_BOARD : BOARDS.BOARD;
     case '/api/needs':
       return BOARDS.NEEDS;
     case '/api/personas':

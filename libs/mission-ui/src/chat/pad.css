@@ -54,6 +54,13 @@
   .ph-linkcard {
     min-height: 74px;
   }
+  /* The shape session's answers (5b, 5c): the planner's picture above them. */
+  .pd-via {
+    gap: 8px;
+    font-size: var(--ph-13);
+    line-height: 24px;
+    color: var(--text-2);
+  }
   /* The Assistant (10e): 16 px, the composer on the pane. */
   :host-context(.pad-right) .thread {
     gap: 12px;

@@ -256,3 +256,104 @@ export const ESTIMATES: Record<string, unknown> = {
 export const PAD_TICKET_TEXT: Record<string, string> = {
   'T-0118': `---\nid: T-0118\n---\n\n## Goal\n\nOne Ctrl+P opens one palette, also when the machine is slow and the key repeats.\n\n## Verification\n\nTested on 2026-11-04 by Tessa\n\n- [x] One palette after a double Ctrl+P\n- [x] Escape closes it, the editor keeps focus\n- [x] A slow machine still opens one\n- [x] The second press does nothing\n\n### Video\n\n![](../videos/t-0118.webm)\n\n- 0:48 The second press does nothing\n\n## Verlauf\n\n${COST_118}\n`,
 };
+
+/** Board 5b / 5c: T-0130 as it reads while Paul shapes it: the chapters the Shaping face draws as rows. */
+PAD_TICKET_TEXT['T-0130'] = [
+  '---',
+  'id: T-0130',
+  'form: ship',
+  '---',
+  '',
+  '## Goal',
+  '',
+  'Press one global hotkey, speak, and get a ticket in the inbox. No window to manage, no typing.',
+  '',
+  '## Decisions',
+  '',
+  '- Windows dictation (Win+H) is the speech engine; Drey only opens the capture window and focuses it.',
+  '- The first sentence becomes the title; the rest stays in the description.',
+  '',
+  '## Constraints',
+  '',
+  '- Nothing leaves the machine.',
+  '- The hotkey is configurable (ADR-0073).',
+  '',
+  '## Open questions',
+  '',
+  '- How many parts does this need? Asked in Mission Control.',
+  '',
+  '## Acceptance criteria',
+  '',
+  '- [ ] Hotkey raises Drey and opens the capture window with the caret in it',
+  '- [ ] A spoken sentence ends up as one inbox ticket',
+  '- [ ] Escape closes the window without creating anything',
+  '',
+  '## Plan',
+  '',
+  '### Parts',
+  '',
+  '- Capture hotkey and window',
+  '- Dictation hand-off (Win+H)',
+  '- Ticket from transcript',
+  '',
+].join('\n');
+
+/** 5b: who edited which decision since the model's last turn. */
+export const PAD_PLAN_130 = {
+  ok: true,
+  version: 7,
+  edits: 1,
+  summary: null,
+  marks: [
+    { no: 1, text: 'Windows dictation (Win+H) is the speech engine; Drey only opens the capture window and focuses it.', by: 'model' },
+    { no: 2, text: 'The first sentence becomes the title; the rest stays in the description.', by: 'you' },
+  ],
+};
+
+/** 5b: the question open on T-0130, in place of the phone sample's pushback. */
+export const PAD_SHAPE_QUESTION = {
+  kind: 'question',
+  phase: 'plan',
+  ticketId: 'T-0130',
+  title: 'Voice capture for tickets',
+  summary: 'How many parts does this need?',
+  runId: 'run-paul',
+  shaped: {
+    question: 'How many parts does this need?',
+    context: null,
+    where: null,
+    why: null,
+    recommended: 1,
+    recommendationWhy: null,
+    options: [
+      { n: 1, label: '3 parts', consequence: 'hotkey and window, dictation hand-off, ticket from transcript' },
+      { n: 2, label: 'One ticket', consequence: 'about 2 days of work for one builder' },
+    ],
+  },
+};
+
+/** 5b / 5c: the board with Paul as T-0130's worker (the Worker row); the phone's board keeps its card as it was. */
+export const PAD_BOARD = {
+  ...BOARD,
+  columns: BOARD.columns.map((column) => ({
+    ...column,
+    tickets: column.tickets.map((t) => (t.id === 'T-0130' ? { ...t, meta: { ...t.meta, persona: 'paul' } } : t)),
+  })),
+};
+
+/** 5c: the three parts as the board words them: when each starts, and why it is a part. */
+export const PAD_PARTS_130 = {
+  ...PARTS_130,
+  parts: PARTS_130.parts.map((part, i) => ({
+    ...part,
+    reason: ['Mod+Alt+T, focus handling', 'blocked-by P1', 'title from the first sentence'][i]!,
+    start: ['starts first', 'after P1', 'after P2'][i]!,
+    flow: ['Plan', 'Build', 'Review', 'Test'].map((title) => ({ phase: title.toLowerCase(), title, persona: title === 'Build' ? part.persona : null, inserted: false, skipped: false, notify: false })),
+  })),
+};
+
+/** 5c: the estimate the board's first part shows. */
+export const PAD_ESTIMATES: Record<string, unknown> = {
+  ...ESTIMATES,
+  'build/ben': estimate('build', 'ben', 'qwen3-coder', 1.45, 1.1, 1.8),
+};

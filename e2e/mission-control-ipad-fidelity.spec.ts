@@ -9,6 +9,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { startFakeDesk } from './fixtures/mission-control-fake-desk';
+import { PAD_SHAPE_QUESTION } from './fixtures/mission-control-fake-boards';
 
 let desk: Awaited<ReturnType<typeof startFakeDesk>>;
 const OUT = process.env['FID_OUT'] ?? 'test-results/fidelity';
@@ -29,6 +30,12 @@ async function open(page: Page, origin = desk.origin): Promise<void> {
   await settle(page);
 }
 
+/** Stands the needs list in the board's state: the desk's own answer, patched. */
+const needsOf = (page: Page, patch: (needs: Record<string, unknown>[]) => unknown[]) =>
+  page.route('**/api/needs', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: patch((await response.json()) as Record<string, unknown>[]) });
+  });
 const settle = (page: Page) => page.waitForTimeout(350);
 const shot = async (page: Page, board: string) => {
   await settle(page);
@@ -67,10 +74,20 @@ test.describe('landscape', () => {
     await shot(page, 'MPadReady');
   });
 
-  test('5b shape, 5c plan', async ({ page }) => {
+  test('5b shape', async ({ page }) => {
+    await needsOf(page, (needs) => needs.map((need) => (need['ticketId'] === 'T-0130' ? PAD_SHAPE_QUESTION : need)));
     await open(page);
     await ticket(page, 'Voice capture for tickets');
+    await page.getByRole('radio', { name: /^3 parts/ }).click();
     await shot(page, 'PadShape');
+  });
+
+  test('5c plan', async ({ page }) => {
+    await needsOf(page, (needs) => needs.map((need) => (need['ticketId'] === 'T-0130' ? { kind: 'checkpoint', phase: 'plan', ticketId: 'T-0130', title: 'Voice capture for tickets', summary: 'Plan to accept.' } : need)));
+    await open(page);
+    await page.locator('mc-work .ph-trow', { hasText: 'Voice capture for tickets' }).first().click();
+    await expect(page.locator('mc-plan-approve .pd-wide-bar')).toBeVisible();
+    await page.getByRole('radio', { name: /^Accept plan/ }).click();
     await shot(page, 'PadPlan');
   });
 

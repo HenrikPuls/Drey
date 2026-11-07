@@ -1,0 +1,198 @@
+/* The iPad's plan to accept (board 5c). Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .pd-thead {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: flex-end;
+    position: relative;
+    width: calc(100% + var(--pd-bar-extra, 0px));
+    height: 53px;
+    padding: 0 4px;
+    font-size: var(--ph-17);
+    border-bottom: 1px solid var(--line);
+  }
+  .pd-tid {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+  }
+  .pd-wide-bar + .ph-plan {
+    padding: 12px 20px 20px;
+  }
+  .ph-needs-dot {
+    width: 7px;
+    height: 7px;
+  }
+  .pd-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 26;
+  }
+  .pd-menu {
+    position: absolute;
+    top: 49px;
+    right: 4px;
+    z-index: 27;
+    display: flex;
+    flex-direction: column;
+    min-width: 220px;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-menuitem {
+    min-height: 44px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: var(--ph-16);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-chip);
+  }
+  .ph-worker {
+    min-height: 24px;
+  }
+  .pd-intro {
+    margin: 0;
+    font-size: var(--ph-17);
+    line-height: 26px;
+    color: var(--text-2);
+  }
+  .pd-mono {
+    font-family: var(--mono);
+    font-size: var(--ph-15);
+    color: var(--text);
+  }
+  .pd-planhead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+  }
+  .pd-planh2 {
+    margin: 0;
+    font-size: var(--ph-20);
+    font-weight: 700;
+    line-height: 28px;
+  }
+  .pd-count,
+  .pd-total {
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  .pd-total b {
+    color: var(--text);
+  }
+  .pd-part {
+    box-sizing: content-box;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 64px;
+    padding: 8px 0;
+    font: inherit;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .pd-pn {
+    flex: none;
+    width: 24px;
+    font-family: var(--mono);
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-pbody {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pd-ptitle {
+    font-size: var(--ph-17);
+    line-height: 22px;
+  }
+  .pd-psub {
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-pstate {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  .pd-pcost {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    width: 124px;
+  }
+  .pd-pamount {
+    font-size: var(--ph-15);
+  }
+  .pd-pbasis {
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-flowcard,
+  .pd-declink {
+    box-sizing: content-box;
+    display: flex;
+    align-items: center;
+    width: calc(100% - 30px);
+    min-height: 48px;
+    padding: 6px 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-flowcard {
+    gap: 8px;
+  }
+  .pd-flowcard:disabled {
+    cursor: default;
+  }
+  .pd-declink {
+    gap: 10px;
+    background: var(--panel);
+  }
+  .pd-fk {
+    color: var(--text-2);
+  }
+  .pd-fv,
+  .pd-dectext {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .pd-fgo,
+  .pd-decgo {
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .pd-decdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    background: var(--warn);
+    border-radius: 50%;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 70%, transparent);
+  }
+}

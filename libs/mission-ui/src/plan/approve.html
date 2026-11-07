@@ -1,4 +1,121 @@
 @if (phone()) {
+@if (pad()) {
+  <div class="pd-thead pd-wide-bar">
+    <b class="pd-tid">{{ approval()?.ticket }}</b>
+    <button type="button" class="ph-iconbtn" [attr.aria-label]="'ticket.phone.more' | t" [attr.title]="'ticket.phone.more' | t" aria-haspopup="menu" [attr.aria-expanded]="moreOpen()" (click)="moreOpen.update(open => !open)">
+      <mc-ph-icon name="more" />
+    </button>
+  </div>
+  @if (moreOpen()) {
+    <div class="pd-scrim" (click)="moreOpen.set(false)"></div>
+    <div class="pd-menu" role="menu">
+      <button type="button" role="menuitem" class="pd-menuitem" (click)="backToTicket()">{{ 'plan.pad.back_ticket' | t }}</button>
+    </div>
+  }
+  <div class="ph-scroll ph-plan">
+    @if (approval(); as a) {
+      <div class="ph-headrow">
+        <span class="ph-id">{{ a.ticket }}</span>
+        <span class="ph-needs"><span class="ph-needs-dot" aria-hidden="true"></span>{{ 'plan.pad.pill' | t: { phase: phaseWord() } }}</span>
+        <span class="ph-spacer"></span>
+        <button type="button" class="ph-thread" (click)="changeSplit()">{{ 'ticket.phone.thread' | t }}</button>
+      </div>
+      <h1 class="ph-h1">{{ phoneTitle() }}</h1>
+      <div class="ph-grid">
+        @if (flowLine(); as line) {
+          <span class="ph-grey">{{ 'ticket.phone.flow' | t }}</span>
+          <span class="ph-grey">{{ line }}</span>
+        }
+        @if (planner(); as who) {
+          <span class="ph-grey">{{ 'ticket.phone.worker' | t }}</span>
+          <span class="ph-worker">
+            <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ title: who.title, color: who.color, size: 24 }" />
+            <span>{{ who.title }}</span>
+          </span>
+        }
+        @if (padCost(); as line) {
+          <span class="ph-grey">{{ 'ticket.phone.cost' | t }}</span>
+          <span class="ph-grey">{{ line }}</span>
+        }
+      </div>
+
+      <p class="pd-intro">{{ introParts().before }}<span class="pd-mono">{{ introParts().code }}</span>{{ introParts().after }}</p>
+
+      <div class="pd-planhead">
+        <h2 class="pd-planh2">{{ 'plan.pad.head' | t }}</h2>
+        <span class="pd-count">{{ 'plan.pad.parts_count' | t: { n: rows().length } }}</span>
+        <span class="ph-spacer"></span>
+        <span class="pd-total">{{ 'plan.pad.typical' | t }} <b>{{ padTotal() }}</b></span>
+      </div>
+      <div>
+        @for (row of rows(); track row.card.index) {
+          <button type="button" class="pd-part" [class.ph-edited]="isEdited(row.card.title)" [attr.aria-expanded]="selected() === row.card.index" (click)="select(row.card)">
+            <span class="pd-pn">P{{ row.n }}</span>
+            <span class="pd-pbody">
+              <span class="pd-ptitle ph-ellipsis">{{ row.card.title }}</span>
+              <span class="pd-psub ph-ellipsis">{{ partSub(row.card) }}</span>
+            </span>
+            <span class="pd-pstate"><span aria-hidden="true">{{ row.card.state === 'done' ? '✓' : row.card.locked ? '●' : '○' }}</span>{{ ('ticket.phone.part.' + (row.card.state === 'done' ? 'done' : row.card.locked ? 'running' : 'waiting')) | t }}</span>
+            @if (row.builder; as b) {
+              <ng-container [ngTemplateOutlet]="avatar" [ngTemplateOutletContext]="{ title: b.title, color: b.color, size: 24 }" />
+            }
+            <span class="pd-pcost">
+              @if (partCost(row.card); as cost) {
+                <span class="pd-pamount">{{ cost.amount }}</span>
+                <span class="pd-pbasis">{{ cost.basis }}</span>
+              }
+            </span>
+          </button>
+          @if (selected() === row.card.index) {
+            <div class="ph-part-acts">
+              @if (row.card.locked) {
+                @if (row.card.ticket !== null) {
+                  <button type="button" class="ph-chipbtn" (click)="openTicket(row.card.ticket)">{{ 'plan.phone.open_ticket' | t }}</button>
+                }
+              } @else if (!readOnly()) {
+                @for (p of a.personas; track p.id) {
+                  <button type="button" class="ph-chipbtn" [class.on]="p.id === (row.card.persona ?? a.defaultPersona)" [attr.aria-pressed]="p.id === (row.card.persona ?? a.defaultPersona)" (click)="pick(row.card, p.id)">{{ p.title }}</button>
+                }
+                <button type="button" class="ph-chipbtn" [disabled]="!row.up || busy()" (click)="move(row.card, -1)">{{ 'plan.phone.up' | t }}</button>
+                <button type="button" class="ph-chipbtn" [disabled]="!row.down || busy()" (click)="move(row.card, 1)">{{ 'plan.phone.down' | t }}</button>
+                <button type="button" class="ph-chipbtn ph-red" [disabled]="busy()" (click)="remove(row.card)">{{ (armed() === row.card.index ? 'plan.phone.delete_confirm' : 'plan.phone.delete') | t }}</button>
+                @if (proposal().firstLabel !== null && row.card.index === firstOpen()) {
+                  <button type="button" class="ph-chipbtn" [disabled]="busy()" (click)="release('first')">{{ proposal().firstLabel }}</button>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+
+      @if (flowSteps(); as steps) {
+        <button type="button" class="pd-flowcard" [disabled]="firstCard() === null || readOnly()" (click)="changeFlow(firstCard()!)">
+          <span class="pd-fk">{{ 'ticket.phone.flow' | t }}</span>
+          <span class="pd-fv">{{ steps }}</span>
+          <span class="pd-fgo">{{ 'plan.pad.change_flow' | t }}</span>
+        </button>
+      }
+      @if (questionCard() === null && proposal().approveLabel !== null) {
+        <button type="button" class="pd-declink" (click)="goToCard()">
+          <span class="pd-decdot" aria-hidden="true"></span>
+          <span class="pd-dectext">{{ 'ticket.pad.decision_plan' | t }}</span>
+          <span class="pd-decgo">{{ 'ticket.pad.go_to_card' | t }}</span>
+        </button>
+      }
+      @for (warning of a.warnings; track $index) {
+        <p class="ph-foot-line ph-warn">{{ warning }}</p>
+      }
+      @if (message(); as m) {
+        <p class="ph-warn" role="alert">{{ m }}</p>
+      }
+      <span class="ph-foot-line">{{ 'plan.pad.foot' | t: { name: planner()?.title ?? '' } }}</span>
+    } @else if (error(); as e) {
+      <p class="ph-foot-line" role="alert">{{ e }}</p>
+    } @else {
+      <p class="ph-foot-line" aria-live="polite">{{ 'plan.phone.loading' | t }}</p>
+    }
+  </div>
+} @else {
   <mc-app-bar [title]="phoneTitle()" [sub]="phoneSub()" [subOnPhone]="true" [back]="'plan.phone.back' | t" (backed)="backToTicket()" />
   <div class="ph-scroll ph-plan">
     @if (approval(); as a) {
@@ -128,6 +245,7 @@
     </div>
   </div>
 
+}
   <ng-template #avatar let-title="title" let-color="color" let-size="size">
     <svg class="ph-ava" role="img" [attr.aria-label]="title" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24">
       <rect width="24" height="24" [attr.fill]="color" />

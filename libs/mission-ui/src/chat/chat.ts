@@ -18,6 +18,7 @@ import { MC_WORK_STATE, questionCardOf, ticketPersonaOf, type McBoard, type Ques
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import { AnswerCard, type AnswerOption } from '../phone/answer-card';
+import { PhoneAvatar } from '../phone/avatar';
 import { PhoneIcon } from '../phone/icon';
 import { padSignal, touchFaceSignal } from '../phone/phone';
 import { PadCards } from '../shell/pad-card';
@@ -513,7 +514,7 @@ interface SheetEntry {
   templateUrl: './chat.html',
   styleUrls: ['../phone/kit.css', './chat.css', './phone.css', './pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, PlanPane, AppBar, AnswerCard, McI18nPipe, PhoneIcon],
+  imports: [NgTemplateOutlet, PlanPane, AppBar, AnswerCard, McI18nPipe, PhoneAvatar, PhoneIcon],
 })
 export class Chat {
   protected readonly state: McChatState =
@@ -1080,6 +1081,12 @@ export class Chat {
       line: `Shaping ${ticket} with Paul${active?.model === undefined ? '' : ` · ${active.model}`} · reads only`,
       context: sources.length === 0 ? null : `Context: ${shown}${sources.length > 3 ? ` · +${sources.length - 3}` : ''}`,
     };
+  });
+
+  /** The shape session's planner as the iPad draws it above his answers (board 5b, 5c). */
+  protected readonly shapeWho = computed(() => {
+    const name = 'Paul';
+    return { name, color: this.work?.personas.find((persona) => persona.title === name)?.color ?? 'var(--text-2)' };
   });
 
   /** Paul's unanswered question: the last thing in the thread is his answer card. */

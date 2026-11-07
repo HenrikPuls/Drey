@@ -62,6 +62,10 @@
                 }
               </span>
             }
+            @if (shapeFace()) {
+              <span class="ph-grey">{{ 'ticket.pad.type' | t }}</span>
+              <span>{{ formWord() }}</span>
+            }
             @if (workerName(); as worker) {
               <span class="ph-grey">{{ 'ticket.phone.worker' | t }}</span>
               @if (pad()) {
@@ -122,7 +126,39 @@
             }
           }
 
-          @if (phoneBody() !== '') {
+          @if (shapeFace()) {
+            @for (section of shape().sections; track $index) {
+              <h2 class="ph-h2">{{ section.title }}</h2>
+              @for (paragraph of section.paragraphs; track $index) {
+                <p class="pd-para">{{ paragraph }}</p>
+              }
+              @if (section.items.length > 0) {
+                <div>
+                  @for (item of section.items; track $index) {
+                    @if (section.criteria) {
+                      <div class="pd-srow pd-crit">
+                        <span class="pd-box" [class.on]="item.checked === true" aria-hidden="true">{{ item.checked === true ? '✓' : '' }}</span>
+                        <span class="pd-stext">{{ item.text }}</span>
+                      </div>
+                    } @else {
+                      <div class="pd-srow">
+                        <span class="pd-bullet" aria-hidden="true">•</span>
+                        <span class="pd-stext">{{ item.text }}</span>
+                        @if (item.mark; as mark) {
+                          <span class="pd-smark">{{ mark }}</span>
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+              }
+            }
+            @if (shape().rest !== '') {
+              <div class="ph-md">
+                <mc-markdown [text]="shape().rest" surface="ticket" [label]="'ticket.phone.text' | t" mode="view" [modeBar]="false" />
+              </div>
+            }
+          } @else if (phoneBody() !== '') {
             <div class="ph-md">
               <mc-markdown [text]="phoneBody()" surface="ticket" [label]="'ticket.phone.text' | t" mode="view" [modeBar]="false" />
             </div>

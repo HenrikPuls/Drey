@@ -48,7 +48,7 @@
             } @else if (item.message.kind === 'question') {
               <div class="msg mission">
                 @if (shape()) {
-                  <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
+                  <ng-container [ngTemplateOutlet]="via" />
                 }
                 <p class="bubble">{{ item.message.text }}</p>
               </div>
@@ -86,7 +86,7 @@
             } @else if (isLive(item)) {
               <div class="msg mission live">
                 @if (shape()) {
-                  <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
+                  <ng-container [ngTemplateOutlet]="via" />
                 }
                 @if ((item.message.thought ?? '') !== '') {
                   <div class="thinklive" aria-label="Mission Control is thinking">
@@ -101,7 +101,7 @@
               <div class="msg mission">
                 <span class="ph-meta">{{ metaOf(item.message.at) }}</span>
                 @if (shape()) {
-                  <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
+                  <ng-container [ngTemplateOutlet]="via" />
                 }
                 @if (item.message.thought !== null && (item.message.thought ?? '') !== '') {
                   <details class="think">
@@ -583,5 +583,16 @@
     }
   } @else {
     <p class="card-summary">{{ proposal.summary }}</p>
+  }
+</ng-template>
+
+<ng-template #via>
+  @if (pad()) {
+    <span class="via pd-via">
+      <mc-ph-avatar [name]="shapeWho().name" [color]="shapeWho().color" [size]="24" />
+      {{ 'chat.pad.via' | t: { name: shapeWho().name } }}
+    </span>
+  } @else {
+    <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
   }
 </ng-template>

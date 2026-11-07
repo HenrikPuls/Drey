@@ -24,8 +24,64 @@
     left: 50%;
     translate: -50% 0;
   }
+  /* The bar of 5b reaches over the right pane: the ticket must not clip it. */
+  .ticket:has(.pd-wide-bar) {
+    overflow: visible;
+  }
   .ph-page {
     padding: 12px 24px 20px;
+  }
+  /* The Shaping face's chapters as rows (5b). */
+  .pd-para {
+    margin: 0;
+    font-size: var(--ph-17);
+    line-height: 26px;
+  }
+  .pd-srow {
+    box-sizing: content-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 44px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .pd-bullet {
+    flex: none;
+    width: 18px;
+    color: var(--text-2);
+  }
+  .pd-stext {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: var(--ph-16);
+    line-height: 24px;
+  }
+  .pd-smark {
+    flex: none;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-crit {
+    align-items: center;
+    padding: 0;
+  }
+  .pd-box {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: var(--ph-13);
+    line-height: 1;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-chip);
+  }
+  .pd-box.on {
+    color: var(--on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
   }
   .ph-page:has(~ .pd-none),
   .pd-wide-bar + .ph-page {

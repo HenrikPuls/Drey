@@ -29,6 +29,7 @@ import { PhoneAvatar } from '../phone/avatar';
 import { Panes } from '../shell/panes';
 import { PadCards, type PadCard } from '../shell/pad-card';
 import { flowLineOf, partRowsOf, withoutEmptyHeadings, withoutPartsChapter, type PhonePartRow } from './phone-face';
+import { editorOf, formOf, shapeFaceOf } from './shape-face';
 import { CostTable } from '../cost/cost-table';
 import { costTableOf } from '../cost/cost-table.model';
 import { McI18n } from '../i18n/i18n.service';
@@ -205,6 +206,9 @@ export class TicketView {
     if (!this.panes.right() || this.panes.orientation() === 'portrait') {
       return this.i18n.t('ticket.pad.decision_closed');
     }
+    if (this.shapeFace()) {
+      return null; // 5b: the card in the Assistant is the only prompt
+    }
     if (this.questionNeed() !== null) {
       const name = this.workerName();
       return name === null ? this.i18n.t('ticket.pad.decision_question_anon') : this.i18n.t('ticket.pad.decision_question', { name });
@@ -353,6 +357,31 @@ export class TicketView {
     const body = withoutPartsChapter(this.bodyText());
     return this.pad() ? withoutEmptyHeadings(body) : body;
   });
+
+  /** The Shaping face's chapters (5b): the known ones as rows, each with who edited its lines; the rest stays Markdown. */
+  protected readonly shape = computed(() => {
+    const face = shapeFaceOf(this.phoneBody());
+    const marks = this.vm.plan?.()?.marks ?? [];
+    return {
+      rest: face.rest,
+      sections: face.sections.map((section) => ({
+        title: section.title,
+        paragraphs: section.paragraphs,
+        criteria: section.items.some((item) => item.checked !== null),
+        items: section.items.map((item) => {
+          const by = editorOf(item.text, marks);
+          return {
+            text: item.text,
+            checked: item.checked,
+            mark: by === 'you' ? this.i18n.t('ticket.pad.you_edited') : by === 'model' ? this.i18n.t('ticket.pad.paul_edited') : null,
+          };
+        }),
+      })),
+    };
+  });
+
+  /** The Type row of the Shaping face: the ticket's form. */
+  protected readonly formWord = computed(() => this.i18n.t(formOf(this.doc()?.text ?? '') === 'scout' ? 'ticket.pad.form_scout' : 'ticket.pad.form_ship'));
 
   /** The titles of the phases still to run; a done or manual column has no row on the phone (10d). */
   protected readonly phoneOpenPhases = computed<readonly string[]>(() => {
