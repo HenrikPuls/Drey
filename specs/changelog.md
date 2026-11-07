@@ -1,3 +1,10 @@
+### Milestone 207 — D-58 header icons stuck after fold or close
+
+**Not yet manually verified by the owner.**
+
+- **D-58, a dock panel's hover-only header icons stayed visible after folding it with the chevron.** Cause: `src/app/dock/panel-frame.css` set `--head-actions: 1` on `.head:focus-within`; a mouse click leaves focus on the chevron button, so the actions stayed shown until focus moved. Fix: `.head:has(:focus-visible)` -- hover or keyboard focus only (board 9a), which the plugin-row rule below it in the same file already used. The calendar's title-replacing row reads the same `--head-actions` and follows. Close via the strip icon or the context menu removes the frame, so it needed no separate change.
+- **Not covered:** no automated spec (the renderer test setup has neither Node types nor a way to read the component CSS, and jsdom does not evaluate `:has(:focus-visible)`); not reproduced in a built app by this session. To check: fold a panel by mouse (icons leave when the pointer does), then Tab onto the chevron (icons appear).
+
 ### Milestone 206 — D-44 the iPad scroll flake, D-47 the empty bottom band
 
 **Not yet manually verified by the owner.**
