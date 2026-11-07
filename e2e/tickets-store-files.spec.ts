@@ -192,3 +192,55 @@ test('a checkout inside a larger vault shows the ticket, not a plain note', asyn
   dk(['add', '--unclaimed', '-m', 'Beta: from a terminal']);
   await expect(treeRow(page, 't-2')).toBeVisible({ timeout: 30_000 });
 });
+
+/** Structural rebuilds of the panel (header included) since the watch began; the live paint only changes text. */
+async function watchPanel(page: Page): Promise<() => Promise<number>> {
+  await page.evaluate(() => {
+    const frame = document.querySelector('.tickets-panel')?.closest('app-panel-frame');
+    const seen = { count: 0 };
+    (window as unknown as { panelRebuilds: typeof seen }).panelRebuilds = seen;
+    const isElement = (node: Node): boolean => node.nodeType === Node.ELEMENT_NODE;
+    new MutationObserver((records) => {
+      seen.count += records.filter((record) => [...record.addedNodes, ...record.removedNodes].some(isElement)).length;
+    }).observe(frame!, { childList: true, subtree: true });
+  });
+  return () => page.evaluate(() => (window as unknown as { panelRebuilds: { count: number } }).panelRebuilds.count);
+}
+
+test('a board refresh that changes nothing rebuilds nothing, a real change does', async ({ page, electronApp }) => {
+  test.setTimeout(180_000);
+  await showBoard(page);
+  const rebuilds = await watchPanel(page);
+
+  // The first burst after a start ends by itself (docs/testing-flakes.md): wait it out.
+  let before = -1;
+  await expect
+    .poll(async () => {
+      const now = await rebuilds();
+      const quiet = now === before;
+      before = now;
+      return quiet;
+    }, { timeout: 30_000, intervals: [2_000] })
+    .toBe(true);
+
+  const row = page.locator('.tickets-panel').filter({ visible: true }).locator('.work-row[data-id="T-0001"]');
+  await row.evaluate((node) => node.setAttribute('data-same-node', '1'));
+  const settled = await rebuilds();
+
+  // Each push is a full round in the plugin: a board read through the engine, then the gate.
+  for (let i = 0; i < 3; i += 1) {
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('plugin:event', { pluginId: 'tickets', event: 'board-changed' });
+      }
+    });
+    await page.waitForTimeout(700);
+  }
+  expect(await rebuilds()).toBe(settled);
+  await expect(row).toHaveAttribute('data-same-node', '1');
+
+  // The control: the same watch does see a change, or the numbers above prove nothing.
+  dk(['add', '--unclaimed', '-m', 'Beta: from a terminal']);
+  await expect(page.locator('.tickets-panel').filter({ visible: true }).locator('.work-row[data-id="T-0002"]')).toBeVisible({ timeout: 30_000 });
+  expect(await rebuilds()).toBeGreaterThan(settled);
+});

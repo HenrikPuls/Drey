@@ -46,6 +46,7 @@ import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, showsTicketDocument, ticketLogFold, ticketTabTitle } from './ticket-header';
 import { openTicketDocument, type TicketDocumentReply } from './open-ticket';
+import { createBoardRefresh, createChangeGate } from './board-refresh';
 import { BOARD_KEY, BOARD_KIND, TEAM_KEY, TEAM_KIND, WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
@@ -105,9 +106,7 @@ const messageOf = (error: unknown): string =>
 // --- the shared board store (one snapshot, any number of views) --------
 
 let snapshot: BoardSnapshot | null = null;
-let busy = false;
 let note = '';
-let inFlight: Promise<void> | null = null;
 
 /**
  * What the board's message is (req-60): `busy` while an action runs,
@@ -186,49 +185,52 @@ const notifyViews = (): void => {
 /** Keeps the editor's ticket headers in step with each fresh board (set in activate). */
 let afterBoardRefresh: (() => void) | null = null;
 
-function refreshBoard(): Promise<void> {
-  if (inFlight !== null) {
-    return inFlight;
-  }
-  busy = true;
-  notifyViews();
-  inFlight = (async () => {
-    try {
-      snapshot = (await invokeBoard('board')) as BoardSnapshot;
-      refreshStatusItem();
-      // A fresh board clears its own earlier load error; results and
-      // failures of actions keep their own lifetime.
-      if (noteFromLoad) {
-        setNote('', 'ok');
-      }
-      // The worktree note rides along (own round, never blocks the board).
-      void loadWorktreesStatus();
-      // The project switcher follows its own round, too (req-72).
-      void invokeBoard('projects')
-        .then((projects) => {
-          for (const paint of projectPainters) {
-            paint(projects as readonly ProjectRef[]);
-          }
-        })
-        .catch(() => undefined);
-    } catch (error) {
-      setNote(messageOf(error), 'error');
-      noteFromLoad = true;
-    } finally {
-      busy = false;
-      inFlight = null;
+/** The project list as last read: a header mounted later paints from it. */
+let lastProjects: readonly ProjectRef[] | null = null;
+const projectsChanged = createChangeGate();
+
+/** A fresh pull. Whatever it finds unchanged stays on screen untouched (D-40, `board-refresh.ts`). */
+const refreshBoard = createBoardRefresh<BoardSnapshot>({
+  read: () => invokeBoard('board') as Promise<BoardSnapshot>,
+  onBoard: (board) => {
+    snapshot = board;
+  },
+  onRead: () => {
+    refreshStatusItem();
+    // A fresh board clears its own earlier load error; results and
+    // failures of actions keep their own lifetime.
+    if (noteFromLoad) {
+      setNote('', 'ok');
     }
+    // The worktree note rides along (own round, never blocks the board).
+    void loadWorktreesStatus();
+    // The project switcher follows its own round, too (req-72).
+    void invokeBoard('projects')
+      .then((projects) => {
+        lastProjects = projects as readonly ProjectRef[];
+        if (projectsChanged(projects)) {
+          for (const paint of projectPainters) {
+            paint(lastProjects);
+          }
+        }
+      })
+      .catch(() => undefined);
+  },
+  onFailure: (error) => {
+    setNote(messageOf(error), 'error');
+    noteFromLoad = true;
+  },
+  note: () => note,
+  repaint: () => {
     notifyViews();
     afterBoardRefresh?.();
-  })();
-  return inFlight;
-}
+  },
+});
 
 /** Runs a mutation: busy line, error surfacing, then a fresh pull.
  *  Returns the backend's result (with `id`/`path` for `create`).
  *  An error keeps its note (no refresh would clear it into view). */
 async function runMutation(label: string, invoke: () => Promise<unknown>): Promise<MutationResult> {
-  busy = true;
   setNote(`${label}…`, 'busy');
   notifyViews();
   let result: MutationResult;
@@ -237,7 +239,6 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
   } catch (error) {
     result = { ok: false, error: messageOf(error) };
   }
-  busy = false;
   if (!result.ok) {
     // A refused action often means the screen is stale (a stop of a run
     // that has already ended): pull the real state, or the lane stays and
@@ -329,6 +330,7 @@ interface WorktreesStatus {
 }
 
 let worktrees: WorktreesStatus | null = null;
+const worktreesChanged = createChangeGate();
 
 /** The status note's data — refreshed beside the board, never blocking it. */
 async function loadWorktreesStatus(): Promise<void> {
@@ -337,7 +339,9 @@ async function loadWorktreesStatus(): Promise<void> {
   } catch {
     worktrees = null;
   }
-  notifyViews();
+  if (worktreesChanged(worktrees)) {
+    notifyViews();
+  }
 }
 
 const runForCard = (id: string): RunInfo | null =>
@@ -761,6 +765,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
         project.hidden = projects.length < 2;
       };
       projectPainters.add(paintProjects);
+      if (lastProjects !== null) {
+        paintProjects(lastProjects);
+      }
       project.addEventListener('change', () => {
         void runMutation('Switching the project', () => invokeBoard('switchProject', { id: project.value }));
       });
@@ -1185,7 +1192,6 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
 
 /** Runs the global worktree cleanup and reports what it did (T-0044). */
 async function runWorktreesCleanup(): Promise<void> {
-  busy = true;
   setNote('Cleaning up worktrees…', 'busy');
   notifyViews();
   let result: {
@@ -1203,7 +1209,6 @@ async function runWorktreesCleanup(): Promise<void> {
   } catch (error) {
     result = { ok: false, error: messageOf(error) };
   }
-  busy = false;
   if (result.ok === true) {
     const r = result.report;
     setNote(
