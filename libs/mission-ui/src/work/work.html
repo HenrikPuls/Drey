@@ -264,8 +264,8 @@
                 @if (vm.need.summary) {
                   <p class="need-summary">{{ vm.need.summary }}</p>
                 }
-                @if (manualDone()[vm.key]) {
-                  <p class="manual-done">{{ manualDone()[vm.key] }}</p>
+                @if (manualDoneOf(vm); as done) {
+                  <p class="manual-done">{{ done }}</p>
                 } @else if (canFinishManual()) {
                   @if (manualSendBackOpen()[vm.key]) {
                     <textarea

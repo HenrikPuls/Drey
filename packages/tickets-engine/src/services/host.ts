@@ -39,6 +39,8 @@ export interface EngineHost {
   resolveAssetPath(vaultId: string, path: string): string | null;
   /** One external-change round for exactly these paths (plus the board-changed signal, debounced, via emitBoardChanged). */
   announceChanges(vaultId: string, changedPaths: readonly string[], deletedPaths?: readonly string[]): void;
+  /** A store's checkout changed these files (D-28), paths relative to the checkout; absent = nobody shows them. */
+  announceStoreChanges?(checkout: string, changedPaths: readonly string[], deletedPaths: readonly string[]): void;
   /** The plugin-managed flag (ADR-0082): detection sets it both ways. */
   markManaged(vaultId: string | null): void;
   configGet<T>(key: string): Promise<T | undefined>;

@@ -90,6 +90,26 @@ describe('the dricket document path (E12-12)', () => {
   });
 });
 
+describe('a checkout inside a larger vault (D-25)', () => {
+  const PREFIXED = 'work/store/tickets/t/0000/t-30/ticket.md';
+  const board = { vaultId: 'meta', columns: [{ tickets: [{ id: 'T-0030', path: 'tickets/inbox/T-0030.md', phase: 'inbox' }] }] } as unknown as BoardSnapshot;
+
+  it('the header draws: the id, the card, no phase from the folders', () => {
+    expect(ticketIdOfPath(PREFIXED)).toBe('T-0030');
+    expect(showsTicketDocument(board, 'big', PREFIXED)).toBe(true);
+    expect(cardOfDocument(board, PREFIXED)?.id).toBe('T-0030');
+    expect(phaseOfTicketPath(PREFIXED)).toBeNull();
+  });
+
+  it('a stray document of a ticket the board does not list stays a plain note', () => {
+    expect(showsTicketDocument(board, 'big', 'work/store/tickets/t/0000/t-31/ticket.md')).toBe(false);
+  });
+
+  it('the files shape stays bound to the root of the board vault', () => {
+    expect(ticketIdOfPath('work/tickets/50-build/T-0042.md')).toBeNull();
+  });
+});
+
 describe('phaseOfTicketPath on a store document (D-23)', () => {
   it('reads no phase from prefix and shard, so the card decides', () => {
     expect(phaseOfTicketPath('tickets/t/0000/t-30/ticket.md')).toBeNull();

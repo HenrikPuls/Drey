@@ -45,6 +45,9 @@ import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, t
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, showsTicketDocument, ticketLogFold, ticketTabTitle } from './ticket-header';
+import { openTicketDocument, type TicketDocumentReply } from './open-ticket';
+import { createBoardRefresh, createChangeGate } from './board-refresh';
+import { createSnapshotOrder } from './snapshot-order';
 import { BOARD_KEY, BOARD_KIND, TEAM_KEY, TEAM_KIND, WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
@@ -104,9 +107,7 @@ const messageOf = (error: unknown): string =>
 // --- the shared board store (one snapshot, any number of views) --------
 
 let snapshot: BoardSnapshot | null = null;
-let busy = false;
 let note = '';
-let inFlight: Promise<void> | null = null;
 
 /**
  * What the board's message is (req-60): `busy` while an action runs,
@@ -185,49 +186,52 @@ const notifyViews = (): void => {
 /** Keeps the editor's ticket headers in step with each fresh board (set in activate). */
 let afterBoardRefresh: (() => void) | null = null;
 
-function refreshBoard(): Promise<void> {
-  if (inFlight !== null) {
-    return inFlight;
-  }
-  busy = true;
-  notifyViews();
-  inFlight = (async () => {
-    try {
-      snapshot = (await invokeBoard('board')) as BoardSnapshot;
-      refreshStatusItem();
-      // A fresh board clears its own earlier load error; results and
-      // failures of actions keep their own lifetime.
-      if (noteFromLoad) {
-        setNote('', 'ok');
-      }
-      // The worktree note rides along (own round, never blocks the board).
-      void loadWorktreesStatus();
-      // The project switcher follows its own round, too (req-72).
-      void invokeBoard('projects')
-        .then((projects) => {
-          for (const paint of projectPainters) {
-            paint(projects as readonly ProjectRef[]);
-          }
-        })
-        .catch(() => undefined);
-    } catch (error) {
-      setNote(messageOf(error), 'error');
-      noteFromLoad = true;
-    } finally {
-      busy = false;
-      inFlight = null;
+/** The project list as last read: a header mounted later paints from it. */
+let lastProjects: readonly ProjectRef[] | null = null;
+const projectsChanged = createChangeGate();
+
+/** A fresh pull. Whatever it finds unchanged stays on screen untouched (D-40, `board-refresh.ts`). */
+const refreshBoard = createBoardRefresh<BoardSnapshot>({
+  read: () => invokeBoard('board') as Promise<BoardSnapshot>,
+  onBoard: (board) => {
+    snapshot = board;
+  },
+  onRead: () => {
+    refreshStatusItem();
+    // A fresh board clears its own earlier load error; results and
+    // failures of actions keep their own lifetime.
+    if (noteFromLoad) {
+      setNote('', 'ok');
     }
+    // The worktree note rides along (own round, never blocks the board).
+    void loadWorktreesStatus();
+    // The project switcher follows its own round, too (req-72).
+    void invokeBoard('projects')
+      .then((projects) => {
+        lastProjects = projects as readonly ProjectRef[];
+        if (projectsChanged(projects)) {
+          for (const paint of projectPainters) {
+            paint(lastProjects);
+          }
+        }
+      })
+      .catch(() => undefined);
+  },
+  onFailure: (error) => {
+    setNote(messageOf(error), 'error');
+    noteFromLoad = true;
+  },
+  note: () => note,
+  repaint: () => {
     notifyViews();
     afterBoardRefresh?.();
-  })();
-  return inFlight;
-}
+  },
+});
 
 /** Runs a mutation: busy line, error surfacing, then a fresh pull.
  *  Returns the backend's result (with `id`/`path` for `create`).
  *  An error keeps its note (no refresh would clear it into view). */
 async function runMutation(label: string, invoke: () => Promise<unknown>): Promise<MutationResult> {
-  busy = true;
   setNote(`${label}…`, 'busy');
   notifyViews();
   let result: MutationResult;
@@ -236,7 +240,6 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
   } catch (error) {
     result = { ok: false, error: messageOf(error) };
   }
-  busy = false;
   if (!result.ok) {
     // A refused action often means the screen is stale (a stop of a run
     // that has already ended): pull the real state, or the lane stays and
@@ -263,45 +266,38 @@ function invokeBoard(method: string, payload?: unknown): Promise<unknown> {
   return backend.invoke(method, payload);
 }
 
-/** Opens a ticket file in the editor (the tickets vault, wherever the
- *  active pane lives — a centre tab like any note). */
-function openTicketFile(api: DreyPluginApi, path: string): void {
+/** Opens one of the board's own files, `tickets/_meta/…`, in the editor. Never a ticket: that is {@link openTicket}. */
+function openBoardFile(api: DreyPluginApi, path: string): void {
   if (snapshot?.vaultId != null) {
     void api.documents.open(path, undefined, { vaultId: snapshot.vaultId });
   }
 }
 
-/**
- * E14-4c: with the dricket backend a ticket's document is a file of the store's
- * checkout (a vault of its own), not a card path of the tickets vault. Opens it in
- * the editor and returns true; false = not a dricket ticket, the caller opens the
- * vault file as before. A declined or failed checkout registration is told once.
- */
-async function openDricketDocument(api: DreyPluginApi, id: string): Promise<boolean> {
-  let reply: { ok: boolean; document?: { vaultId: string; path: string } | null; error?: string };
-  try {
-    reply = (await invokeBoard('ticketDocument', { id })) as typeof reply;
-  } catch {
-    return false;
-  }
-  if (!reply.ok) {
-    await api.ui.showMessage(reply.error ?? 'The ticket document could not be opened.', 'Tickets');
-    return true;
-  }
-  if (reply.document == null) {
-    return false;
-  }
-  await api.documents.open(reply.document.path, undefined, { vaultId: reply.document.vaultId });
-  return true;
+/** Every ticket's document opens here: the store says where it is (D-27, `open-ticket.ts`). */
+function openTicket(api: DreyPluginApi, id: string, filePath: string): void {
+  void openTicketDocument(
+    {
+      locate: (ticket) => invokeBoard('ticketDocument', { id: ticket }) as Promise<TicketDocumentReply>,
+      open: (path, vaultId) => api.documents.open(path, undefined, { vaultId }),
+      showMessage: (text) => api.ui.showMessage(text, 'Tickets'),
+      boardVaultId: () => snapshot?.vaultId ?? null,
+    },
+    id,
+    filePath,
+  );
 }
 
-/** Opens the ticket's document: the store checkout's on dricket, else the vault file. */
-function openTicketCard(api: DreyPluginApi, card: TicketCard): void {
-  void openDricketDocument(api, card.id).then((opened) => {
-    if (!opened) {
-      openTicketFile(api, card.path);
-    }
-  });
+/** A new ticket opens like any row of the board once the fresh board lists it. */
+function openCreatedTicket(api: DreyPluginApi, created: CreateResult): void {
+  if (created.id === undefined || created.path === undefined) {
+    return;
+  }
+  const card = boardCard(created.id);
+  if (card === null) {
+    openTicket(api, created.id, created.path);
+  } else {
+    showTicketDocument(api, card);
+  }
 }
 
 /** Outlines the Work row whose ticket file (or thread) is the active tab. */
@@ -335,6 +331,7 @@ interface WorktreesStatus {
 }
 
 let worktrees: WorktreesStatus | null = null;
+const worktreesChanged = createChangeGate();
 
 /** The status note's data — refreshed beside the board, never blocking it. */
 async function loadWorktreesStatus(): Promise<void> {
@@ -343,7 +340,9 @@ async function loadWorktreesStatus(): Promise<void> {
   } catch {
     worktrees = null;
   }
-  notifyViews();
+  if (worktreesChanged(worktrees)) {
+    notifyViews();
+  }
 }
 
 const runForCard = (id: string): RunInfo | null =>
@@ -446,6 +445,17 @@ const applyFleetSnapshot = (payload: { runs?: RunInfo[]; chain?: ChainStatus | n
   }
 };
 
+type FleetPayload = { runs?: RunInfo[]; chain?: ChainStatus | null };
+
+/** Pushes and pulled replies in the order they stand for: an older reply never replaces a newer push (D-49). */
+const fleetOrder = createSnapshotOrder();
+
+const pullFleetStatus = (): Promise<void> =>
+  fleetOrder.pull(
+    () => invokeBoard('fleetStatus') as Promise<FleetPayload | null>,
+    (status) => applyFleetSnapshot(status ?? {}),
+  );
+
 /** Whether the board issues are unfolded under the toolbar (req-73; view state, per session). */
 let boardIssuesOpen = false;
 
@@ -458,7 +468,7 @@ function boardIssuesDeps(api: DreyPluginApi, issues: BoardSnapshot['issues']): B
       boardIssuesOpen = !boardIssuesOpen;
       notifyViews();
     },
-    openFile: (path: string) => openTicketFile(api, path),
+    openFile: (path: string) => openBoardFile(api, path),
   };
 }
 
@@ -767,6 +777,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
         project.hidden = projects.length < 2;
       };
       projectPainters.add(paintProjects);
+      if (lastProjects !== null) {
+        paintProjects(lastProjects);
+      }
       project.addEventListener('change', () => {
         void runMutation('Switching the project', () => invokeBoard('switchProject', { id: project.value }));
       });
@@ -1033,8 +1046,8 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dicta
       ).then((result) => {
         // The file is pre-filled by the canonical writer — open it so
         // everything else can be filled in right away (T-0001).
-        if (result.ok && (result as CreateResult).path !== undefined) {
-          openTicketFile(api, (result as CreateResult).path as string);
+        if (result.ok) {
+          openCreatedTicket(api, result as CreateResult);
         }
       });
     };
@@ -1191,7 +1204,6 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
 
 /** Runs the global worktree cleanup and reports what it did (T-0044). */
 async function runWorktreesCleanup(): Promise<void> {
-  busy = true;
   setNote('Cleaning up worktrees…', 'busy');
   notifyViews();
   let result: {
@@ -1209,7 +1221,6 @@ async function runWorktreesCleanup(): Promise<void> {
   } catch (error) {
     result = { ok: false, error: messageOf(error) };
   }
-  busy = false;
   if (result.ok === true) {
     const r = result.report;
     setNote(
@@ -1576,9 +1587,7 @@ async function startInteractive(
   }
   const runId = (result as { runId?: string }).runId ?? null;
   // The thread follows the fleet snapshot; pull one so it shows the run now.
-  await invokeBoard('fleetStatus')
-    .then((status) => applyFleetSnapshot((status ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }))
-    .catch(() => undefined);
+  await pullFleetStatus().catch(() => undefined);
   if (open) {
     openTicketThread(api, card);
   }
@@ -1786,7 +1795,7 @@ function showTicketDocument(api: DreyPluginApi, card: TicketCard): void {
   for (const listener of threadListeners) {
     listener();
   }
-  openTicketCard(api, card);
+  openTicket(api, card.id, card.path);
   markOpenCard(api);
 }
 
@@ -1931,8 +1940,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
         }
         // The thread follows the ticket's newest run — pull the fleet so
         // the resumed run shows now (the takeover tab used to open it).
-        void invokeBoard('fleetStatus')
-          .then((status) => applyFleetSnapshot((status ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }))
+        void pullFleetStatus()
           .catch(() => undefined);
       });
     },
@@ -3336,10 +3344,10 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     });
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
-    api.backend.on('fleet-changed', (payload) =>
-      applyFleetSnapshot((payload ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
-    void invokeBoard('fleetStatus').then((result) =>
-      applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
+    api.backend.on('fleet-changed', (payload) => {
+      fleetOrder.push(() => applyFleetSnapshot((payload ?? {}) as FleetPayload));
+    });
+    void pullFleetStatus().catch(() => undefined);
 
     // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
     // chord raises Drey, reveals the board and opens the create modal.

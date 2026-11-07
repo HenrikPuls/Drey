@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { documentRelPath, documentTitle, idOfDocumentPath } from './document-paths';
+import { documentRelPath, documentTitle, idInVaultPath, idOfDocumentPath } from './document-paths';
+
+describe('idInVaultPath: a checkout inside a larger vault (D-25)', () => {
+  it('finds the document under any prefix', () => {
+    expect(idInVaultPath('tickets/t/0000/t-63/ticket.md')).toBe('T-0063');
+    expect(idInVaultPath('work/store/tickets/t/0000/t-63/ticket.md')).toBe('T-0063');
+    expect(idInVaultPath('work\\store\\tickets\\t\\0001\\t-1204\\ticket.md')).toBe('T-1204');
+  });
+
+  it('does not take a look-alike', () => {
+    expect(idInVaultPath('work/tickets/t/0009/t-63/ticket.md')).toBeNull();
+    expect(idInVaultPath('work/tickets/t/0000/t-63/comments/ticket.md')).toBeNull();
+    expect(idInVaultPath('work/mytickets/t/0000/t-63/ticket.md')).toBeNull();
+    expect(idInVaultPath('work/notes/t/0000/t-63/ticket.md')).toBeNull();
+  });
+});
 
 describe('ticket document paths (E14-4c)', () => {
   it('maps a display id to the sharded checkout path and back', () => {

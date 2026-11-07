@@ -319,6 +319,27 @@ describe('event-driven refreshes', () => {
     );
   });
 
+  it('a run that ends re-reads the Needs-you list, though no board frame came (D-33)', async () => {
+    const { desk, data } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    data.fleet = { runs: [{ id: 'r1', ticketId: 'T-5', state: 'running' }], chain: null };
+    const state = makeState(desk);
+    await state.boot();
+    await waitFor(() => expect(desk.eventsOpen).toBe(true));
+    await waitFor(() => expect(state.team().runs.length).toBe(1));
+    const before = desk.callsOf('GET', '/api/needs').length;
+    const fleetReads = desk.callsOf('GET', '/api/fleet').length;
+
+    desk.pushEvent('fleet', {}); // nothing changed: no extra read
+    await waitFor(() => expect(desk.callsOf('GET', '/api/fleet').length).toBeGreaterThan(fleetReads));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(desk.callsOf('GET', '/api/needs').length).toBe(before);
+
+    data.fleet = { runs: [{ id: 'r1', ticketId: 'T-5', state: 'failed' }], chain: null };
+    desk.pushEvent('fleet', {});
+    await waitFor(() => expect(desk.callsOf('GET', '/api/needs').length).toBeGreaterThan(before));
+  });
+
   it('a chat frame for another session refreshes the list but leaves the pane alone', async () => {
     const { desk, data } = makeDesk();
     desk.storage.setItem('drey.remote.token', 'tok');

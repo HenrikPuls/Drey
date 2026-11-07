@@ -9,7 +9,7 @@
  * `dk put --if-version`.
  */
 import type { BoardSnapshot, TicketIssue, TicketMeta } from '../shared/tickets';
-import { idOfDocumentPath } from '../../../packages/tickets-engine/src/store/document-paths';
+import { idInVaultPath } from '../../../packages/tickets-engine/src/store/document-paths';
 import { flatText, parseFlatDocument, withFlatField } from '../../../packages/tickets-engine/src/store/flat-frontmatter';
 
 export type StoreHeaderReply =
@@ -18,12 +18,12 @@ export type StoreHeaderReply =
 
 /** Whether a path is a store's document, whose header is answered here. */
 export function isStoreDocumentPath(path: string): boolean {
-  return idOfDocumentPath(path) !== null;
+  return idInVaultPath(path) !== null;
 }
 
 /** The header model of a store document: the card's, with the title the buffer says. */
 export function storeDocumentHeader(path: string, frontmatter: string, snapshot: BoardSnapshot): StoreHeaderReply {
-  const id = idOfDocumentPath(path);
+  const id = idInVaultPath(path);
   const card = snapshot.columns.flatMap((column) => column.tickets).find((ticket) => ticket.id === id);
   if (card === undefined) {
     return { ok: false, error: `${id ?? path} is not on the board.` };

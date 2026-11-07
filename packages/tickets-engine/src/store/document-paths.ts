@@ -37,6 +37,18 @@ export function documentTitle(relPath: string, text: string, ticketsDir: string 
 
 const DOCUMENT = /^([^/]+)\/([^/]+)\/([^/]+)\/ticket\.md$/;
 
+const DOCUMENT_TAIL = new RegExp(`(?:^|/)(${TICKETS_DIR}/[^/]+/[^/]+/[^/]+/ticket\\.md)$`);
+
+/**
+ * The display id a vault-relative path names when it ends in a store's document: the
+ * checkout may lie inside a larger vault, so the layout can start anywhere (D-25). Whether
+ * that ticket is one the board lists is the caller's check, as for any store document.
+ */
+export function idInVaultPath(vaultRelPath: string): string | null {
+  const tail = DOCUMENT_TAIL.exec(vaultRelPath.replace(/\\/g, '/'))?.[1];
+  return tail === undefined ? null : idOfDocumentPath(tail);
+}
+
 /** The display id of a checkout-relative ticket document path, or null when the path is not one. */
 export function idOfDocumentPath(relPath: string, ticketsDir: string = TICKETS_DIR): string | null {
   const normal = relPath.replace(/\\/g, '/').replace(/^\.\//, '');

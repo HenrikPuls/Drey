@@ -36,6 +36,7 @@ import {
   parsePersonaThread,
   parseProposal,
   parseSessions,
+  liveTicketsOf,
   parseTeam,
   parseTicketDetail,
   parseEstimate,
@@ -396,6 +397,9 @@ export class McState {
     }
   }
 
+  /** The tickets with a live run as of the last fleet read; null before the first. */
+  private liveTickets: string | null = null;
+
   private async refreshTeam(): Promise<void> {
     const [personas, fleet] = await Promise.all([
       this.client.request('GET', '/api/personas').catch(() => null),
@@ -404,7 +408,17 @@ export class McState {
     if (personas !== null) {
       this.personas.set(Array.isArray(personas) ? personas : []);
     }
-    this.team.set(parseTeam(personas, fleet));
+    const team = parseTeam(personas, fleet);
+    this.team.set(team);
+    // D-33: a ticket waits for the owner only while no run is live on it, and a run can
+    // end without a board write: the end of a run is the Needs-you list's cue too.
+    if (fleet !== null) {
+      const live = liveTicketsOf(team.runs);
+      if (this.liveTickets !== null && live !== this.liveTickets) {
+        void this.refreshWork();
+      }
+      this.liveTickets = live;
+    }
   }
 
   private async refreshSessions(): Promise<void> {

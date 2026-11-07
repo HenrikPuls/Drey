@@ -26,6 +26,7 @@ import {
   type McAnswerReply,
   type McBoard,
   type McDoneEntry,
+  type McNeed,
   type McMoveResult,
   type McPersona,
   type McScoutReport,
@@ -456,7 +457,8 @@ export class Work {
   /** Per manual card: an action is in flight / its refusal / the send-back note panel and text. */
   protected readonly manualPending = signal<Readonly<Record<string, boolean>>>({});
   protected readonly manualError = signal<Readonly<Record<string, string>>>({});
-  protected readonly manualDone = signal<Readonly<Record<string, string>>>({});
+  /** An answered card: the line that says so, and the Needs-you list it was answered on. */
+  private readonly manualAnswered = signal<Readonly<Record<string, { readonly text: string; readonly needs: readonly McNeed[] }>>>({});
   protected readonly manualSendBackOpen = signal<Readonly<Record<string, boolean>>>({});
   protected readonly manualNote = signal<Readonly<Record<string, string>>>({});
 
@@ -467,6 +469,17 @@ export class Work {
   protected acceptOffered(vm: NeedVm): boolean {
     const state = this.state;
     return state === null || questionNeedOf(state.needs, vm.need.ticketId ?? '') === null;
+  }
+
+  /**
+   * "Accepted." or "Sent back.", until the next Needs-you list says what became of the
+   * ticket (D-33). The desk answered first, so a later list is the state after the answer:
+   * a run on the ticket or a move takes the card away, and a card in that list waits again,
+   * after a blocked or red end, say, with its actions back.
+   */
+  protected manualDoneOf(vm: NeedVm): string | null {
+    const answered = this.manualAnswered()[vm.key];
+    return answered !== undefined && answered.needs === this.state?.needs ? answered.text : null;
   }
 
   /** The actions show only where the adapter offers them and the device may act. */
@@ -520,7 +533,9 @@ export class Work {
     }
     this.manualPending.update((p) => ({ ...p, [vm.key]: false }));
     if (reply.ok) {
-      this.manualDone.update((d) => ({ ...d, [vm.key]: doneText }));
+      this.manualAnswered.update((d) => ({ ...d, [vm.key]: { text: doneText, needs: state.needs } }));
+      this.manualSendBackOpen.update((open) => ({ ...open, [vm.key]: false }));
+      this.manualNote.update((notes) => ({ ...notes, [vm.key]: '' }));
     } else {
       this.manualError.update((errors) => ({ ...errors, [vm.key]: reply.error ?? 'The desk refused.' }));
     }

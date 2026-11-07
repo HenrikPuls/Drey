@@ -98,6 +98,30 @@ describe('PathAnnouncer (D-3)', () => {
     expect(announce).not.toHaveBeenCalled();
   });
 
+  it('a report of a store checkout reaches the vault that is the checkout (D-28)', async () => {
+    const { announce, announcer } = make({ listVaults: async () => [{ id: 'co', path: 'E:\\drey-tickets', exists: true }, VAULT] });
+    announcer.add({ vaultPath: 'E:\\drey-tickets', changed: ['tickets/t/0000/t-92/ticket.md'], deleted: [] });
+    await announcer.flushAll();
+    expect(announce.mock.calls).toEqual([[{ vaultId: 'co', changedPaths: ['tickets/t/0000/t-92/ticket.md'] }]]);
+  });
+
+  it('a checkout inside a larger vault reaches it with its prefix, and the checkout vault too (D-25, D-28)', async () => {
+    const { announce, announcer } = make({
+      listVaults: async () => [
+        { id: 'big', path: 'E:\\Data', exists: true },
+        { id: 'co', path: 'E:\\Data\\Work\\Store', exists: true },
+        { id: 'gone', path: 'E:\\Data\\Work', exists: false },
+        { id: 'sibling', path: 'E:\\Data\\Work\\Store-2', exists: true },
+      ],
+    });
+    announcer.add({ vaultPath: 'e:\\data\\Work\\Store', changed: ['tickets/a.md'], deleted: ['tickets/b.md'] });
+    await announcer.flushAll();
+    expect(announce.mock.calls).toEqual([
+      [{ vaultId: 'big', changedPaths: ['Work/Store/tickets/a.md'], deletedPaths: ['Work/Store/tickets/b.md'] }],
+      [{ vaultId: 'co', changedPaths: ['tickets/a.md'], deletedPaths: ['tickets/b.md'] }],
+    ]);
+  });
+
   it('survives a failing vault listing', async () => {
     const log = vi.fn();
     const { announce, announcer } = make({

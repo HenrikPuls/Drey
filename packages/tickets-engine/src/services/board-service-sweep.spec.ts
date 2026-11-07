@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { promises as fsp, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { EngineBoardService } from './board-service';
 import type { EngineHost, EngineVault, FleetPort } from './host';
 import { TicketsGit } from '../core/tickets-git';
@@ -51,7 +51,8 @@ describe.skipIf(!found.ok)('the sweep defects on a scratch dk store', { timeout:
   let service: EngineBoardService;
   const saved: Record<string, string | undefined> = {};
   const config: Record<string, string> = {};
-  const envSet = (key: string, value: string): void => {
+  const storeChanges: { checkout: string; changed: readonly string[]; deleted: readonly string[] }[] = [];
+  const envSet =(key: string, value: string): void => {
     if (!(key in saved)) {
       saved[key] = process.env[key];
     }
@@ -73,6 +74,9 @@ describe.skipIf(!found.ok)('the sweep defects on a scratch dk store', { timeout:
       listMarkdownFiles: async () => [],
       resolveAssetPath: (_v, p) => abs(p),
       announceChanges: () => undefined,
+      announceStoreChanges: (checkout, changed, deleted) => {
+        storeChanges.push({ checkout, changed, deleted });
+      },
       markManaged: () => undefined,
       configGet: async <T>(key: string) => config[key] as T | undefined,
       configSet: async () => undefined,
@@ -146,6 +150,43 @@ describe.skipIf(!found.ok)('the sweep defects on a scratch dk store', { timeout:
     service?.dispose();
     await service?.idle();
     rmSync(root, { recursive: true, force: true });
+  });
+
+  describe("D-28: the store checkout's changed files", () => {
+    const reportedPaths = (): readonly string[] => storeChanges.flatMap((change) => change.changed);
+
+    it('a ticket the board creates is named, by its document path in the checkout', async () => {
+      await service.snapshot();
+      const created = await service.createTicket({ title: 'Made by the board', priority: 'normal', repo: null, description: '' });
+      expect(created).toMatchObject({ ok: true });
+      const id = (created as unknown as { id: string }).id;
+      const number = Number(id.slice(2));
+      await vi.waitFor(() => {
+        expect(reportedPaths()).toContain(`tickets/t/0000/t-${number}/ticket.md`);
+      }, { timeout: 30_000, interval: 100 });
+      expect(storeChanges.every((change) => change.checkout === storeDir)).toBe(true);
+    });
+
+    it("a terminal's dk put is named too, though no call of the board wrote it", async () => {
+      await service.snapshot();
+      storeChanges.length = 0;
+      dk(['add', '--prefix', 't', '-m', 'Made in a terminal', '--unclaimed']);
+      let document = '';
+      await vi.waitFor(() => {
+        document = reportedPaths().find((p) => /^tickets\/t\/0000\/t-\d+\/ticket\.md$/.test(p)) ?? '';
+        expect(document).not.toBe('');
+      }, { timeout: 30_000, interval: 100 });
+      const id = document.split('/')[3]!;
+      storeChanges.length = 0;
+      const text = readFileSync(path.join(storeDir, ...document.split('/')), 'utf8');
+      const rev = /^rev:\s*(\d+)/m.exec(text)?.[1] ?? '0';
+      const put = path.join(root, 'put.md');
+      writeFileSync(put, `${text}\nFrom a terminal.\n`);
+      dk(['put', id, '-F', put, '--claim', '--if-version', rev]);
+      await vi.waitFor(() => {
+        expect(reportedPaths()).toContain(document);
+      }, { timeout: 30_000, interval: 100 });
+    });
   });
 
   describe('D-11: the priority vocabulary', () => {
