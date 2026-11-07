@@ -152,3 +152,7 @@ Consolidated — Mission Control with Shape and Plan to accept
 ## rowMobile
 
 Mobile, aligned — the iPad is the phone app with more room
+
+## Amendment to board 9a (owner, 2026-11-07)
+
+Panel header controls are not hover-only: they show on header hover, on keyboard focus and while the panel is the active one (focus or the last pointer interaction inside it); they fade when the editor or another panel becomes active. See ADR-0019, milestone 208.

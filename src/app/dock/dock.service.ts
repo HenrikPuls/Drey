@@ -151,6 +151,14 @@ export class DockService {
   /** True while a splitter or dock-edge is being dragged. */
   readonly resizing = signal(false);
 
+  /**
+   * The panel the user last interacted with: focus moved into it or a pointer
+   * went down inside it. Its header controls stay visible while it is the active
+   * one (board 9a amended, req-163); the editor or anything outside every panel
+   * clears it.
+   */
+  readonly activePanel = signal<WidgetId | null>(null);
+
   /** Host elements, registered by the components, for hit-testing during a drag. */
   private readonly panelEls = new Map<WidgetId, HTMLElement>();
   /** The strip buttons, for the drop slot while the pointer is over a dock's strip. */
@@ -158,6 +166,11 @@ export class DockService {
   private readonly dockEls = new Map<DockSide, HTMLElement>();
 
   constructor() {
+    if (typeof document !== 'undefined') {
+      const activate = (event: Event): void => this.activateAt(event.target);
+      document.addEventListener('pointerdown', activate, true);
+      document.addEventListener('focusin', activate, true);
+    }
     if (typeof window !== 'undefined') {
       // A pointerup lost outside the window (Alt-Tab mid-drag, a devtools
       // pause) would otherwise leave `document.body` unselectable with the
@@ -628,6 +641,22 @@ export class DockService {
   }
 
   // ---- element registration (called from Dock / DockStrip / PanelFrame) ----
+
+  /** Make the panel that contains `target` the active one; none when it is outside every panel. */
+  activateAt(target: EventTarget | null): void {
+    let found: WidgetId | null = null;
+    if (target instanceof Node) {
+      for (const [id, el] of this.panelEls) {
+        if (el.contains(target)) {
+          found = id;
+          break;
+        }
+      }
+    }
+    if (this.activePanel() !== found) {
+      this.activePanel.set(found);
+    }
+  }
 
   registerPanelEl(id: WidgetId, el: HTMLElement): void {
     this.panelEls.set(id, el);

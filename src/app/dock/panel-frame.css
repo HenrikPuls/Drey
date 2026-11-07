@@ -11,7 +11,8 @@
 
 /* Board 9a's panel header. The controls show on hover or keyboard focus only
    (:focus-visible, not :focus-within -- a mouse click leaves focus on the
-   chevron and would pin them, D-58); they read the same switch through --head-actions, so a title-replacing row
+   chevron and would pin them, D-58) or while the panel is the active one
+   (req-163: the owner amended 9a's hover-only rule); they read the same switch through --head-actions, so a title-replacing row
    (the calendar) can hide its parts from its own stylesheet. */
 .head {
   --head-actions: 0;
@@ -29,7 +30,8 @@
 }
 
 .head:hover,
-.head:has(:focus-visible) {
+.head:has(:focus-visible),
+:host(.active) .head {
   --head-actions: 1;
 }
 
