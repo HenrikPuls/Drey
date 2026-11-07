@@ -221,11 +221,20 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await expect(board.locator('[data-phase="build"] [data-id="T-0141"]')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('desk-board.png') });
     // Scroll to the later columns; a repaint (a refreshed board) keeps the place.
-    const cols = board.locator('.desk-cols');
-    await build.evaluate((el) => el.scrollIntoView({ inline: 'start', block: 'nearest' }));
+    // Every repaint rebuilds the columns, and the engine's first board rounds
+    // still arrive here: a handle on `build` can be a node already replaced, so
+    // the scroll goes through the board's root, which stays. The mark on the
+    // scrolled columns tells when a repaint has really replaced them.
+    const scrolled = await board.evaluate((root) => {
+      const columns = root.querySelector<HTMLElement>('.desk-cols')!;
+      columns.dataset['e2eScrolled'] = 'yes';
+      root.querySelector('[data-phase="build"]')!.scrollIntoView({ inline: 'start', block: 'nearest' });
+      return columns.scrollLeft;
+    });
+    expect(scrolled).toBeGreaterThan(0);
     await openFromMenu('Refresh the board');
-    await page.waitForTimeout(800);
-    expect(await cols.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await expect(board.locator('.desk-cols[data-e2e-scrolled]')).toHaveCount(0);
+    expect(await board.evaluate((root) => root.querySelector('.desk-cols')!.scrollLeft)).toBeCloseTo(scrolled, 0);
     await page.screenshot({ path: testInfo.outputPath('desk-board-build.png') });
 
     // --- Team

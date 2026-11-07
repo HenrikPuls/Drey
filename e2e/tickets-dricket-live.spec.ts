@@ -194,13 +194,21 @@ test('a foreign dk write, a burst, own moves and the editor save all reach the b
   });
   await row('T-0001').click({ button: 'right' });
   await page.getByText('Open ticket', { exact: true }).first().click();
+  await expect(page.locator('app-editor .tickets-head-id').first()).toHaveText('T-0001', { timeout: 20_000 });
   const editor = page.locator('app-editor .cm-content').first();
-  await expect(editor).toContainText('terminal add t-1', { timeout: 20_000 });
+  // Milestone 185: the `## Log` holding `terminal add t-1` opens folded.
+  await expect(page.locator('app-editor .cm-foldPlaceholder').first()).toBeVisible();
+  await expect(editor).not.toContainText('terminal add t-1');
+  const putsOfT1 = (): number => git('log', '--oneline', '--grep=put t-1').split('\n').filter((line) => line !== '').length;
+  const putsBefore = putsOfT1();
   await editor.click();
   await page.keyboard.press('Control+End');
   await page.keyboard.type('\n\nEdited in Drey: the editor save is a dk put.\n');
   await page.keyboard.press('Control+S');
   await expect.poll(() => fs.readFileSync(path.join(storeDir, 'tickets', 't', '0000', 't-1', 'ticket.md'), 'utf8'), { timeout: 20_000 }).toContain('Edited in Drey');
+  // One save is one `dk put`, and the folded Log is written back whole.
+  await expect.poll(putsOfT1, { timeout: 20_000 }).toBe(putsBefore + 1);
+  expect(fs.readFileSync(path.join(storeDir, 'tickets', 't', '0000', 't-1', 'ticket.md'), 'utf8')).toContain('terminal add t-1');
   note(`editor save landed in the store; dk log: ${git('log', '--oneline', '-3').trim().split('\n').join(' | ')}`);
   await page.screenshot({ path: testInfo.outputPath('window-ticket-document.png') });
 
