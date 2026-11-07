@@ -176,7 +176,7 @@ describe('composeRunRequest carries the home rule', () => {
       card,
       ticketText,
       vaultPath: 'V:/tickets',
-      workingPhase: phase('prioritized'),
+      workingPhase: phase('plan', { handover: 'agent plan-default' }),
       nextPhaseId: 'plan',
       nextPhaseDir: null,
       pushRemote: null,

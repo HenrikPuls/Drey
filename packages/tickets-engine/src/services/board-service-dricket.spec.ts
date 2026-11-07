@@ -372,6 +372,28 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     }
   });
 
+  it('a client asking for a run from an owner's column is refused before the runner hears of it (D-29)', async () => {
+    const created = await service.createTicket({ title: 'Stays put', priority: 'normal', repo: null, description: 'Body.' });
+    const id = (created as unknown as { id: string }).id;
+    const started: RunRequest[] = [];
+    const fleet: FleetPort = {
+      runs: async () => [],
+      start: async (request) => {
+        started.push(request);
+        return { ok: false, error: 'stub: not spawning' };
+      },
+      configureChain: async () => undefined,
+    };
+    const runner = new EngineBoardService(hostOf(), new TicketsGit(() => 'git', async () => ''), 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', {});
+    try {
+      const reply = await runner.startRun({ ticketId: id, workerChoice: 'opencode', permissionMode: 'accept-edits', handover: 'fresh', interactive: null });
+      expect(reply).toMatchObject({ ok: false, error: expect.stringContaining("the owner's column") });
+      expect(started).toEqual([]);
+    } finally {
+      runner.dispose();
+    }
+  });
+
   it('keeps notes and signals as comments, answers a decision, and writes no phase ledger line or status file (E14-6)', async () => {
     const created = await service.createTicket({ title: 'Signals', priority: 'normal', repo: null, description: 'Signal body.' });
     expect(created).toMatchObject({ ok: true });

@@ -98,6 +98,32 @@ function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Para
   };
 }
 
+describe('composeRunRequest — the owner\'s columns (D-29)', () => {
+  const inbox = phase('inbox', { title: 'Inbox', handover: 'manual', persona: 'you' });
+
+  it('refuses a run from a manual column: the fleet takes nothing from it, whoever asks', () => {
+    for (const asked of [{}, { workerChoice: 'opencode' }, { handover: 'fresh' as const }, { dispatchedBy: 'inbox' }]) {
+      const result = composeRunRequest(base({ workingPhase: inbox, nextPhaseId: 'shaping', ...asked }));
+      expect(result.ok).toBe(false);
+      expect(result.ok ? '' : result.error).toBe("T-0001 sits in Inbox, the owner's column: the fleet takes nothing from it. Move it into an agent column to run it.");
+    }
+  });
+
+  it('refuses a column with no handover at all (Done) the same way', () => {
+    const result = composeRunRequest(base({ workingPhase: phase('done', { title: 'Done', handover: 'none' }), nextPhaseId: null }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('the owner\'s own dialog and Accept\'s commit step stay: neither takes a ticket for the fleet', () => {
+    expect(composeRunRequest(base({ workingPhase: inbox, interactive: 'plan' })).ok).toBe(true);
+    expect(composeRunRequest(base({ workingPhase: phase('ready', { handover: 'manual' }), nextPhaseId: null, commitStep: true })).ok).toBe(true);
+  });
+
+  it('an agent column still runs', () => {
+    expect(composeRunRequest(base({ workingPhase: phase('building', { handover: 'agent build-default' }), nextPhaseId: 'ready' })).ok).toBe(true);
+  });
+});
+
 describe('composeRunRequest', () => {
   it('builds a dispatched run: the pull stays in its phase, the move follows the working column', () => {
     const result = composeRunRequest(

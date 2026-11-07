@@ -18,6 +18,7 @@ import {
 } from '../contracts/tickets';
 import { acceptanceCommands, ticketSections } from '../core/ticket-files';
 import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
+import { isAutoPhase } from './chain';
 import { personaCoachingSection, personaMemorySection } from './context-pack';
 import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunDkTarget, type RunRequest, type WorkerProviderId } from './protocol';
 import { worktreePathFor } from './worktree-home';
@@ -90,6 +91,8 @@ export interface ComposeRunInput {
    * holds the worker from turn one and never gates or moves.
    */
   readonly interactive?: InteractiveMode;
+  /** Accept's run on Ready to try (req-99a): the one run a manual column may carry, besides the owner's dialog (D-29). */
+  readonly commitStep?: boolean;
   /** E14-5: the ticket lives in a dricket store - the run claims and releases it through `dk`. */
   readonly dk?: RunDkTarget;
   /**
@@ -137,6 +140,15 @@ export type ComposeRunResult =
   | { readonly ok: false; readonly error: string };
 
 export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
+  // D-29: every start passes here, so this is where the owner's columns are closed. A manual column is
+  // the owner's: nothing is run out of it, whoever asks. Only the owner's own dialog and Accept's commit step work there.
+  const phaseOfRun = input.workingPhase;
+  if (phaseOfRun !== null && !isAutoPhase(phaseOfRun) && input.interactive === undefined && input.commitStep !== true) {
+    return {
+      ok: false,
+      error: `${input.card.id} sits in ${phaseOfRun.title}, the owner's column: the fleet takes nothing from it. Move it into an agent column to run it.`,
+    };
+  }
   // A scout ticket (form: scout, E8, concept §5.6) runs an exploration,
   // not a build: no worktree is prepared — the named repo's checkout
   // (else the tickets vault itself) is the run's read ground, the gate

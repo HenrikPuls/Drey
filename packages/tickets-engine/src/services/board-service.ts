@@ -3116,6 +3116,7 @@ export class EngineBoardService {
       ...(personaDispatch !== null ? { persona: personaDispatch } : {}),
       ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
       ...(input.interactive !== null ? { interactive: input.interactive } : {}),
+      ...(commitStep ? { commitStep: true } : {}),
       ...(dricket !== null ? { dk: await this.runTarget(dricket, snap.pipeline, phaseId) } : {}),
     });
     if (!composed.ok) {
