@@ -21,7 +21,7 @@
 
 | Board | Region | Board shows | Build shows | Verdict |
 |---|---|---|---|---|
-| 7a–7d, 9a | Assistant chip | `T-0121.md` | `T-0121 · title` | owner ruling O6: one name per document, SDK 1.48 (to be confirmed by the integrator; the file name is `ticket.md` on a store) |
+| 7a–7d, 9a | Assistant chip | `T-0121.md` | `T-0121 · title` | owner ruling O6: one name per document, SDK 1.48 — confirmed at integration (2026-11-07): the chip reads `id · title` on both stores; the board's file name would differ between the files store and the dricket store (`ticket.md`) |
 | 7a, 7b | Shaping row | `plan v3` | Nothing | feature not yet built — req-151 |
 | 7a | Header on hover | One row | Second row at 300 px: the build's filter and chain controls (milestone 194) | feature beyond the board, all reachable; at rest 28 px as drawn |
 | 5c | Flow | `… Review · Accept` | `… Review · Test · Accept` | data instead of sample content: the fixture's flow carries Test, 10j draws it too |
