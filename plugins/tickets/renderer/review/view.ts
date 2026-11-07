@@ -337,14 +337,6 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
       }
       subhead.append(count);
     }
-    // Interim until 4.8 draws the Send back option on the decision card (build plan row 4.8).
-    const current = card();
-    const snapshot = deps.snapshot();
-    if (marks.comments.length > 0 && current !== null && snapshot !== null && actionBarOf(deps.rowOf(current), snapshot).decide) {
-      const back = button(i18n.t('decision.send_back_with_comments', { n: marks.comments.length }), 'tickets-review-sendback', i18n.t('review.send_back_hint'), () => void sendBackWithComments());
-      back.disabled = busy;
-      subhead.append(back);
-    }
     list.append(subhead);
     const rows = el('div', 'tickets-review-list-rows');
     for (const file of files) {

@@ -79,7 +79,8 @@ test.describe('Assistant plugin', () => {
     ).toBeAttached();
     await expect(actionsPage.locator('.template .badge').first()).toHaveText('built-in');
 
-    await page.locator('button.close[aria-label="Close settings"]').click();
+    // Settings is an editor tab since milestone 197: closing it is closing the tab.
+    await page.locator('app-tab-bar .tab', { hasText: 'Settings' }).locator('.close').click();
   });
 
   test('a manual action runs from the ⋯ menu and its failure surfaces in the panel', async ({
@@ -226,7 +227,8 @@ test.describe('Assistant plugin — the button at a selection (milestone 74)', (
       .locator('.assistant-actions-settings .switch-row', { hasText: 'assistant button' })
       .locator('input')
       .uncheck();
-    await page.locator('button.close[aria-label="Close settings"]').click();
+    // Settings is an editor tab since milestone 197: closing it is closing the tab.
+    await page.locator('app-tab-bar .tab', { hasText: 'Settings' }).locator('.close').click();
 
     await page.locator('app-editor .cm-content').click();
     await page.keyboard.press('Control+A');

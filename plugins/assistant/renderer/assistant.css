@@ -524,28 +524,6 @@
 
 /* Question / answer read as a conversation: a thin accent rule instead of
    a filled bubble, which would fight the flat surfaces everywhere else. */
-.assistant-thread .card.q,
-.assistant-thread .card.a {
-  border-left: 2px solid var(--border-strong);
-  padding-left: 11px;
-}
-
-.assistant-thread .card.q {
-  border-left-color: var(--accent);
-}
-
-.assistant-thread .card.q .card-label {
-  color: var(--accent-fg);
-}
-
-.assistant-thread .card.q .card-body {
-  color: var(--text-primary);
-}
-
-.assistant-thread .card.a {
-  border-left-color: var(--text-faint);
-}
-
 /* Tool calls/results and edit outcomes from the note's drey-tool fence:
    collapsible chips, collapsed by default (name + one-line summary). */
 .assistant-thread .tool-chip {
@@ -1369,20 +1347,6 @@
   color: var(--accent-contrast);
 }
 
-.target-tray {
-  flex: 0 0 auto;
-  margin: 0 14px 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  font-size: 12.5px;
-}
-
-.target-tray-question {
-  margin: 0;
-  color: var(--text-3);
-}
-
 .target-error {
   border-left: 2px solid var(--accent);
   padding-left: 10px;
@@ -1492,4 +1456,480 @@
 
 .assistant-composer .chip.target-attached {
   padding-right: 8px;
+}
+
+/* -- The panel body as boards 9a, 7a, 7c and 7d draw it (milestone 200) --------
+   No rail on the left of a message: the owner's words are a bubble on the
+   right, the answer is plain text under one grey meta line. Tokens only; the
+   board's hex -> token map is in the changelog's Fidelity block. This block
+   sits last on purpose: it replaces the card look of the earlier rules. */
+
+.assistant-head {
+  gap: 6px;
+  padding: 0 6px 0 8px;
+}
+
+.assistant-head .chat-switch,
+.assistant-head .chat-new {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+}
+
+.assistant-head .chat-switch.on {
+  color: var(--text-primary);
+  background: var(--active-bg);
+}
+
+.assistant-head .chat-label {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-4);
+}
+
+.assistant-targets {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-editor);
+}
+
+.assistant-target {
+  width: auto;
+  height: 26px;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-4);
+}
+
+.assistant-target:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.assistant-target.on {
+  color: var(--text-primary);
+  background: var(--active-bg);
+}
+
+/* The thread: the Model's chat (9a) breathes a little more than a target's (7a). */
+.assistant-thread {
+  padding: 16px 16px 8px;
+  gap: 16px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.assistant-thread.target-thread {
+  padding: 14px 16px 8px;
+  gap: 14px;
+  font-size: 15px;
+  line-height: 23px;
+}
+
+.assistant-thread .card {
+  border-radius: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.assistant-thread .card.q,
+.assistant-thread .card.a {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.assistant-thread .card.q {
+  align-self: flex-end;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.assistant-thread.target-thread .card.q {
+  max-width: 304px;
+}
+
+.assistant-thread .card.q .card-body {
+  padding: 8px 12px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--accent-surface);
+  color: var(--text-primary);
+}
+
+.assistant-thread .card.a {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 23px;
+}
+
+.assistant-thread.target-thread .card.a {
+  display: block;
+}
+
+.assistant-thread div.card-body {
+  font-size: inherit;
+  color: var(--text-primary);
+}
+
+.assistant-thread div.card-body p {
+  margin: 0 0 8px;
+}
+
+.assistant-thread div.card-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* The model line: "glm-5.3-flash · 22:11 · 20 s", the vault chip at its right end. */
+.assistant-thread .card-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-4);
+}
+
+.assistant-thread .card-label .model-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-thread.target-thread .card-label {
+  display: block;
+  margin-bottom: 4px;
+  line-height: 23px;
+}
+
+.assistant-thread .card-label .relay-chip {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.assistant-thread .card-label .context-chip {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.assistant-thread .card-label .context-chip .tool-chip-summary {
+  display: block;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-4);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.assistant-thread .card-label .context-chip .tool-chip-summary:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.assistant-thread .card-attachments {
+  margin: 0;
+  justify-content: flex-end;
+}
+
+.assistant-thread .card-attachments .attachment {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 22px;
+  max-width: 100%;
+}
+
+.assistant-thread .card-actions {
+  top: -10px;
+}
+
+/* The decision card above the composer (boards 7a, 7c, 7d). */
+.target-tray {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 10px 10px 8px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.decision-question {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.decision-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.decision-option {
+  height: 30px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.decision-option.on {
+  background: var(--hover-bg);
+}
+
+.decision-radio {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--field-border);
+  border-radius: 50%;
+}
+
+.decision-option.on .decision-radio {
+  border-color: var(--text-primary);
+}
+
+.decision-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.decision-option.on .decision-dot {
+  background: var(--text-primary);
+}
+
+.decision-label {
+  white-space: nowrap;
+}
+
+.decision-description {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+
+.decision-tag {
+  white-space: nowrap;
+  color: var(--text-4);
+}
+
+.decision-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-left: 8px;
+}
+
+.decision-own {
+  flex-grow: 1;
+  color: var(--text-4);
+  font-size: 13px;
+}
+
+.decision-send {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.decision-send:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.decision-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The composer. */
+.assistant-composer {
+  padding: 8px 12px 10px;
+  gap: 6px;
+}
+
+.assistant-composer .composer-box {
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-dialog);
+  background: var(--bg-editor);
+}
+
+.assistant-composer .composer-chips {
+  gap: 4px;
+  max-height: none;
+}
+
+.assistant-composer .chip {
+  height: 24px;
+  max-width: 100%;
+  padding: 0 6px 0 8px;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.assistant-composer .chip.note,
+.assistant-composer .chip.image,
+.assistant-composer .chip.scratch {
+  border: 0;
+  color: var(--text-primary);
+}
+
+.assistant-composer .chip .chip-x {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-4);
+}
+
+.assistant-composer .chip.target-attached {
+  padding-right: 8px;
+}
+
+.assistant-composer .composer-row {
+  align-items: center;
+  gap: 4px;
+}
+
+.assistant-composer .composer-input {
+  align-self: center;
+}
+
+.assistant-composer .composer-input .cm-content {
+  font-size: 14px;
+  line-height: 20px;
+  padding: 4px 0;
+}
+
+.assistant-panel.on-target .assistant-composer .composer-input .cm-content {
+  padding: 3px 0;
+}
+
+.assistant-composer .composer-input .cm-placeholder {
+  color: var(--placeholder);
+}
+
+.assistant-composer .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+}
+
+.assistant-composer .icon-btn.mic {
+  border-radius: 50%;
+}
+
+.assistant-panel.on-target .assistant-composer .icon-btn {
+  height: 28px;
+}
+
+.assistant-composer .send {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+.assistant-composer .composer-meta {
+  min-height: 0;
+}
+
+.assistant-composer .prompt-btn {
+  opacity: 0;
+}
+
+.assistant-composer .composer-meta:hover .prompt-btn,
+.assistant-composer .composer-meta:focus-within .prompt-btn {
+  opacity: 1;
+}
+
+.assistant-composer .model-btn {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 8px;
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+  font-size: 13px;
+  max-width: 60%;
+}
+
+.assistant-composer .model-btn .model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-composer .target-name {
+  margin-left: auto;
+  padding: 0 6px;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.assistant-composer .target-name[hidden] {
+  display: none;
 }

@@ -133,9 +133,8 @@ describe('Review tab', () => {
     input.dispatchEvent(new Event('input'));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
     expect(host.querySelector('.tickets-review-comment-text')?.textContent).toBe('Name this after what it returns.');
-    const send = byText(host, '.tickets-review-sendback', 'Send back')!;
-    expect(send.textContent).toBe('Send back with 1 comment');
-    click(send);
+    // The decision card in the Assistant (board 7d) asks the tab to send back.
+    expect(requestReviewSendBack('T-0121')).toBe(true);
     await flush();
     const sent = calls.find((c) => c.method === 'sendBack')!;
     expect(sent.payload).toEqual({
@@ -158,17 +157,19 @@ describe('Review tab', () => {
     input.value = 'Whole block.';
     input.dispatchEvent(new Event('input'));
     click(byText(host, '.tickets-review-btn', 'Add comment'));
-    click(byText(host, '.tickets-review-sendback', 'Send back'));
+    expect(requestReviewSendBack('T-0121')).toBe(true);
     await flush();
     expect((calls.find((c) => c.method === 'sendBack')!.payload as { comments: unknown[] }).comments).toEqual([
       { file: 'src/a.ts', line: 1, endLine: 3, text: 'Whole block.' },
     ]);
   });
 
-  it('offers no Send back without comments (that decision is on the card)', async () => {
+  it('sends nothing back without comments, whoever asks (the decision card)', async () => {
     const { host, calls } = setup();
     await flush();
-    expect(byText(host, '.tickets-review-sendback', 'Send back')).toBeUndefined();
+    expect(host.querySelector('.tickets-review-sendback')).toBeNull();
+    requestReviewSendBack('T-0121');
+    await flush();
     expect(calls.some((c) => c.method === 'sendBack')).toBe(false);
   });
 

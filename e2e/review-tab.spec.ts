@@ -269,14 +269,15 @@ test.describe('Review tab (E13-7)', () => {
     await expect(review.locator('.tickets-review-row.is-context')).not.toHaveCount(0);
     await review.getByRole('button', { name: 'Changes' }).click();
 
-    // No footer (board 7d): until the decision card offers it, Send back shows under the pointer on the Files head.
+    // No footer (board 7d): the Send back option is on the decision card in the Assistant.
     await expect(review.locator('.tickets-review-footer')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('review-comments.png') });
-    await review.locator('.tickets-review-list .tickets-review-subhead').hover();
-    const send = review.getByRole('button', { name: 'Send back with 2 comments' });
-    await expect(send).toBeVisible();
-
-    await send.click();
+    const card = page.locator('.assistant-panel .target-tray');
+    await expect(card).toContainText('Your review of T-0118');
+    const pick = card.getByRole('radio', { name: /Send back with 2 comments/ });
+    await expect(pick).toHaveAttribute('aria-checked', 'true');
+    await expect(card.locator('.decision-send')).toHaveText('Send “Send back with 2 comments”');
+    await card.locator('.decision-send').click();
     await expect(review.locator('.tickets-review-note')).toContainText('Sent back', { timeout: 15_000 });
 
     // The ticket file sits in an earlier phase now, with the structured feedback in its Handover.
