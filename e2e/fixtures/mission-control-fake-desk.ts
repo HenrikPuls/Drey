@@ -134,10 +134,12 @@ export interface FakeDeskOptions {
   readonly refuseAutopilot?: 'read_only' | 'bad_resume_at' | 'runner_down';
   /** Serves the phone boards' sample (10a–10t) in place of the demo data: the fidelity spec's state. */
   readonly boards?: boolean;
+  /** With `boards`: the iPad boards' overlay (5b-5i, 10e-10s). */
+  readonly pad?: boolean;
 }
 
 /** The answers of the board sample, by path; undefined = not a sample route. */
-function boardsRoute(pathname: string): unknown {
+function boardsRoute(pathname: string, pad: boolean): unknown {
   const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\//.exec(pathname);
   if (estimate !== null) {
     return BOARDS.ESTIMATES[`${estimate[1]}/${estimate[2]}`] ?? { ok: false, error: 'no basis' };
@@ -152,7 +154,7 @@ function boardsRoute(pathname: string): unknown {
       return id === 'T-0130' ? BOARDS.PLAN_130 : { ok: true, version: null, edits: 0, summary: null, marks: [] };
     }
     const found = BOARDS.BOARD.columns.flatMap((c) => c.tickets).find((t) => t.id === id);
-    return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
+    return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: (pad ? BOARDS.PAD_TICKET_TEXT[id] : undefined) ?? BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
   }
   const session = /^\/api\/chat\/sessions\/(.+)$/.exec(pathname);
   if (session !== null) {
@@ -209,7 +211,7 @@ export async function startFakeDesk(
       return;
     }
     if (options.boards === true && (req.method === 'GET' || req.method === 'HEAD')) {
-      const answer = url.pathname === '/api/fleet' ? { ...BOARDS.FLEET, chain: { ...BOARDS.FLEET.chain, ...(chain['autopilotSet'] === true ? { autopilot: chain['autopilot'] } : {}) } } : boardsRoute(url.pathname);
+      const answer = url.pathname === '/api/fleet' ? { ...BOARDS.FLEET, chain: { ...BOARDS.FLEET.chain, ...(chain['autopilotSet'] === true ? { autopilot: chain['autopilot'] } : {}) } } : boardsRoute(url.pathname, options.pad === true);
       if (answer !== undefined) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(answer));

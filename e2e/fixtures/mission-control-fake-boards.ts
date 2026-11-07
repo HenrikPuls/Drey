@@ -173,7 +173,7 @@ const COST_118 = [
 
 export const TICKET_TEXT: Record<string, string> = {
   'T-0121': `---\nid: T-0121\n---\n\n## Goal\n\nDrag headings in the Outline panel to reorder the note. The text under a heading is part of the move.\n\n## Plan\n\n### Parts\n\n- Outline tree model\n- Drop handler\n- Reorder in the buffer\n- Manual test notes\n\n## Verlauf\n\n${COST_121}\n`,
-  'T-0118': `---\nid: T-0118\n---\n\n## Goal\n\nOne Ctrl+P opens one palette, also when the machine is slow and the key repeats.\n\n## Verification\n\nTested on 2026-11-04 by Tessa\n\n- [x] One palette after a double Ctrl+P\n- [x] Escape closes it, the editor keeps focus\n- [x] A slow machine still opens one\n- [x] The second press does nothing\n\n## Verlauf\n\n${COST_118}\n`,
+  'T-0118': `---\nid: T-0118\n---\n\n## Verification\n\nTested on 2026-11-04 by Tessa\n\n- [x] One palette after a double Ctrl+P\n- [x] Escape closes it, the editor keeps focus\n- [x] A slow machine still opens one\n- [x] The second press does nothing\n\n## Verlauf\n\n${COST_118}\n`,
   'T-0130': `---\nid: T-0130\n---\n\n## Plan\n\n### Goal\n\nA ticket in Inbox from anywhere in Windows, typed or spoken, in under ten seconds.\n\n### Parts\n\n- Capture hotkey and window\n- Dictation hand-off (Win+H)\n- Ticket from transcript\n`,
 };
 
@@ -246,4 +246,13 @@ const estimate = (gate: string, persona: string, model: string, cost: number, co
 export const ESTIMATES: Record<string, unknown> = {
   'build/ben': estimate('build', 'ben', 'qwen3-coder', 3, 2, 4),
   'review/tessa': estimate('review', 'tessa', 'sonnet', 2, 1.5, 2.4),
+};
+
+/**
+ * Wave row 4.6: what only the iPad boards (5b-5i, 10e-10s) draw, laid over the
+ * phone sample when the desk starts with `pad: true`. The phone's shots keep
+ * their sample byte for byte.
+ */
+export const PAD_TICKET_TEXT: Record<string, string> = {
+  'T-0118': `---\nid: T-0118\n---\n\n## Goal\n\nOne Ctrl+P opens one palette, also when the machine is slow and the key repeats.\n\n## Verification\n\nTested on 2026-11-04 by Tessa\n\n- [x] One palette after a double Ctrl+P\n- [x] Escape closes it, the editor keeps focus\n- [x] A slow machine still opens one\n- [x] The second press does nothing\n\n### Video\n\n![](../videos/t-0118.webm)\n\n- 0:48 The second press does nothing\n\n## Verlauf\n\n${COST_118}\n`,
 };

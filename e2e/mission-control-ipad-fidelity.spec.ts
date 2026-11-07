@@ -14,7 +14,7 @@ let desk: Awaited<ReturnType<typeof startFakeDesk>>;
 const OUT = process.env['FID_OUT'] ?? 'test-results/fidelity';
 
 test.beforeAll(async () => {
-  desk = await startFakeDesk({ boards: true });
+  desk = await startFakeDesk({ boards: true, pad: true });
 });
 test.afterAll(async () => {
   await desk.stop();
@@ -119,7 +119,7 @@ test.describe('landscape', () => {
   });
 
   test('10t chip', async ({ page }) => {
-    const own = await startFakeDesk({ boards: true });
+    const own = await startFakeDesk({ boards: true, pad: true });
     await open(page, own.origin);
     await page.locator('mc-autopilot-chip button').first().click();
     await page.getByRole('radio', { name: /^Paused/ }).click();
