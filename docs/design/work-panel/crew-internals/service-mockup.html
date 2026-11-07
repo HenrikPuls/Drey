@@ -1,0 +1,200 @@
+<title>Drey Service</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: two desktop frames stacked, each 1100px wide max, Anthrazit tokens of the Drey boards (charcoal greys, blue accent, 14px UI sans, radii 4/8). Single deliberate dark look like the app itself. */
+:root{
+  --bg:#1b1d20; --panel:#232629; --panel2:#2a2e32; --line:#34393e; --fg:#e6e8ea; --muted:#9aa1a8; --dim:#6f767d;
+  --accent:#4f8cff; --accent-fg:#ffffff; --ok:#5bc08a; --warn:#f0b35a; --bad:#e06464; --peach:#f2b48a;
+  --ui:"Segoe UI",system-ui,-apple-system,sans-serif; --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --r4:4px; --r8:8px; color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--ui);padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:18px;font-weight:600;margin:0 0 4px}
+.lead{color:var(--muted);margin:0 0 20px;max-width:70ch}
+.frame{max-width:1100px;margin:0 auto 32px;border:1px solid var(--line);border-radius:var(--r8);overflow:hidden;background:var(--panel)}
+.cap{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg)}
+.titlebar{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;background:#17191c;border-bottom:1px solid var(--line);font-size:13px}
+.titlebar .sq{width:18px;height:18px;border-radius:var(--r4);background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-weight:700;font-size:12px}
+.titlebar .win{margin-left:auto;color:var(--dim);letter-spacing:6px}
+.sv{display:grid;grid-template-columns:300px 1fr;min-height:520px}
+.sv-list{border-right:1px solid var(--line);padding:12px 0}
+.sv-head{display:flex;align-items:center;gap:8px;padding:6px 14px 10px;color:var(--muted);font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;flex:none}
+.dot.off{background:var(--dim)}.dot.warn{background:var(--warn)}
+.row{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:10px;padding:9px 14px;cursor:default}
+.row.sel{background:var(--panel2)}
+.row .n{font-weight:500}.row .m{display:block;color:var(--muted);font-size:12px}
+.row .ac{display:flex;gap:4px;opacity:.85}
+.ib{width:24px;height:24px;border:1px solid var(--line);border-radius:var(--r4);background:transparent;color:var(--fg);display:grid;place-items:center;font-size:11px}
+.sv-detail{display:flex;flex-direction:column;min-width:0}
+.dh{display:flex;align-items:center;gap:12px;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.dh h2{font-size:15px;font-weight:600;margin:0}
+.dh .meta{color:var(--muted);font-size:12px}
+.dh .sp{margin-left:auto;display:flex;gap:6px}
+.btn{height:28px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r4);background:transparent;color:var(--fg);font:13px var(--ui)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.fact{background:var(--panel);padding:10px 16px}
+.fact b{display:block;font-size:12px;color:var(--muted);font-weight:500}
+.fact span{font-variant-numeric:tabular-nums}
+.logbar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.logbar input{flex:1;height:26px;border:1px solid var(--line);border-radius:var(--r4);background:var(--bg);color:var(--fg);padding:0 8px;font:13px var(--ui);min-width:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r4);overflow:hidden}
+.seg span{padding:3px 8px}.seg span.on{background:var(--panel2);color:var(--fg)}
+.log{flex:1;margin:0;padding:10px 16px;font:12px/1.6 var(--mono);color:var(--muted);overflow:auto;background:var(--bg);white-space:pre-wrap;word-break:break-word}
+.log i{color:var(--dim);font-style:normal}.log b{color:var(--fg);font-weight:500}.log .e{color:var(--bad)}.log .w{color:var(--warn)}
+.foot{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.foot .sp{margin-left:auto;display:flex;gap:6px}
+/* settings */
+.set{display:grid;grid-template-columns:230px 1fr;min-height:560px}
+.nav{border-right:1px solid var(--line);padding:16px 0;font-size:13px}
+.nav div{padding:6px 24px;color:var(--fg)}.nav .sub{padding-left:40px;color:var(--muted)}.nav .sel{background:var(--panel2);border-radius:var(--r4);margin:0 8px;padding-left:16px}
+.page{padding:24px 40px;max-width:760px}
+.page h2{font-size:22px;font-weight:600;margin:0 0 4px}
+.page .d{color:var(--muted);margin:0 0 22px}
+.page h3{font-size:15px;font-weight:600;margin:22px 0 10px}
+.it{margin:0 0 18px}
+.it b{display:block;font-weight:600;font-size:13px}
+.it p{margin:2px 0 8px;color:var(--muted);max-width:62ch}
+.ctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sel2{height:28px;border:1px solid var(--line);border-radius:var(--r4);background:var(--bg);color:var(--fg);padding:0 8px;font:13px var(--ui);display:inline-flex;align-items:center;gap:8px}
+.tog{width:36px;height:20px;border-radius:10px;background:var(--accent);position:relative;display:inline-block}
+.tog::after{content:"";position:absolute;top:2px;left:18px;width:16px;height:16px;border-radius:50%;background:#fff}
+.tog.off{background:var(--line)}.tog.off::after{left:2px}
+.comp{border:1px solid var(--line);border-radius:var(--r8);overflow:hidden}
+.comp .cr{display:grid;grid-template-columns:14px 1fr auto auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.comp .cr:first-child{border-top:0}
+.comp .cr small{display:block;color:var(--muted);font-size:12px}
+.tray{display:inline-flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:var(--r8);background:var(--panel2);margin-top:10px;font-size:13px}
+.menu{display:inline-block;border:1px solid var(--line);border-radius:var(--r4);background:var(--panel);padding:4px 0;min-width:220px;font-size:13px;vertical-align:top;margin-left:16px}
+.menu div{padding:5px 14px}.menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}.menu .h{color:var(--muted);font-size:12px}
+@media (max-width:760px){.sv,.set{grid-template-columns:1fr}.sv-list,.nav{border-right:0;border-bottom:1px solid var(--line)}.page{padding:20px 16px}}
+</style>
+
+<h1>Drey Service</h1>
+<p class="lead">Vorschlag für den sichtbaren Hintergrundprozess: das Fenster aus dem Taskleistensymbol, das Symbolmenü und die Settings-Seite. Beispieldaten.</p>
+
+<div class="frame">
+  <div class="cap">1 · Das Fenster, geöffnet über das Taskleistensymbol (eigenes kleines Fenster, nicht Drey)</div>
+  <div class="titlebar"><span class="sq">D</span> Drey Service <span class="win">— ▢ ✕</span></div>
+  <div class="sv">
+    <div class="sv-list">
+      <div class="sv-head"><span class="dot"></span> Running since 08:12 · pid 18240 · 4 components</div>
+      <div class="row"><span class="dot"></span><span><span class="n">Tickets engine</span><span class="m">127.0.0.1:52114 · vault drey-tickets</span></span><span class="ac"><span class="ib" title="Restart">↻</span><span class="ib" title="Stop">■</span></span></div>
+      <div class="row sel"><span class="dot"></span><span><span class="n">Crew runner</span><span class="m">2 runs live · 1:1 with Ben idle 4 min</span></span><span class="ac"><span class="ib" title="Restart">↻</span><span class="ib" title="Stop">■</span></span></div>
+      <div class="row"><span class="dot"></span><span><span class="n">MCP server</span><span class="m">127.0.0.1:4319 · 3 clients (2 runs, Claude Desktop)</span></span><span class="ac"><span class="ib" title="Restart">↻</span><span class="ib" title="Stop">■</span></span></div>
+      <div class="row"><span class="dot off"></span><span><span class="n">Remote gateway</span><span class="m">off · phones and iPad</span></span><span class="ac"><span class="ib" title="Start">▶</span></span></div>
+      <div class="row"><span class="dot warn"></span><span><span class="n">Local model (LM Studio)</span><span class="m">not reachable · last seen 07:40</span></span><span class="ac"><span class="ib" title="Open settings">⚙</span></span></div>
+    </div>
+    <div class="sv-detail">
+      <div class="dh"><span class="dot"></span><h2>Crew runner</h2><span class="meta">pid 18302 · started 08:12 by Tickets engine · leaves 15 min after the last run</span>
+        <span class="sp"><button class="btn">Open log file</button><button class="btn">Restart</button><button class="btn danger">Stop</button></span></div>
+      <div class="facts">
+        <div class="fact"><b>Live runs</b><span>2 · T-0126 Tessa, T-0121 Ben</span></div>
+        <div class="fact"><b>Sessions held</b><span>1 · 1:1 Ben, idle 4 min</span></div>
+        <div class="fact"><b>Slots</b><span>Local 2/2 · Claude Code 1/3</span></div>
+        <div class="fact"><b>Today</b><span>$4.10 of $15</span></div>
+      </div>
+      <div class="logbar"><span>Log</span><input id="logfilter" placeholder="Filter"><span class="seg"><span class="on">All</span><span>Warnings</span><span>Errors</span></span><span>Follow</span><span class="tog"></span></div>
+<pre class="log"><i>08:12:03</i> runner up, home C:\Users\puls\AppData\Roaming\drey\fleet
+<i>08:12:04</i> chain config from engine: vault drey-tickets, autopilot <b>off</b>
+<i>08:14:11</i> run R-2026…-7f1a <b>start</b> T-0126 test · tessa · opencode/qwen3-coder · origin drey:run-dialog
+<i>08:14:12</i> mcp: run token minted, vault read-only (all), tickets tools
+<i>08:21:40</i> run R-2026…-7f1a turn 6 · 38k in (34k cached) · 1.2k out
+<i>08:26:02</i> <span class="w">run R-2026…-7f1a no output for 9 min</span>
+<i>08:27:15</i> session S-ben-1on1 <b>open</b> · claude-code/sonnet · origin drey:crew-1on1
+<i>08:31:50</i> session S-ben-1on1 idle, release in 11 min
+<i>08:33:09</i> run R-2026…-c02e <b>start</b> T-0121 build · ben · origin chain
+<i>08:33:10</i> <span class="e">mcp: vault_write refused — ben may not write vault "notes" (allowed: read)</span></pre>
+      <div class="foot"><span class="dot"></span> Service runs in the background. Closing this window keeps it running.<span class="sp"><button class="btn">Open Drey</button><button class="btn">Quit service</button></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">1b · Dasselbe Fenster, Bereich Sessions: jede Harness-Session (Run oder 1:1) auf Rohebene, zum Debuggen</div>
+  <div class="titlebar"><span class="sq">D</span> Drey Service <span style="color:var(--muted)">· <span style="color:var(--dim)">Components</span> · <b style="font-weight:600">Sessions</b> · <span style="color:var(--dim)">Logs</span></span><span class="win">— ▢ ✕</span></div>
+  <div class="sv">
+    <div class="sv-list">
+      <div class="sv-head"><span class="dot"></span> 3 sessions · 2 runs · 1 held</div>
+      <div class="row"><span class="dot"></span><span><span class="n">T-0126 · test · Tessa</span><span class="m">opencode · qwen3-coder · turn 6 · 9 min quiet</span></span><span class="ac"><span class="ib" title="Stop">■</span></span></div>
+      <div class="row sel"><span class="dot"></span><span><span class="n">T-0121 · build · Ben</span><span class="m">claude-code · sonnet · turn 3 · writing</span></span><span class="ac"><span class="ib" title="Stop">■</span></span></div>
+      <div class="row"><span class="dot warn"></span><span><span class="n">1:1 · Ben</span><span class="m">claude-code · sonnet · held · releases in 11 min</span></span><span class="ac"><span class="ib" title="Release now">⏏</span></span></div>
+      <div class="sv-head" style="padding-top:16px">Ended today · 7 <span style="margin-left:auto;color:var(--dim)">show</span></div>
+    </div>
+    <div class="sv-detail">
+      <div class="dh"><span class="dot"></span><h2>T-0121 · build · Ben</h2><span class="meta">R-20261107T0833-c02e · pid 19877 · origin chain · fresh</span>
+        <span class="sp"><button class="btn">Open worktree</button><button class="btn">Copy attach command</button><button class="btn danger">Stop</button></span></div>
+      <div class="facts">
+        <div class="fact"><b>Harness · model</b><span>claude-code 2.1 · sonnet · permission auto</span></div>
+        <div class="fact"><b>Session ref</b><span style="font:12px var(--mono)">e4b9…71c0 · resumable</span></div>
+        <div class="fact"><b>Tokens</b><span>112k in (98k cached) · 4.1k out · $0.61</span></div>
+        <div class="fact"><b>MCP</b><span>vault read · tickets · 14 calls, 1 refused</span></div>
+      </div>
+      <div class="logbar"><span class="seg"><span class="on">Stream</span><span>Instruction</span><span>Tool calls</span><span>Process</span></span><input id="streamfilter" placeholder="Filter"><span>Raw JSON</span><span class="tog off"></span><span>Follow</span><span class="tog"></span></div>
+<pre class="log"><i>08:33:09</i> <b>system</b> init · cwd E:\projects\drey-tickets\_worktrees\T-0121 · tools: Read, Edit, Bash, mcp__drey__vault_read, mcp__drey__vault_search, mcp__drey__tickets_read …
+<i>08:33:10</i> <b>user</b> [instruction, 9.8k tokens — open under Instruction]
+<i>08:33:31</i> <b>assistant</b> I will start with the failing test for the order reducer …
+<i>08:33:32</i> <b>tool</b> Read plugins/tickets/renderer/board/order.ts → 212 lines
+<i>08:33:40</i> <b>tool</b> mcp__drey__vault_search {"query":"order reducer","vault":"notes"} → 3 hits
+<i>08:33:41</i> <b>tool</b> <span class="e">mcp__drey__vault_write → Error: ben may not write vault "notes" (allowed: read)</span>
+<i>08:34:02</i> <b>tool</b> Edit plugins/tickets/renderer/board/order.spec.ts (+18 −0)
+<i>08:34:55</i> <b>tool</b> Bash npm run test:plugin -- tickets -t "order" → exit 1 (1 failed)
+<i>08:35:10</i> <b>assistant</b> The test fails as intended; now the reducer.
+<i>08:35:11</i> <b>usage</b> turn 3 · input 41k (38k cached) · output 1.4k</pre>
+      <div class="logbar" style="border-top:1px solid var(--line);border-bottom:0"><input id="steer" placeholder="Send to the session (stdin, stream-json) — lands in the ticket Log as a steer"><button class="btn pri">Send</button><button class="btn">Interrupt turn</button><button class="btn">Resume after stop ▾</button></div>
+      <div class="foot"><span>Drey's Thread shows this session cleaned up; here it is the harness as it speaks. Everything you send is logged to the ticket.</span><span class="sp"><button class="btn">Open in Drey</button></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">2 · Das Taskleistensymbol (rechts in der Windows-Taskleiste) und sein Menü</div>
+  <div style="padding:16px 20px 20px">
+    <span class="tray"><span class="sq" style="width:16px;height:16px;border-radius:3px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700">D</span> Drey Service · 2 runs live · $4.10 today</span>
+    <span class="menu">
+      <div class="h">Drey Service · running</div>
+      <div>Open Drey Service…</div>
+      <div>Open Drey</div>
+      <hr>
+      <div>Autopilot: Off ▸</div>
+      <div>Stop all running steps…</div>
+      <hr>
+      <div>Start with Windows ✓</div>
+      <div>Quit service</div>
+    </span>
+    <p class="lead" style="margin:14px 0 0">Das Symbol zeigt den Zustand als Punkt: grün läuft, gelb etwas braucht dich, grau gestoppt. Doppelklick öffnet das Fenster. Drey schließen beendet den Service nicht; „Quit service“ fragt, wenn Runs leben.</p>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">3 · Settings → Background service (neue Kategorie auf Dreys Settings-Seite, Board 7g)</div>
+  <div class="set">
+    <div class="nav">
+      <div>Commonly used</div><div>Appearance</div><div>Assistant</div><div class="sel">Background service</div><div>Editor</div><div>Files</div><div>Keyboard shortcuts</div><div>MCP server</div><div>Panels and plugins</div><div>Tickets</div><div class="sub">Crew</div><div class="sub">Flow</div><div class="sub">Autopilot</div><div class="sub">Budget and runners</div><div class="sub">Devices</div><div>Vault</div><div>About</div>
+    </div>
+    <div class="page">
+      <h2>Background service</h2>
+      <p class="d">Drey Service runs the tickets engine, the Crew runner, the MCP server and the remote gateway. It keeps working while Drey is closed and shows in the taskbar.</p>
+
+      <h3>Service</h3>
+      <div class="it"><b>Status</b><p>Running since 08:12 · 4 components · 2 runs live.</p><div class="ctl"><button class="btn">Open Drey Service…</button><button class="btn">Restart</button><button class="btn">Stop</button></div></div>
+      <div class="it"><b>Start with Windows</b><p>The service starts at sign-in, before Drey. Off: it starts with Drey.</p><div class="ctl"><span class="tog"></span><span>On</span></div></div>
+      <div class="it"><b>Keep running after Drey quits</b><p>Live runs and a running Autopilot always keep it alive. With nothing to do it leaves after this span.</p><div class="ctl"><span class="sel2">15 minutes ▾</span></div></div>
+      <div class="it"><b>Taskbar icon</b><p>Shows the service state and opens its window. Hidden, the window opens from here and from the Crew tab.</p><div class="ctl"><span class="tog"></span><span>Shown</span></div></div>
+
+      <h3>Components</h3>
+      <div class="comp">
+        <div class="cr"><span class="dot"></span><span>Tickets engine<small>The board, Mission Control, personas. Always on while the service runs.</small></span><span class="meta" style="color:var(--muted);font-size:12px">running</span><span></span></div>
+        <div class="cr"><span class="dot"></span><span>Crew runner<small>Runs tickets and 1:1 sessions in their own worktrees and sessions.</small></span><span style="color:var(--muted);font-size:12px">running · 2 live</span><span class="tog"></span></div>
+        <div class="cr"><span class="dot"></span><span>MCP server<small>Vault and Crew tools for runs, 1:1 sessions and programs on this machine. 127.0.0.1:4319.</small></span><span style="color:var(--muted);font-size:12px">running · 3 clients</span><span class="tog"></span></div>
+        <div class="cr"><span class="dot off"></span><span>Remote gateway<small>Phones and the iPad over Tailscale. Pairing under Tickets → Devices.</small></span><span style="color:var(--muted);font-size:12px">off</span><span class="tog off"></span></div>
+      </div>
+
+      <h3>Logs</h3>
+      <div class="it"><b>Log level</b><p>What the components write. Debug is loud and meant for a report.</p><div class="ctl"><span class="sel2">Normal ▾</span></div></div>
+      <div class="it"><b>Log folder</b><p>One file per component, rotated daily, kept 14 days.</p><div class="ctl"><code style="font:12px var(--mono);color:var(--muted)">C:\Users\puls\AppData\Roaming\drey\service\logs</code><button class="btn">Open folder</button></div></div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,123 @@
+<title>Persona Page v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one desktop frame (1440 wide board look, scaled to the page), two columns under the head like board 7k; Anthrazit tokens. */
+:root{--bg:#1b1d20;--panel:#232629;--panel2:#2a2e32;--line:#34393e;--fg:#e6e8ea;--muted:#9aa1a8;--dim:#6f767d;--accent:#4f8cff;--accent-fg:#fff;--ok:#5bc08a;--warn:#f0b35a;--bad:#e06464;--ui:"Segoe UI",system-ui,sans-serif;--mono:"Cascadia Mono",Consolas,ui-monospace,monospace;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--ui);padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:18px;font-weight:600;margin:0 0 4px}.lead{color:var(--muted);margin:0 0 18px;max-width:72ch}
+.frame{max-width:1140px;margin:0 auto 24px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg)}
+.cap{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);padding:8px 14px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;align-items:center;height:32px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.tabs span{padding:0 14px;height:32px;display:flex;align-items:center;gap:8px}.tabs .on{color:var(--fg);background:var(--panel)}
+.head{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)}
+.av{width:40px;height:40px;border-radius:50%;background:#2f6fe0;display:grid;place-items:center;font-weight:700;font-size:13px}
+.head h2{font-size:17px;font-weight:600;margin:0}.head .sub{color:var(--muted);font-size:12px}.head .sub code{font:12px var(--mono)}
+.head .sp{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
+.btn{height:28px;padding:0 10px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--fg);font:13px var(--ui)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}.btn.link{border:0;color:var(--accent)}
+.cols{display:grid;grid-template-columns:400px 1fr;gap:0}
+.left{padding:18px 20px;border-right:1px solid var(--line)}.right{padding:18px 20px;min-width:0}
+h3{font-size:15px;font-weight:600;margin:0 0 10px}h3 small{font-weight:400;color:var(--muted);font-size:12px;margin-left:8px}
+.blk{margin-bottom:24px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+.in{height:34px;border:1px solid var(--line);border-radius:4px;background:var(--panel);padding:0 10px;display:flex;align-items:center;font-size:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{height:26px;padding:0 10px;border:1px solid var(--line);border-radius:4px;display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}.chip.on{color:var(--fg);border-color:var(--fg)}
+.pool{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.pool .r{display:grid;grid-template-columns:22px 1fr auto auto;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--line)}
+.pool .r:first-child{border-top:0}.pool .n{width:22px;height:22px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;font-size:12px}
+.pool small{display:block;color:var(--muted);font-size:12px}.tag{font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--muted)}
+.allow{border:1px solid var(--line);border-radius:8px;padding:4px 12px}
+.allow .a{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.allow .a:first-child{border-top:0}.allow small{display:block;color:var(--muted);font-size:12px}
+.sel{height:26px;border:1px solid var(--line);border-radius:4px;padding:0 8px;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--fg);background:var(--panel)}
+.ed{border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden}
+.ed .bar{display:flex;gap:2px;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+.ed .bar span{padding:3px 7px;border-radius:4px}.ed .bar .on{background:var(--panel2);color:var(--fg)}.ed .bar .sp{margin-left:auto}
+.ed .body{padding:16px 20px;font-size:15px;line-height:1.6;min-height:300px;max-width:72ch}
+.ed .body h4{font-size:17px;margin:14px 0 6px}.ed .body h4:first-child{margin-top:0}.ed .body ul{margin:4px 0 0 18px;padding:0}.ed .body p{margin:0 0 8px}
+.ed .body .cur{border-left:2px solid var(--accent);margin-left:-10px;padding-left:8px}
+.skills{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.skills .s{display:grid;grid-template-columns:1fr auto auto auto;gap:14px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);font-size:13px}
+.skills .s:first-child{border-top:0}.skills code{font:12px var(--mono);color:var(--muted)}.skills .m{color:var(--muted);font-size:12px}
+.tog{width:32px;height:18px;border-radius:9px;background:var(--accent);position:relative;display:inline-block}.tog::after{content:"";position:absolute;top:2px;left:16px;width:14px;height:14px;border-radius:50%;background:#fff}.tog.off{background:var(--line)}.tog.off::after{left:2px}
+.card{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-top:10px}
+.card b{display:block;font-weight:600;font-size:13px}.card .m{color:var(--muted);font-size:12px}
+.foot{display:flex;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}.foot .sp{margin-left:auto;display:flex;gap:8px}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
+.links{display:flex;gap:16px;font-size:13px}.links span{color:var(--accent)}
+@media (max-width:900px){.cols{grid-template-columns:1fr}.left{border-right:0;border-bottom:1px solid var(--line)}}
+</style>
+<h1>Persona Page v2</h1>
+<p class="lead">Vorschlag für req-153 nach den Rulings 1 bis 5: ein Markdown-Editor für die Instruktionen, Modelle aus der Modelltabelle der Settings, der Rechte-Block, Memory und Journal als eigene Tabs im Crew-Detail. Beispieldaten.</p>
+
+<div class="frame">
+  <div class="cap">Editor-Tab „Ben · persona“, geöffnet aus Crew → Edit persona</div>
+  <div class="tabs"><span>▦ Board ✕</span><span class="on">☺ Ben · persona ✕</span></div>
+  <div class="head">
+    <div class="av">BE</div>
+    <div><h2>Ben</h2><div class="sub">Builder · <code>personas/ben/</code> · Memory 12 · Journal 7 · Proposals 1</div></div>
+    <div class="sp"><span>Saved · committed 2 days ago</span><button class="btn link">Back to Crew</button></div>
+  </div>
+  <div class="cols">
+    <div class="left">
+      <div class="blk"><h3>Profile</h3>
+        <div style="display:grid;grid-template-columns:72px 1fr;gap:14px;align-items:center"><div class="av" style="width:72px;height:72px;font-size:20px">BE</div><div><div class="in" style="justify-content:center">Upload picture…</div><div class="note">Square PNG or JPG, or drop it on the circle.</div></div></div>
+        <label>Name</label><div class="in">Ben</div>
+        <label>Role</label><div class="in" style="justify-content:space-between">Builder <span style="color:var(--dim)">▾</span></div>
+        <label>One line for the crew list</label><div class="in">Builds one part of a ticket, test first.</div>
+      </div>
+      <div class="blk"><h3>Work</h3>
+        <label>Steps Ben can take <span style="color:var(--dim)">· from your flows, edited there</span></label>
+        <div class="chips"><span class="chip">Shape</span><span class="chip">Plan</span><span class="chip on">✓ Build</span><span class="chip">Review</span><span class="chip">Test</span></div>
+        <label>Harness</label><div class="in" style="justify-content:space-between">Claude Code <span style="color:var(--dim)">▾</span></div>
+        <label>Models, strongest first <span style="color:var(--dim)">· classes and slots under Settings → Models</span></label>
+        <div class="pool">
+          <div class="r"><span class="n">1</span><span>opus<small>Claude Code · class A · factor 3</small></span><span class="tag">0 / 2 busy</span><span style="color:var(--dim)">⋮</span></div>
+          <div class="r"><span class="n">2</span><span>sonnet<small>Claude Code · class B · factor 1</small></span><span class="tag">1 / 3 busy</span><span style="color:var(--dim)">⋮</span></div>
+          <div class="r"><span class="n">3</span><span>qwen3-coder<small>Local · class C · factor 0.2</small></span><span class="tag">2 / 2 busy</span><span style="color:var(--dim)">⋮</span></div>
+          <div class="r" style="color:var(--accent)"><span></span><span>Add a model…</span><span></span><span></span></div>
+        </div>
+        <div class="note">A task asks for a class; Ben runs it on his model of that class when a slot is free, otherwise it waits. Never a smaller class.</div>
+        <label>Daily budget</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="in">$5.00</div><div class="in" style="justify-content:space-between;color:var(--muted)">Tell me when: asks or stuck <span style="color:var(--dim)">▾</span></div></div>
+      </div>
+      <div class="blk"><h3>Allowed to</h3>
+        <div class="allow">
+          <div class="a"><span>Read vaults<small>All registered vaults, through the MCP server.</small></span><span class="sel">All ▾</span></div>
+          <div class="a"><span>Write vaults<small>Per vault; never delete.</small></span><span class="sel">notes ▾</span></div>
+          <div class="a"><span>Run commands in the worktree<small>The harness permission mode.</small></span><span class="sel">Auto ▾</span></div>
+          <div class="a"><span>Reach the network<small>Web search and fetch, package installs.</small></span><span class="sel">Off ▾</span></div>
+          <div class="a"><span>Spend above the ticket allowance<small>Otherwise the run waits for you.</small></span><span class="sel">Ask ▾</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="blk"><h3>Instructions <small>prompt.md, edited here in Drey's Markdown editor (Live Preview ⇄ Source) · ≈ 2,490 tokens at start</small><button class="btn" style="float:right">Preview full prompt</button></h3>
+        <div class="ed">
+          <div class="bar"><span><b>B</b></span><span><i>I</i></span><span>H</span><span>• List</span><span>☑ Task</span><span>`code`</span><span class="sp"></span><span class="on">Live</span><span>Source</span></div>
+          <div class="body">
+            <h4>Who Ben is</h4>
+            <p>The builder on this crew. Implements exactly one part of a ticket, in its own worktree, and changes nothing outside the files the part names. Calm, terse, prefers a failing test to a paragraph.</p>
+            <h4>How you work</h4>
+            <ul><li>Write the failing test first.</li><li class="cur">Keep each commit small and name it after the part.</li><li>Prefer the existing helpers over new abstractions.</li></ul>
+            <h4>Done means</h4>
+            <p>Tests green, rebased on main, no new lint warnings, and the acceptance criteria of the part ticked in the ticket.</p>
+          </div>
+        </div>
+        <div class="note">Also loaded at session start, not edited here: the repository's agent instructions, the skills below, Ben's memory, the ticket and its part.</div>
+      </div>
+      <div class="blk"><h3>Skills <small>shared under _meta/skills, Ben's own under personas/ben/skills</small><button class="btn" style="float:right">Add skill…</button></h3>
+        <div class="skills">
+          <div class="s"><span>Go conventions <code>_meta/skills/go-conventions/SKILL.md</code></span><span class="m">shared · 310 tokens</span><span class="tog"></span><span style="color:var(--dim)">⋮</span></div>
+          <div class="s"><span>Test first <code>_meta/skills/tdd/SKILL.md</code></span><span class="m">shared · 240 tokens</span><span class="tog"></span><span style="color:var(--dim)">⋮</span></div>
+          <div class="s"><span>Drey plugin authoring <code>personas/ben/skills/drey-plugins/SKILL.md</code></span><span class="m">own · 1,120 tokens</span><span class="tog"></span><span style="color:var(--dim)">⋮</span></div>
+          <div class="s"><span>Diff review <code>_meta/skills/diff-review/SKILL.md</code></span><span class="m">shared · 400 tokens</span><span class="tog off"></span><span style="color:var(--dim)">⋮</span></div>
+        </div>
+      </div>
+      <div class="blk"><h3>Proposals <small>from Friction and the 1:1</small></h3>
+        <div class="card"><div><b>Add “Read the ADR index before adding a new component.” to How you work</b><span class="m">Friction · 3 reports · T-0098, T-0104, T-0117</span></div><div style="display:flex;gap:8px"><button class="btn">Show diff</button><button class="btn">Dismiss</button><button class="btn pri">Apply</button></div></div>
+        <div class="links" style="margin-top:14px"><span>Memory · 12 →</span><span>Journal · 7 →</span><span>Talk to Ben 1:1 →</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>One commit to personas/ben/. New sessions get the change; running sessions keep the prompt they started with.</span><span class="sp"><button class="btn">Discard</button><button class="btn pri">Save</button></span></div>
+</div>

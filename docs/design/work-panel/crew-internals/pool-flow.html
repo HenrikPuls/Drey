@@ -1,0 +1,76 @@
+<title>Crew Session Pool</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one column, diagram first, then the three ledgers as a compact table. Anthrazit tokens like the Drey boards. */
+:root{--bg:#1b1d20;--panel:#232629;--line:#34393e;--fg:#e6e8ea;--muted:#9aa1a8;--dim:#6f767d;--accent:#4f8cff;--ok:#5bc08a;--warn:#f0b35a;--ui:"Segoe UI",system-ui,sans-serif;--mono:"Cascadia Mono",Consolas,ui-monospace,monospace;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--ui);padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:18px;font-weight:600;margin:0 0 4px}
+.lead{color:var(--muted);margin:0 0 18px;max-width:72ch}
+section{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:16px 20px;margin-bottom:20px;overflow-x:auto}
+h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+pre.mermaid{margin:0;background:transparent}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-top:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;border-top:0}
+td:first-child{white-space:nowrap;font-weight:500}
+code{font:12px var(--mono);color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+</style>
+<main>
+<h1>Crew Session Pool</h1>
+<p class="lead">Vorschlag für Frage 5: du sprichst mit Pia, jede Arbeit ist eine Session, eine Session fordert vor dem Start einen Slot und ein Modell vom Pool der Engine an. Beispielzahlen.</p>
+
+<section>
+<h2>Der Weg einer Aufgabe</h2>
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant O as Owner
+  participant P as Pia (Mission Control, direct call)
+  participant E as Engine · Pool
+  participant R as Crew runner
+  participant S as Session (Ben)
+  participant M as MCP (vault, tickets)
+  O->>P: "Build T-0121" / Accept / a question
+  P->>E: command (proposal confirmed by the owner)
+  E->>E: rank: phase build, part size M, priority high → tier 2 of Ben's pool
+  E->>E: request slot {persona ben, tier 2, context 40k}
+  alt a slot is free
+    E->>R: start session (model sonnet, run token)
+    R->>S: spawn harness, instruction = prompt + skills + memory + plan
+    S->>M: vault_search / tickets_read (token → ben → read only)
+    S-->>R: turns, usage per turn
+    R-->>E: telemetry: tokens, cost, gate verdict
+  else no slot
+    E-->>P: queued · waits for a sonnet slot (position 2)
+    P-->>O: "T-0121 waits for a slot, Tessa's test finishes in ~5 min"
+  end
+  E-->>O: ledgers: ticket · persona · provider
+</pre>
+</section>
+
+<section>
+<h2>Was der Pool hält</h2>
+<table>
+<tr><th>Begriff</th><th>Bedeutung</th><th>Woher</th><th>Beispiel</th></tr>
+<tr><td>Slot</td><td>Eine gleichzeitige Session auf einem Provider · Modell. Ein Slot ist belegt vom Spawn bis zur Freigabe (Run-Ende oder 1:1-Leerlauf).</td><td><code>fleet.pool.&lt;provider&gt;.&lt;model&gt;.size</code>, Settings → Budget and runners</td><td class="num">Claude Code: opus 2, sonnet 3 · Local: qwen3-coder 2</td></tr>
+<tr><td>Tier</td><td>Die Stufe im Pool der Persona, teuerste zuerst. Der Pool gewährt die <b>kleinste ausreichende</b> Stufe mit freiem Slot, nie eine höhere als angefordert.</td><td><code>models.pool</code> in persona.md, Reihenfolge = Stärke</td><td>Ben: [opus, sonnet, qwen3-coder]</td></tr>
+<tr><td>Rang der Aufgabe</td><td>Welche Stufe eine Aufgabe braucht. Pauls Plan gibt jedem Part eine Größe (S/M/L); die Phase hat eine Untergrenze (Plan und Review mindestens tier 2); ein Ticket-Pin überschreibt; du kannst auf der Karte ändern.</td><td>Part-Zeile <code>size:</code>, pipeline.md <code>min-tier:</code>, Frontmatter <code>model:</code></td><td>Part M, build → tier 2 (sonnet)</td></tr>
+<tr><td>Warten</td><td>Kein Prozess startet. Die Karte zeigt „queued · waits for a sonnet slot“, Pia kann es erklären, der Dispatcher nimmt die nächste Aufgabe, deren Stufe frei ist.</td><td>Engine-Queue, sichtbar im Service-Fenster</td><td>Position 2, ~5 min</td></tr>
+<tr><td>Budget</td><td>Drei Kassen, ein Betrag je Ebene: Ticket (Zuteilung, req-113), Persona (Tag), Provider (Tag). Erreicht eine Kasse ihre Grenze, gewährt der Pool keinen Slot mehr, die Aufgabe wartet und du bekommst eine Needs-you-Karte.</td><td>Frontmatter <code>allowance:</code>, persona.md <code>budget:</code>, Settings</td><td class="num">$2.50 · $5.00 · $15.00</td></tr>
+<tr><td>Zählung</td><td>Jede Session hat einen Datensatz (Run-Telemetrie): Tokens pro Turn, Cache-Anteil, Kosten vom Provider, Modell, das wirklich lief. Alles andere ist eine Summe daraus.</td><td><code>GET /report</code>, gruppiert nach Ticket · Phase · Persona · Modell</td><td>T-0121: $1.84 über 3 Phasen</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Was wo zu sehen ist</h2>
+<table>
+<tr><th>Fläche</th><th>Zeigt</th></tr>
+<tr><td>Crew-Tab (7f)</td><td>Pro Persona: Slots belegt / Pool, heute und diese Woche gegen das Budget, typischer Run, Wartende. Kopf: Budget heute, Slots gesamt.</td></tr>
+<tr><td>Mission Control</td><td>Pia antwortet aus den Kassen: „was kostet die Woche“, „warum wartet T-0122“, „nimm Opus für T-0130“ (ein Pin als Vorschlagskarte).</td></tr>
+<tr><td>Ticket-Karte / -Seite</td><td>Kumulierte Kosten gegen die Zuteilung (orange ab 70 %), Stufe und Modell je Part, Wartegrund.</td></tr>
+<tr><td>Drey Service</td><td>Die Sessions roh: Slot, Modell, Prozess, Stream; die Queue; die Provider-Kassen.</td></tr>
+</table>
+</section>
+</main>
