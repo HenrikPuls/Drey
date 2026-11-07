@@ -642,5 +642,6 @@
   "assistant.decision.own_answer": "Or write your own answer below",
   "assistant.decision.send": "Send “{label}”",
   "assistant.review.question": "Your review of {id}: **what next?**",
-  "assistant.review.send_back_hint": "The worker gets your line comments with the next run"
+  "assistant.review.send_back_hint": "The worker gets your line comments with the next run",
+  "assistant.review.accept_hint": "Accepts {id}, comments are dropped"
 }

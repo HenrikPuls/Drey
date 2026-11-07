@@ -20,6 +20,8 @@ import { MODEL_TARGET } from './targets-model.js';
 const REVIEW_COMMENTS = 'drey:tickets-review-comments';
 /** `drey:tickets-review-send-back`: `detail` is `{ id, handled }`; a tab that took it sets `handled`. */
 const REVIEW_SEND_BACK = 'drey:tickets-review-send-back';
+/** `drey:tickets-review-accept`: the same shape; the tab runs the ticket's one accept. */
+const REVIEW_ACCEPT = 'drey:tickets-review-accept';
 
 interface DecisionOption {
   readonly label: string;
@@ -101,6 +103,12 @@ export function createDecisionCard(api: DreyPluginApi, targets: TargetController
             description: api.i18n.t('assistant.review.send_back_hint'),
             recommended: true,
             run: () => Promise.resolve(askTab(REVIEW_SEND_BACK, id)),
+          },
+          {
+            label: api.i18n.t('decision.accept'),
+            description: api.i18n.t('assistant.review.accept_hint', { id }),
+            recommended: false,
+            run: () => Promise.resolve(askTab(REVIEW_ACCEPT, id)),
           },
         ],
       };

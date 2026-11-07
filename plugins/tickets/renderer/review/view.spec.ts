@@ -7,7 +7,7 @@ import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
 import { GO_TO_DECISION_CARD } from '../ticket-document/dom';
 import { ticketIdOfKey } from './register';
-import { REVIEW_COMMENTS, requestReviewSendBack, type ReviewCommentsDetail } from './events';
+import { REVIEW_COMMENTS, requestReviewAccept, requestReviewSendBack, type ReviewCommentsDetail } from './events';
 import { mountReview, type ReviewDeps } from './view';
 
 const flush = async (): Promise<void> => {
@@ -162,6 +162,16 @@ describe('Review tab', () => {
     expect((calls.find((c) => c.method === 'sendBack')!.payload as { comments: unknown[] }).comments).toEqual([
       { file: 'src/a.ts', line: 1, endLine: 3, text: 'Whole block.' },
     ]);
+  });
+
+  it('accepts through the same acceptTicket as the Ready card when the decision card asks, and drops the comments', async () => {
+    const { host, calls } = setup();
+    await flush();
+    expect(requestReviewAccept('T-0999')).toBe(false);
+    expect(requestReviewAccept('T-0121')).toBe(true);
+    await flush();
+    expect(calls.find((c) => c.method === 'acceptTicket')?.payload).toEqual({ id: 'T-0121' });
+    expect(host.querySelector('.tickets-review-comment')).toBeNull();
   });
 
   it('sends nothing back without comments, whoever asks (the decision card)', async () => {

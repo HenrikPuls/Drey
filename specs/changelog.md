@@ -14,9 +14,12 @@ Milestone numbers 197–199 are the other wave-4 rows'.
   `recommended` marked and selected first, `Or write your own answer below` and **`Send “<choice>”`** — a click on a row only selects,
   Send sends it as the next message. An open question is shown once: its message leaves the thread while the card stands.
 - **Send back with N comments** (7d; hand-off of milestone 196): the card also carries the Review tab's decision, `Your review of
-  T-0121: what next?` with *Send back with 2 comments* (recommended, selected). It listens to `drey:tickets-review-comments`
-  and, on Send, asks the tab with `drey:tickets-review-send-back` (the event names are copied, a plugin never imports another
-  plugin); it is offered on every target, the Model's too. **One hunk outside the Assistant:** the Review tab's interim hover-only
+  T-0121: what next?` with *Send back with 2 comments* (recommended, selected) and *Accept*. It listens to `drey:tickets-review-comments`
+  and, on Send, asks the tab with `drey:tickets-review-send-back` / `drey:tickets-review-accept` (the event names are copied, a
+  plugin never imports another plugin); it is offered on every target, the Model's too. The Assistant therefore knows "a
+  review" (two event names and the card's strings), because no engine card exists for it. Accept is the Ready card's own
+  `acceptTicket`, run by the tab (`review/events.ts` `REVIEW_ACCEPT` + `requestReviewAccept`, `review/view.ts` handler; the
+  comments are dropped with it) — no second accept path. **Hunks outside the Assistant (integrator-approved):** the two Review-tab additions above, and the Review tab's interim hover-only
   *Send back* on the Files head is gone (`plugins/tickets/renderer/review/view.ts`, its CSS in `review.css` and the three tests
   of `review/view.spec.ts` that clicked it now ask through the event).
 - **Composer** (9a, 7a): radius-16 box on `--bg-editor` with `--field-border`, the file chip `T-0017.md ×`, mic and send round at 30 px,
@@ -24,11 +27,11 @@ Milestone numbers 197–199 are the other wave-4 rows'.
   as 7x draws it) and the model name with a chevron — on a target the target's name instead. The prompts button stays but shows
   only while the row is hovered or focused (the boards draw no book).
 - **Strings:** `assistant.*` in the i18n catalog (ADR-0091); `decision-card.ts` carries `// i18n: catalog`.
-- **Specs:** `decision-card.spec.ts` (selection, Send, the Review option, its removal), `review/view.spec.ts` (send back through the
-  event), e2e `shape-in-drey` and `review-tab` (radio + Send; the card in the Assistant sends the ticket back), `assistant`
+- **Specs:** `decision-card.spec.ts` (selection, Send, the Review options, their removal), `review/view.spec.ts` (send back and accept through the
+  events), e2e `shape-in-drey` and `review-tab` (radio + Send; the card in the Assistant sends the ticket back), `assistant`
   (Settings is a tab since 197: the two specs that clicked its overlay close now close the tab). `e2e/fidelity-desk-assistant.spec.ts`
   is the opt-in capture (`DREY_FIDELITY_SHOTS=1`).
-- **Roadmap:** the Assistant rows of 9a and 7d are done; req-138 and req-139 (found by this row) and req-140 to req-142 (new) carry what
+- **Roadmap:** the Assistant rows of 9a and 7d are done; req-138 and req-139 (found by this row) and req-140, req-141 (new) carry what
   is not built.
 
 **Fidelity:** boards `DeskClean` (9a), `DeskWork` (7a), `DeskPlan` (7c), `DeskReview` (7d), right dock only; screenshots
@@ -47,9 +50,8 @@ line and chip, answer paragraphs, composer box, chip, input row, icon row, the d
 | 7a/7c/7d option descriptions (`one undo step…`) | a grey second line per option | none | feature not yet built — req-138 |
 | 7a step rows `✓ T-0121 · step 1…`, `4 min ago · Ben waits…` | under the answer | none | feature not yet built — req-139 |
 | 7c step rows `✓ Shape · decisions locked` | under the answer | none | feature not yet built — req-129 |
-| 7d `Accept` option | second row of the card | none | feature not yet built — req-140 |
-| 7a–7d chip `T-0121.md ×` / `Review T-0121 ×` | label without a verb, removable | `T-0121.md attached`, no × (the label is the tickets provider's, the chip is not the owner's to drop) | feature not yet built — req-141 |
-| 7a–7d icon row on a target | attach, allow edits, vault, web | attach, vault (a toggle that does nothing on a target is not drawn) | feature not yet built — req-142 |
+| 7a–7d chip `T-0121.md ×` / `Review T-0121 ×` | label without a verb, removable | `T-0121.md attached`, no × (the label is the tickets provider's, the chip is not the owner's to drop) | feature not yet built — req-140 |
+| 7a–7d icon row on a target | attach, allow edits, vault, web | attach, vault (a toggle that does nothing on a target is not drawn) | feature not yet built — req-141 |
 | 9a vs 7x conversation title | 20 px tall at y+6 on 9a, 18 px at y+7 on 7x | 9a's | the boards disagree by 1 px; 9a is the frame's board |
 | Bubble wash | 14 % accent | `--accent-surface`, 15 % | a token in place of a hex |
 | 7d thread (Ralf, Tessa relays), chat title `Review T-0121` | two relays | the mock model's lines | data instead of sample content |

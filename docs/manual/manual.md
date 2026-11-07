@@ -1005,7 +1005,7 @@ change it, the bin removes it. **Send back with 2 comments** moves the ticket
 back to the agent with each comment (file, line, text) in its Handover, so the
 next run reads them; as soon as the tab has a comment, the Assistant offers it as
 the first option of its decision card, **Your review of <ticket>: what next?** (pick it
-and press **Send “Send back with 2 comments”**). The Review tab has no Accept
+and press **Send “Send back with 2 comments”**), next to **Accept**. The Review tab has no Accept
 either: while the ticket waits at one of your checkpoints its head has the link
 **Decision waiting · go to the card**.
 

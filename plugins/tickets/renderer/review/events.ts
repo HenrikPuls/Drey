@@ -32,3 +32,19 @@ export function requestReviewSendBack(id: string): boolean {
   document.dispatchEvent(new CustomEvent<ReviewSendBackDetail>(REVIEW_SEND_BACK, { detail }));
   return detail.handled;
 }
+
+/** Asks the open Review tab of `detail.id` to accept the ticket (the card's second option, board 7d). */
+export const REVIEW_ACCEPT = 'drey:tickets-review-accept';
+
+export interface ReviewAcceptDetail {
+  readonly id: string;
+  /** The tab that took it sets it; still false after dispatch = no Review tab of that ticket is open. */
+  handled: boolean;
+}
+
+/** For the card's Accept: true when an open tab took it. The tab runs the Ready card's own `acceptTicket`. */
+export function requestReviewAccept(id: string): boolean {
+  const detail: ReviewAcceptDetail = { id, handled: false };
+  document.dispatchEvent(new CustomEvent<ReviewAcceptDetail>(REVIEW_ACCEPT, { detail }));
+  return detail.handled;
+}

@@ -16,7 +16,7 @@ import type { BoardSnapshot, MutationResult, TicketCard } from '../../shared/tic
 import { decisionLinkNode, pillNode } from '../ticket-document/dom';
 import { actionBarOf, assetUrl, offsetWords, proofOfText, titleCase, type ProofView } from '../ticket-document/model';
 import type { WorkRow } from '../work-groups';
-import { REVIEW_SEND_BACK, announceReviewComments, type ReviewSendBackDetail } from './events';
+import { REVIEW_ACCEPT, REVIEW_SEND_BACK, announceReviewComments, type ReviewAcceptDetail, type ReviewSendBackDetail } from './events';
 import {
   EMPTY_MARKS,
   clampSplit,
@@ -683,6 +683,34 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
   };
   document.addEventListener(REVIEW_SEND_BACK, onSendBack);
 
+  /** Accept from the decision card: the same `acceptTicket` the Ready card runs; the comments are dropped with it. */
+  const acceptTicket = async (): Promise<void> => {
+    if (card() === null || busy) {
+      return;
+    }
+    busy = true;
+    note = null;
+    paintList();
+    const result = await deps.mutate(`Accepting ${ticketId}`, () => deps.invoke('acceptTicket', { id: ticketId }));
+    busy = false;
+    if (result.ok) {
+      setMarks(EMPTY_MARKS);
+      composer = null;
+      paintAll();
+    } else {
+      setNote(result.error ?? i18n.t('review.refused'), true);
+    }
+  };
+
+  const onAccept = (event: Event): void => {
+    const detail = (event as CustomEvent<ReviewAcceptDetail>).detail;
+    if (detail.id === ticketId) {
+      detail.handled = true;
+      void acceptTicket();
+    }
+  };
+  document.addEventListener(REVIEW_ACCEPT, onAccept);
+
   const paintAll = (): void => {
     paintHead();
     paintProof();
@@ -738,6 +766,7 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     disposed = true;
     off();
     document.removeEventListener(REVIEW_SEND_BACK, onSendBack);
+    document.removeEventListener(REVIEW_ACCEPT, onAccept);
     root.remove();
   };
 }

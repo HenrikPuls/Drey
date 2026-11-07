@@ -70,12 +70,20 @@ describe('the decision card (boards 7a, 7c)', () => {
       asked.push(detail.id);
       detail.handled = true;
     });
+    document.addEventListener('drey:tickets-review-accept', (event) => {
+      const detail = (event as CustomEvent<{ id: string; handled: boolean }>).detail;
+      asked.push(`${detail.id}:accept`);
+      detail.handled = true;
+    });
     document.dispatchEvent(new CustomEvent('drey:tickets-review-comments', { detail: { id: 'T-0121', count: 2 } }));
     expect(card.node.hidden).toBe(false);
     expect(card.node.querySelector('.decision-question')?.textContent).toBe('Your review of T-0121: what next?');
-    expect(card.node.querySelector('.decision-label')?.textContent).toBe('Send back with 2 comments');
+    expect([...card.node.querySelectorAll('.decision-label')].map((n) => n.textContent)).toEqual(['Send back with 2 comments', 'Accept']);
     click(card.node.querySelector('.decision-send'));
     expect(asked).toEqual(['T-0121']);
+    click(card.node.querySelectorAll('.decision-option')[1]);
+    click(card.node.querySelector('.decision-send'));
+    expect(asked).toEqual(['T-0121', 'T-0121:accept']);
     card.destroy();
   });
 
