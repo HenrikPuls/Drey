@@ -5,6 +5,7 @@ import { DocKindRegistry, StatusItemsService } from '../plugin-host';
 import { KeybindingService } from '../keybindings';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
+import { SettingsTabService } from '../settings/settings-tab.service';
 import { UpdateService } from '../services/update.service';
 
 /**
@@ -23,6 +24,7 @@ import { UpdateService } from '../services/update.service';
 export class StatusBar {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
+  protected readonly settingsTab = inject(SettingsTabService);
   protected readonly update = inject(UpdateService);
   private readonly docKinds = inject(DocKindRegistry);
   protected readonly statusItems = inject(StatusItemsService).items;

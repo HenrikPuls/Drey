@@ -27,8 +27,18 @@ board elements from its own files and handed them to the frame; the owner ruled 
 ### Milestone 197 — wave 4.4: Settings and the desktop Autopilot item match boards 7g and 10t
 
 **Not yet manually verified by the owner.** Wave row 4.4 (`desk-settings-autopilot`). Boards: `DeskSettings` (7g) and the desktop part of
-`Autopilot` (10t). The container of 7g — Settings as an editor tab — is the owner's ruling (a / b / c, below) and stays open.
+`Autopilot` (10t). The container of 7g — Settings as an editor tab — was ruled by the owner (2026-11-07, option a: "4.4 builds the tab") and is built here.
 
+- **Settings is an editor tab (board 7g; ADR-0010 and ADR-0057 later changes).** `SettingsTabService`
+  (`src/app/settings/settings-tab.service.ts`) registers a core doc kind `settings` on the `DocKindRegistry` seam and
+  mounts `<app-settings>` into the pane's body (`createComponent`); the tab is titled "Settings" with its X, carries no glyph,
+  is one instance under the key `settings://` (opening it again focuses it), the status bar says "Settings" while it is
+  active, and the session restores its presence only. The status-bar entry, File → Settings, `Mod+,` and Help → About call
+  `SettingsTabService.open(category?)`; the overlay mount in `app.html` is gone with its backdrop, footer and Close.
+  `Escape` (focus inside the tab or on nothing) closes the tab after a flush; closing by the X flushes too, and a failed save
+  at that moment ends the session with the error unseen (the draft is dropped). `SettingsService.openScreen` / `closeScreen`
+  now mark the tab's session (`closeScreen(session)` ignores a stale one). A page named after the fact (Help → About while
+  the tab is open) is selected by an effect on `openCategory`.
 - **Settings surface (`src/app/settings/**`).** Search block across the top (38 px outer, radius 8, icon, placeholder, `N settings`
   while searching, a clear button), the scope tabs under it (34 px, 2 px bar, the scope's note on the right), then a 257 px section tree
   (single-line 30 px rows, chevron slot on the left, children indented 28 px behind the same slot, hit counts only while searching, rows
@@ -52,6 +62,13 @@ board elements from its own files and handed them to the frame; the owner ruled 
 - **Autopilot popover (10t).** Measured against the board's markup, not by eye: the board's 340 px is a content box (outer 370), its chips
   are 28 px outer, and it sits 7 px (not 8) above the bar; every child rectangle now equals the board's (dialog 370×218, title 15/15,
   segments 45, sentence 93, chips 122, divider 160, stop 171; `test-results/fidelity/Autopilot.desktop-rects.json`).
+- **Hunks outside `settings/` for the tab (owner-widened ownership):** `src/app/app.html` (the overlay mount removed),
+  `src/app/app.ts` (inject the service so the kind is registered before the session restores; the `settings.open` command
+  calls it), `src/app/status-bar/status-bar.{html,ts}` and `src/app/titlebar/menu.service.ts` (the entry points),
+  `src/app/tab-bar/tab-bar.ts` (no glyph for the `settings` kind), `src/app/services/settings.service.ts` (session
+  number). `src/app/panes/` and `EditorService` are untouched: the registry seam and `addPluginDoc` were enough.
+  e2e: `settings-appearance`, `settings-vscode`, `link-fallback`, `manual-screenshots`, `search` close the tab with
+  Escape instead of the old Close / X.
 - **Hunks outside the row's files:** `plugins/tickets/renderer/index.ts` (the module-level popover toggle, the page's `openAutopilot` hook,
   `deskDeps.toggleAutopilot`), `plugins/tickets/renderer/desk-deps.ts` (one optional field), `plugins/tickets/renderer/team/team-view.ts`
   (the chip; 4.2's file, merged), `e2e/plugins.spec.ts` (the renamed category). `public/manual/manual.md` is the build's copy of the manual.
@@ -74,7 +91,8 @@ the item 114.8×28, the popover's right edge item + 51 px, 7 px above the bar.
 
 | Region | Board | Build | Row |
 |---|---|---|---|
-| 7g container | `Settings ×` tab in the editor area, frame around it | modal overlay (title bar, tab bar, status bar behind the backdrop) | **open — the owner's ruling (a/b/c)**: Settings as an editor tab is a base change (ADR-0010) |
+| 7g container | `Settings ×` tab in the editor area, frame around it | the same: a `Settings ×` tab, one instance, the frame around it | fixed (owner ruling a, 2026-11-07) |
+| 7g frame | no panels, no bottom band; tab `T-0017 · A8 large modules` | both docks folded and empty in the shot; the Work view keeps its Capacity band (milestone 180); the file tab reads `T-0017.md` | the band is the Work view's own (owner ruling, milestone 180); the tab title is 4.3's ticket tab, a file opened by the palette here |
 | 7g search | filter button (changed only), `Changed · default N` labels, the accent bar on a changed row | clear button only; the bar is drawn transparent | feature not yet built — req-132 |
 | 7g tree | `Commonly used` first | not there | feature not yet built — req-133 |
 | 7g tree | Appearance, Assistant ›, Editor ›, Files, Keyboard shortcuts, MCP server, Panels and plugins, Tickets, Vault, About | the app's pages: Assistant tools, Daily notes, Entry format, LLM, Spelling, Updates, Actions, Git, Tags, Tasks beside them, no groups, a scrollbar | **open — for the integrator**: the app has pages the board does not list; no id exists |

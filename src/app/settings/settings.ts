@@ -3,18 +3,22 @@ import {
   Component,
   ElementRef,
   Injector,
+  type OnDestroy,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import type { MessageKey } from '../../../shared/i18n';
 import { I18nPipe } from '../i18n';
 import { Icon } from '../icons/icon';
-import { OverlayGuardDirective } from '../services/overlay-guard.directive';
+import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
+import { SETTINGS_DOC_KEY } from './settings-doc';
 import { SettingsCategoryRegistry } from './settings-registry.service';
 import {
   SETTINGS_SCOPES,
@@ -31,32 +35,39 @@ const SPY_OFFSET = 24;
 
 /**
  * The Settings screen: master-detail per CLAUDE.md's "UI/UX Design" -- a
- * category list on the left, the detail pane on the right. Shown as a
- * full-surface overlay (`App` renders it when
- * `SettingsService.screenOpen`). The category list is a data-driven
+ * category list on the left, the detail pane on the right. Shown as an
+ * editor tab (board 7g; `SettingsTabService` mounts it into the pane's body).
+ * The category list is a data-driven
  * registry (`SettingsCategory[]`), rendered through `NgComponentOutlet`, so
  * a new category is one array entry -- no `@switch` to extend.
  *
  * Every change is applied as it is made (ADR-0010 later change): a pane
  * writes `SettingsService.draft`, which saves itself. This component tells
  * the service while a text field has the focus -- the save then waits for
- * the field to be left or Enter -- and flushes before the screen closes.
- * The footer carries the save status and one Close button; no Save, no
- * Discard, no "unsaved changes" prompt.
+ * the field to be left or Enter -- and flushes before the tab closes.
+ * No footer, no Save, no Discard, no "unsaved changes" prompt; Escape
+ * closes the tab like any tab's close.
  */
 @Component({
   selector: 'app-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [I18nPipe, Icon, NgComponentOutlet, OverlayGuardDirective],
+  imports: [I18nPipe, Icon, NgComponentOutlet],
   templateUrl: './settings.html',
   styleUrl: './settings.css',
   host: {
-    '(document:keydown.escape)': 'requestClose()',
+    tabindex: '-1',
+    style: 'display: flex; flex: 1; min-width: 0; min-height: 0; outline: none',
+    '(document:keydown.escape)': 'onEscape($event)',
     '(window:blur)': 'flush()',
   },
 })
-export class Settings {
+export class Settings implements OnDestroy {
   protected readonly settings = inject(SettingsService);
+  private readonly editor = inject(EditorService);
+  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+
+  /** The session this tab started (`SettingsService.openScreen`). */
+  private readonly session = this.settings.openScreen(this.settings.openCategory() ?? undefined);
   private readonly registry = inject(SettingsCategoryRegistry);
 
   /** Core categories + plugin-contributed pages, from the registry. */
@@ -64,6 +75,23 @@ export class Settings {
 
   /** A caller-named category (Help -> About) wins; falls back to the first. */
   private readonly presetCategory = this.settings.openCategory();
+
+  constructor() {
+    // Focus the tab itself (no ring), so Escape and the keys reach it without a field being picked.
+    afterNextRender(() => this.hostEl.focus({ preventScroll: true }), { injector: this.injector });
+    // Help -> About while the tab is already open names a page after the fact.
+    effect(() => {
+      const wanted = this.settings.openCategory();
+      if (wanted !== null && this.categories().some((category) => category.id === wanted)) {
+        untracked(() => {
+          if (wanted !== this.selected()) {
+            this.selectCategory(wanted);
+          }
+          this.settings.openCategory.set(null);
+        });
+      }
+    });
+  }
 
   protected readonly selected = signal<string>(
     this.presetCategory !== null &&
@@ -297,23 +325,39 @@ export class Settings {
   }
 
   /**
-   * Saves what is pending, then closes. A failed save keeps the screen
-   * open with the error in the footer, whose button then closes without
-   * saving (`closeWithoutSaving`).
+   * Saves what is pending, then closes the tab. A failed save keeps the tab
+   * open with the error under the page, whose button then closes without
+   * saving (`closeWithoutSaving`). Escape first leaves a search.
    */
   protected async requestClose(): Promise<void> {
     if (this.searching()) {
-      // Escape or the backdrop first leaves the search, then the screen.
       this.clearSearch();
       return;
     }
     if (await this.settings.flush()) {
-      this.settings.closeScreen();
+      void this.editor.closeTab(SETTINGS_DOC_KEY);
+    }
+  }
+
+  /**
+   * Escape closes the tab when it was meant for it: focus inside the tab, or on nothing (a button
+   * that went away leaves it on the body). Focus in another pane, the palette or a dialog is theirs.
+   */
+  protected onEscape(event: Event): void {
+    const target = event.target;
+    if (target === document.body || (target instanceof Node && this.hostEl.contains(target))) {
+      void this.requestClose();
     }
   }
 
   protected closeWithoutSaving(): void {
-    this.settings.closeScreen();
+    this.settings.closeScreen(this.session);
+    void this.editor.closeTab(SETTINGS_DOC_KEY);
+  }
+
+  /** The tab went (closed, or another tab shown): save what is pending, end the session. */
+  ngOnDestroy(): void {
+    void this.settings.flush().finally(() => this.settings.closeScreen(this.session));
   }
 }
 

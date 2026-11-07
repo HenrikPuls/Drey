@@ -189,7 +189,32 @@ test('boards 7g and 10t desktop: Settings, the Autopilot item', async ({ page, e
   await page.keyboard.press('Escape');
   await pushChain(electronApp, { state: 'on' });
 
-  // 7g: Settings, the Tickets category, All devices.
+  // 7g: the Work view with both docks folded, the ticket's tab, then the Settings tab (Tickets, All devices).
+  await page.keyboard.press('Control+2');
+  await page.waitForTimeout(500);
+  // The board draws no side panel: every panel in the left dock, the right dock empty, both docks folded. The Work view keeps its Capacity band (milestone 180).
+  await page.evaluate(() => {
+    const ids = [...document.querySelectorAll<HTMLElement>('app-dock-strip button[data-widget]')].map((b) => b.dataset['widget'] ?? '');
+    const saved = JSON.parse(localStorage.getItem('drey.dock') ?? '{}') as { active: string; views: Record<string, Record<string, unknown>> };
+    const view = saved.views[saved.active];
+    saved.views[saved.active] = {
+      ...view,
+      dock: { left: ids, right: [], bottom: (view['dock'] as { bottom: string[] }).bottom },
+      bottomH: 140,
+      open: Object.fromEntries(ids.map((id) => [id, false])),
+      foldedSides: ['left', 'right'],
+    };
+    localStorage.setItem('drey.dock', JSON.stringify(saved));
+  });
+  await page.reload();
+  await sizeWindow(electronApp);
+  await expect(page.locator('app-titlebar [role="tab"]', { hasText: 'Work' })).toBeVisible({ timeout: 30_000 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.keyboard.press('Control+p');
+  await page.locator('.palette input').fill('T-0017');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
   await page.locator('app-status-bar .settings').click();
   await expect(page.locator('app-settings .category').first()).toBeVisible();
   await page.locator('app-settings .category', { hasText: 'Tickets' }).first().click();

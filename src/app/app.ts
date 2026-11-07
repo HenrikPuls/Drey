@@ -34,7 +34,7 @@ import { ViewService } from './views';
 import { Titlebar } from './titlebar';
 import { WindowChromeService } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
-import { Settings } from './settings/settings';
+import { SettingsTabService } from './settings/settings-tab.service';
 import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
 import { EditorContextMenuService } from './editor-context-menu/editor-context-menu.service';
 import { EditorContextMenuRegistry } from './plugin-host';
@@ -64,7 +64,6 @@ import { EmojiPicker } from './emoji-picker/emoji-picker';
     Dock,
     StatusBar,
     PaneLayout,
-    Settings,
     ConfirmationDialog,
     LinkUpdateDialog,
     ConflictDialog,
@@ -85,6 +84,7 @@ export class App {
   protected readonly ipcAvailable = typeof window !== 'undefined' && !!window.dreyApi;
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
+  private readonly settingsTab = inject(SettingsTabService);
   protected readonly dock = inject(DockService);
   protected readonly zen = inject(ZenService);
 
@@ -421,12 +421,8 @@ export class App {
       id: 'settings.open',
       label: 'Open settings',
       keybinding: 'Mod+,',
-      run: () => {
-        // Re-opening would re-seed the draft and drop unsaved changes.
-        if (!this.settings.screenOpen()) {
-          this.settings.openScreen();
-        }
-      },
+      // One tab: opening it again focuses it (board 7g, ADR-0010 later change).
+      run: () => this.settingsTab.open(),
     });
     keys.register({
       id: 'layout.reset',

@@ -33,7 +33,7 @@ test('a link resolves into a second vault once the vault opted in, naming the va
     .locator('label.switch-row', { hasText: 'Also look for link targets in other vaults (main)' })
     .locator('input')
     .check();
-  await page.locator('app-settings .close').click();
+  await page.keyboard.press('Escape');
 
   // Repaint the marks: an edit rebuilds the decorations.
   await page.locator('app-editor .cm-content').click();

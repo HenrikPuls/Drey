@@ -41,3 +41,20 @@ test('counts show, search says what is missing and clears, scope tabs list a sco
   await page.locator('app-settings .scope-tab', { hasText: 'This vault' }).click();
   await expect(page.locator('app-settings .result').first()).toBeVisible();
 });
+
+test('Settings is one editor tab: the entry and Ctrl+, focus it, Escape closes it (board 7g)', async ({ page }) => {
+  const tab = page.locator('app-tab-bar .tab', { hasText: 'Settings' });
+  await page.locator('app-status-bar .settings').click();
+  await expect(tab).toHaveCount(1);
+  await expect(page.locator('app-settings')).toBeVisible();
+  await expect(page.locator('app-settings .footer, app-settings .actions-bar, app-settings .backdrop')).toHaveCount(0);
+  // Another tab in front, then the chord brings the one tab back.
+  await page.keyboard.press('Control+n');
+  await expect(page.locator('app-settings')).toHaveCount(0);
+  await page.keyboard.press('Control+,');
+  await expect(tab).toHaveCount(1);
+  await expect(page.locator('app-settings')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tab).toHaveCount(0);
+  await expect(page.locator('app-settings')).toHaveCount(0);
+});

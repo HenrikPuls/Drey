@@ -1,5 +1,6 @@
 import { Component, input, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
 import { Settings } from './settings';
 import { SettingsCategoryRegistry } from './settings-registry.service';
@@ -26,8 +27,10 @@ const fakeService = {
   saveError: signal<string | null>(null),
   isDirty: signal(false),
   flush: () => Promise.resolve(true),
-  closeScreen: () => undefined,
+  openScreen: () => 1,
+  closeScreen: vi.fn(),
 };
+const fakeEditor = { closeTab: vi.fn(() => Promise.resolve(true)) };
 
 describe('Settings screen (E13-22)', () => {
   let fixture: ComponentFixture<Settings>;
@@ -36,8 +39,12 @@ describe('Settings screen (E13-22)', () => {
   beforeEach(() => {
     // Opens on the plugin page: the core pages need the real service.
     fakeService.openCategory.set('long');
+    fakeEditor.closeTab.mockClear();
     TestBed.configureTestingModule({
-      providers: [{ provide: SettingsService, useValue: fakeService }],
+      providers: [
+        { provide: SettingsService, useValue: fakeService },
+        { provide: EditorService, useValue: fakeEditor },
+      ],
     });
     TestBed.inject(SettingsCategoryRegistry).registerPluginPage(
       {
@@ -134,9 +141,26 @@ describe('Settings screen (E13-22)', () => {
     expect(search.getAttribute('placeholder')).toBe('Search settings');
   });
 
-  it('draws no footer, no Close button and no X (board 7g); Escape and the backdrop leave', () => {
-    expect(root.querySelector('footer, .actions-bar, .close')).toBeNull();
+  it('draws no footer, no Close button and no X (board 7g); Escape closes the tab', async () => {
+    expect(root.querySelector('footer, .actions-bar, .close, .backdrop')).toBeNull();
     expect(root.textContent).not.toContain('Changes are saved automatically');
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await fixture.whenStable();
+    expect(fakeEditor.closeTab).toHaveBeenCalledTimes(1);
+    // Escape meant for something else (focus in another element) does not close it.
+    const other = document.body.appendChild(document.createElement('input'));
+    other.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    other.remove();
+    await fixture.whenStable();
+    expect(fakeEditor.closeTab).toHaveBeenCalledTimes(1);
+    expect(fakeEditor.closeTab).toHaveBeenCalledWith('settings://');
+  });
+
+  it('ends its session when the tab goes', async () => {
+    fixture.destroy();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fakeService.closeScreen).toHaveBeenCalledWith(1);
   });
 
   it('is operable by keyboard: every entry is a native button', () => {

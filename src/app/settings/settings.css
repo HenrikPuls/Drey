@@ -1,30 +1,15 @@
-.backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 30;
-}
-
 /*
  * The Settings surface as board 7g draws it: a search block, the scope tabs,
- * then the section tree and the page. It is still the overlay of ADR-0010
- * until the owner rules on Settings as an editor tab; the panel only grows
- * with the window.
+ * then the section tree and the page -- the body of an editor tab, as wide
+ * as its pane (ADR-0010 later change, milestone 197).
  */
 .panel {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  z-index: 31;
-  /* Grows with the window (E13-22); the pages inside share one width. */
-  width: min(1400px, calc(100vw - 48px));
-  height: min(900px, calc(100vh - 48px));
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-main);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 

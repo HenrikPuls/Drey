@@ -1903,11 +1903,13 @@ Open with the status-bar entry or `Ctrl+,`. Core categories are
 alphabetical, plugin-contributed ones follow, *About* closes the list.
 Every change applies as you make it — there is no *Save* and no
 *Discard*. A switch or a list choice acts at once; a typed value is
-stored when you leave the field or press Enter. There is no footer and no
-*Close* button: `Esc` or a click beside the panel leaves Settings, and only a
-failed save shows a message (with *Close without saving*).
+stored when you leave the field or press Enter. Settings is a tab
+like any other (File → Settings, `Ctrl+,`, or the Settings entry in the status bar;
+opening it again shows the tab that is open). There is no footer and no *Close*
+button: `Esc` or the tab's X closes it, and only a failed save shows a message
+(with *Close without saving*).
 
-The screen grows with the window, and every page uses the same width — wide
+The tab is as wide as its pane, and every page uses the same width — wide
 tables and editors fill it instead of the page jumping between a narrow and a
 wide layout. A long page is split into sections: a category with sections has a
 small arrow in the list; open it to see the sections, click one to scroll the
