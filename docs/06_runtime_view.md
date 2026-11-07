@@ -3810,7 +3810,7 @@ sequenceDiagram
     participant V as Board / Crew tab, Capacity band
     participant O as Owner
 
-    E-->>X: board-changed / fleet-changed (SSE, debounced)
+    E-->>X: board-changed / fleet-changed (SSE signal, debounced; for the fleet, main reads runs + chain and sends them as the snapshot, D-35)
     X->>X: refreshBoard / applyFleetSnapshot
     X-->>V: DeskDeps.subscribe listeners (notifyViews, fleet listeners)
     X-->>T: same signal
