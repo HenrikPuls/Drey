@@ -1,3 +1,9 @@
+### Milestone 206 — D-44 the iPad scroll flake, D-47 the empty bottom band
+
+**Not yet manually verified by the owner.**
+
+- **D-44, `tickets-remote` "keeps the ticket detail scroll across live redraws" (iPad), flaky 20–50 %.** Cause: the spec, not the client. `kanbanView` restores the detail pane's scroll in a `requestAnimationFrame` after each build and writes the remembered offset (0 for a freshly selected ticket); the spec set `scrollTop = 300` before that frame under load, the restore overwrote it with 0, and the later redraw correctly restored 0. Fix: the restore marks the pane `data-scroll-restored`, the spec waits for the mark before it scrolls (no timeout changed). 30 of 30 runs green under 10 CPU burners (before: failed in every repeat of 16 and 24); the row is in `docs/testing-flakes.md`. Spec: e2e `tickets-remote`.
+
 ### Milestone 203 — req-146: the fidelity review's rulings (SDK 1.51), D-39 and D-48
 
 **Not yet manually verified by the owner.** The owner's rulings on the open rows of milestone 202, O1–O13 without O9 and O11 (those are req-147–149), plus D-48. The rows are updated in [fidelity-review-2026-11.md](../docs/design/work-panel/fidelity-review-2026-11.md).

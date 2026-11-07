@@ -98,6 +98,24 @@ removes. Removing the app's scroll restore turns the spec red.
 | plain | 7 of 16 runs failed | 0 of 40 |
 | 8 CPU burners | not measured | 0 of 24 |
 
+## D-44 — the iPad's "keeps the ticket detail scroll" (e2e, `tickets-remote`)
+
+Failed in a quarter or more of the runs under CPU load (10 burners; the owner measured 20-50 %), passed 12 of 12 alone. **Cause: the
+spec, not the client.** `kanbanView` restores the detail pane's scroll in a
+`requestAnimationFrame` after each build and writes the remembered offset, 0 for
+a freshly selected ticket. The spec set `scrollTop = 300` right after the title
+appeared; under load that came before the first build's restore frame, which
+then wrote 0 over it, and the later redraw correctly remembered 0 (a trace of
+the builds showed `rememberedDetailTop` 0 at the redraw, the live pane at 0).
+**Fix:** the restore leaves a mark (`data-scroll-restored` on the pane), and the
+spec waits for it before it scrolls. No timeout changed.
+
+| `tickets-remote` scroll spec | Before | After |
+|---|---|---|
+| plain, 12 runs | 0 failed | 0 failed |
+| 10 CPU burners, 16 and 24 runs | failed in both repeats (2 or more each) | not repeated |
+| 10 CPU burners, 30 runs | not measured | 0 failed |
+
 ## Rules for new tests
 
 - A component that starts background work exposes how to wait for it

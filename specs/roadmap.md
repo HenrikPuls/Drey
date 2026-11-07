@@ -146,12 +146,6 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 - **D-46 — `persona.skills` never reaches a run** (M; owner request, outside the list, 2026-11-07; found by wave 4.9 reading the engine). The persona record carries `skills`, the boards (7k, 5d, 10i) say the skills ride along, and the runner never loads them into a run's prompt or workspace. Done when a run of a persona with skills has them in its prompt/workspace, proved by an engine spec; the 7k Skills sentence stays a "feature not yet built — D-46" row until then.
 
-- **D-44 — `tickets-remote.spec.ts` "keeps the ticket detail scroll across live redraws" (iPad) is flaky** (S; owner request,
-  outside the list, 2026-11-07; found by the e2e run after the 9a merge). Fails 20–50 % of runs on every commit from 7156413b
-  to 877d835c (fresh builds, 10+ runs each), so no merge broke it: after `padMove` the old detail node is gone (asserted) but
-  `.detail` scrollTop reads 0 instead of ≥ 280 — the redraw restores the scroll later than the poll, or not at all. Done when
-  12 of 12 runs pass; the fix is either the client restoring scroll synchronously on the redraw or the spec waiting for the
-  restore signal, decided by what the client actually does (docs/testing-flakes.md gets the row).
 
 (D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.; what the wave-3 smoke could not see — the Autopilot status item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 

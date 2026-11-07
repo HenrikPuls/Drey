@@ -392,7 +392,11 @@ test.describe('on an iPad in landscape (R6)', () => {
 
     // The pane genuinely overflows (the fixture's long Description); a
     // programmatic scrollTop set fires the scroll the memory listens for.
+    // The build's own restore runs one frame later and writes the remembered
+    // offset (0 for a fresh ticket) -- a scroll set before it is overwritten
+    // (D-44), so wait for the pane's restore mark first.
     const pane = page.locator('.detail');
+    await expect(pane).toHaveAttribute('data-scroll-restored', 'true');
     await pane.evaluate((el) => {
       el.scrollTop = 300;
     });
