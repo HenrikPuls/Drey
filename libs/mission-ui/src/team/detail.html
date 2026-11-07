@@ -1,46 +1,66 @@
 @if (isOpen()) {
   <section class="detail" role="dialog" aria-modal="true" [attr.aria-label]="title()">
-    <mc-app-bar [title]="title()" [sub]="role() || null" back="Crew" (backed)="close()">
-      <span bar-end class="avatar" [style.background-color]="color()" aria-hidden="true">{{
-        initialsOf(title())
-      }}</span>
-    </mc-app-bar>
+    @if (pad()) {
+      <div class="pd-head">
+        <mc-ph-avatar [name]="title()" [color]="color()" [size]="40" />
+        <span class="pd-who">
+          <b>{{ title() }}</b>
+          <span class="pd-role">{{ role() }}</span>
+        </span>
+        @if (canPause()) {
+          <button type="button" class="pd-pause" [attr.aria-label]="(paused() ? 'crew.pad.resume_x' : 'crew.pad.pause_x') | t: { name: title() }" [attr.title]="(paused() ? 'crew.pad.resume_x' : 'crew.pad.pause_x') | t: { name: title() }" (click)="togglePause()">
+            <mc-ph-icon [name]="paused() ? 'play' : 'pause'" />
+          </button>
+        }
+      </div>
+      <div class="pd-tabs" role="tablist" [attr.aria-label]="'crew.pad.tabs' | t">
+        <button type="button" role="tab" [class.on]="tab() === 'chat'" [attr.aria-selected]="tab() === 'chat'" (click)="setTab('chat')">{{ (improveCount() > 0 ? 'crew.pad.tab_chat_n' : 'crew.pad.tab_chat') | t: { n: improveCount() } }}</button>
+        <button type="button" role="tab" [class.on]="tab() === 'mem'" [attr.aria-selected]="tab() === 'mem'" (click)="setTab('mem')">{{ (memCount() > 0 ? 'crew.pad.tab_memory_n' : 'crew.pad.tab_memory') | t: { n: memCount() } }}</button>
+        <button type="button" role="tab" [class.on]="tab() === 'setup'" [attr.aria-selected]="tab() === 'setup'" (click)="setTab('setup')">{{ 'crew.pad.tab_setup' | t }}</button>
+      </div>
+    } @else {
+      <mc-app-bar [title]="title()" [sub]="role() || null" back="Crew" (backed)="close()">
+        <span bar-end class="avatar" [style.background-color]="color()" aria-hidden="true">{{
+          initialsOf(title())
+        }}</span>
+      </mc-app-bar>
 
-    <div class="seg" role="tablist" aria-label="Persona tabs">
-      <button
-        type="button"
-        role="tab"
-        [class.on]="tab() === 'chat'"
-        [attr.aria-selected]="tab() === 'chat'"
-        (click)="setTab('chat')"
-      >
-        1:1
-        @if (improveCount() > 0) {
-          <span class="cnt">· {{ improveCount() }}</span>
-        }
-      </button>
-      <button
-        type="button"
-        role="tab"
-        [class.on]="tab() === 'mem'"
-        [attr.aria-selected]="tab() === 'mem'"
-        (click)="setTab('mem')"
-      >
-        Memory
-        @if (memCount() > 0) {
-          <span class="cnt">· {{ memCount() }}</span>
-        }
-      </button>
-      <button
-        type="button"
-        role="tab"
-        [class.on]="tab() === 'setup'"
-        [attr.aria-selected]="tab() === 'setup'"
-        (click)="setTab('setup')"
-      >
-        Setup
-      </button>
-    </div>
+      <div class="seg" role="tablist" aria-label="Persona tabs">
+        <button
+          type="button"
+          role="tab"
+          [class.on]="tab() === 'chat'"
+          [attr.aria-selected]="tab() === 'chat'"
+          (click)="setTab('chat')"
+        >
+          1:1
+          @if (improveCount() > 0) {
+            <span class="cnt">· {{ improveCount() }}</span>
+          }
+        </button>
+        <button
+          type="button"
+          role="tab"
+          [class.on]="tab() === 'mem'"
+          [attr.aria-selected]="tab() === 'mem'"
+          (click)="setTab('mem')"
+        >
+          Memory
+          @if (memCount() > 0) {
+            <span class="cnt">· {{ memCount() }}</span>
+          }
+        </button>
+        <button
+          type="button"
+          role="tab"
+          [class.on]="tab() === 'setup'"
+          [attr.aria-selected]="tab() === 'setup'"
+          (click)="setTab('setup')"
+        >
+          Setup
+        </button>
+      </div>
+    }
 
   <ng-template #improvementsBlock>
   @if (frictionLine(); as line) {
@@ -336,124 +356,175 @@
       }
       <!-- ============ PANE: SETUP ============ -->
       @case ('setup') {
-        <div class="pane">
-          <div class="pane-body">
-            <p class="hint">
-              The mirror to check — changing also works through the chat, always with a diff and
-              your confirmation.
-            </p>
-            <div class="set-row avatar-row">
-              <span class="pava big" [style.background-color]="color()" aria-hidden="true">{{
-                initialsOf(title())
-              }}</span>
-              <div class="sl">
-                <span class="lt">{{ title() }}</span>
-                <span class="ls"
-                  >{{ role() }}{{ persona()?.model ? ' · ' + persona()?.model : ''
-                  }}{{ persona()?.worker ? ' · ' + persona()?.worker : '' }}</span
-                >
+        @if (pad() && !editing()) {
+          <div class="pd-setup">
+            @if (poolRows(); as rows) {
+              <div class="pd-sec">
+                <span class="pd-cap">{{ 'crew.phone.pool' | t }}</span>
+                @for (entry of rows; track entry.key; let first = $first; let i = $index) {
+                  @if (!first) {
+                    <div class="pd-when"><span class="pd-when-bar"></span>{{ 'crew.phone.when_full' | t: { name: rows[i - 1]!.label } }}</div>
+                  }
+                  <div class="pd-pool">
+                    <span class="pd-n" [class.first]="first">{{ i + 1 }}</span>
+                    <div class="pd-pool-body">
+                      <div class="pd-pool-name">
+                        <b>{{ entry.label }}</b>
+                        @if (entry.model !== '') {
+                          <span class="pd-chip">{{ entry.model }}</span>
+                        }
+                      </div>
+                      <span class="pd-pool-note">{{ (first ? 'crew.phone.first_choice' : 'crew.phone.overflow') | t }}</span>
+                    </div>
+                  </div>
+                }
               </div>
-            </div>
-
-            <div class="ghead">Model &amp; Worker</div>
-            <button
-              type="button"
-              class="set-row"
-              (click)="openSheet('model')"
-              [disabled]="readOnly() || modelOptions().length === 0"
-            >
-              <div class="sl">
-                <span class="lt">Default model</span>
-                <span class="ls">Resolution: ticket pin &gt; default &gt; router</span>
+            }
+            @if (costToday(); as cost) {
+              <div class="pd-sec">
+                <span class="pd-cap">{{ 'crew.phone.cost' | t }}</span>
+                <div class="pd-costs">
+                  <div class="pd-cost">
+                    <span class="pd-cost-cap">{{ 'crew.phone.today_cap' | t }}</span>
+                    <b>{{ cost.today }}</b>
+                    @if (cost.budget !== null) {
+                      <span class="pd-cost-cap">{{ 'crew.pad.of_budget' | t: { budget: cost.budget } }}</span>
+                    }
+                  </div>
+                </div>
               </div>
-              <span class="val">{{ persona()?.model || '—' }}</span>
-            </button>
-            <button type="button" class="set-row" (click)="poolTap()">
-              <div class="sl">
-                <span class="lt">Pool</span>
-                <span class="ls">Allowed models, order = fallback</span>
-              </div>
-              <span class="val muted">{{ poolWords() || '—' }}</span>
-            </button>
-            <button type="button" class="set-row" (click)="cycleRouter()" [disabled]="readOnly()">
-              <div class="sl">
-                <span class="lt">Router</span>
-                <span class="ls">Picks only within the pool</span>
-              </div>
-              <span class="val">{{ routerValue() }}</span>
-            </button>
-            <button
-              type="button"
-              class="set-row"
-              (click)="openSheet('worker')"
-              [disabled]="readOnly()"
-            >
-              <div class="sl">
-                <span class="lt">Worker</span>
-                <span class="ls">Harness (repo) or direct call</span>
-              </div>
-              <span class="val">{{ persona()?.worker || '—' }}</span>
-            </button>
-
-            <div class="ghead">Prompt</div>
-            <textarea
-              class="promptedit"
-              rows="8"
-              [value]="promptDraft()"
-              (input)="onPromptInput($event)"
-              placeholder="A new prompt text replaces prompt.md."
-              aria-label="Prompt text"
-              [disabled]="readOnly()"
-            ></textarea>
-            @if (promptError(); as error) {
-              <p class="pane-error" role="alert">{{ error }}</p>
             }
             @if (!readOnly()) {
-              <div class="pacts-inline">
-                <button
-                  type="button"
-                  class="btn"
-                  [disabled]="promptDraft().trim() === '' || setupBusy() === 'prompt'"
-                  (click)="savePrompt()"
-                >
-                  {{ setupBusy() === 'prompt' ? 'Saving…' : 'Save' }}
-                </button>
+              <div class="pd-acts">
+                <button type="button" class="pd-edit" (click)="editing.set(true)">{{ 'crew.pad.edit_setup' | t }}</button>
               </div>
             }
+          </div>
+        } @else {
+          @if (pad()) {
+            <button type="button" class="pd-back" (click)="editing.set(false)">
+              <mc-ph-icon name="chev" [size]="18" />{{ 'crew.pad.back_to_setup' | t }}
+            </button>
+          }
+          <div class="pane">
+            <div class="pane-body">
+              <p class="hint">
+                The mirror to check — changing also works through the chat, always with a diff and
+                your confirmation.
+              </p>
+              <div class="set-row avatar-row">
+                <span class="pava big" [style.background-color]="color()" aria-hidden="true">{{
+                  initialsOf(title())
+                }}</span>
+                <div class="sl">
+                  <span class="lt">{{ title() }}</span>
+                  <span class="ls"
+                    >{{ role() }}{{ persona()?.model ? ' · ' + persona()?.model : ''
+                    }}{{ persona()?.worker ? ' · ' + persona()?.worker : '' }}</span
+                  >
+                </div>
+              </div>
 
-            @if (skillsValue().length > 0) {
-              <div class="ghead">Skills</div>
-              @for (skill of skillsValue(); track skill) {
-                <div class="set-row">
-                  <div class="sl">
-                    <span class="lt">{{ skill }}</span>
-                    <span class="ls">_meta/skills/</span>
-                  </div>
+              <div class="ghead">Model &amp; Worker</div>
+              <button
+                type="button"
+                class="set-row"
+                (click)="openSheet('model')"
+                [disabled]="readOnly() || modelOptions().length === 0"
+              >
+                <div class="sl">
+                  <span class="lt">Default model</span>
+                  <span class="ls">Resolution: ticket pin &gt; default &gt; router</span>
+                </div>
+                <span class="val">{{ persona()?.model || '—' }}</span>
+              </button>
+              <button type="button" class="set-row" (click)="poolTap()">
+                <div class="sl">
+                  <span class="lt">Pool</span>
+                  <span class="ls">Allowed models, order = fallback</span>
+                </div>
+                <span class="val muted">{{ poolWords() || '—' }}</span>
+              </button>
+              <button type="button" class="set-row" (click)="cycleRouter()" [disabled]="readOnly()">
+                <div class="sl">
+                  <span class="lt">Router</span>
+                  <span class="ls">Picks only within the pool</span>
+                </div>
+                <span class="val">{{ routerValue() }}</span>
+              </button>
+              <button
+                type="button"
+                class="set-row"
+                (click)="openSheet('worker')"
+                [disabled]="readOnly()"
+              >
+                <div class="sl">
+                  <span class="lt">Worker</span>
+                  <span class="ls">Harness (repo) or direct call</span>
+                </div>
+                <span class="val">{{ persona()?.worker || '—' }}</span>
+              </button>
+
+              <div class="ghead">Prompt</div>
+              <textarea
+                class="promptedit"
+                rows="8"
+                [value]="promptDraft()"
+                (input)="onPromptInput($event)"
+                placeholder="A new prompt text replaces prompt.md."
+                aria-label="Prompt text"
+                [disabled]="readOnly()"
+              ></textarea>
+              @if (promptError(); as error) {
+                <p class="pane-error" role="alert">{{ error }}</p>
+              }
+              @if (!readOnly()) {
+                <div class="pacts-inline">
                   <button
                     type="button"
-                    class="switch"
-                    [class.on]="skillOn(skill)"
-                    role="switch"
-                    [attr.aria-checked]="skillOn(skill)"
-                    [attr.aria-label]="'Toggle skill ' + skill"
-                    [disabled]="readOnly()"
-                    (click)="toggleSkill(skill)"
+                    class="btn"
+                    [disabled]="promptDraft().trim() === '' || setupBusy() === 'prompt'"
+                    (click)="savePrompt()"
                   >
-                    <i aria-hidden="true"></i>
+                    {{ setupBusy() === 'prompt' ? 'Saving…' : 'Save' }}
                   </button>
                 </div>
               }
-            }
 
-            @if (setupError(); as error) {
-              <p class="pane-error" role="alert">{{ error }}</p>
-            }
-            <p class="mem-note">
-              Every change here is one commit in the tickets repo — e.g.
-              <span class="mono-accent">personas: {{ openId() }} … updated</span>.
-            </p>
+              @if (skillsValue().length > 0) {
+                <div class="ghead">Skills</div>
+                @for (skill of skillsValue(); track skill) {
+                  <div class="set-row">
+                    <div class="sl">
+                      <span class="lt">{{ skill }}</span>
+                      <span class="ls">_meta/skills/</span>
+                    </div>
+                    <button
+                      type="button"
+                      class="switch"
+                      [class.on]="skillOn(skill)"
+                      role="switch"
+                      [attr.aria-checked]="skillOn(skill)"
+                      [attr.aria-label]="'Toggle skill ' + skill"
+                      [disabled]="readOnly()"
+                      (click)="toggleSkill(skill)"
+                    >
+                      <i aria-hidden="true"></i>
+                    </button>
+                  </div>
+                }
+              }
+
+              @if (setupError(); as error) {
+                <p class="pane-error" role="alert">{{ error }}</p>
+              }
+              <p class="mem-note">
+                Every change here is one commit in the tickets repo — e.g.
+                <span class="mono-accent">personas: {{ openId() }} … updated</span>.
+              </p>
+            </div>
           </div>
-        </div>
+        }
       }
     }
 

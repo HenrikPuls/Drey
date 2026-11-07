@@ -136,7 +136,7 @@
 }
 
 /* The phone's bar above the keyboard replaces the strip (board 10p). */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   .mdx-strip {
     display: none;
   }
@@ -146,7 +146,7 @@
 }
 
 /* The surface on the phone (boards 10d, 10l, 10p): 17/26, 14 px between blocks, no gutter, boards' task rows. */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   .mdx {
     --drey-editor-scale: calc(var(--mc-scale, 1) * 1.1724);
   }
@@ -280,5 +280,28 @@
   .mdx .cm-cursor {
     border-left-width: 2px;
     border-left-color: var(--accent);
+  }
+}
+
+/* The iPad's editor (10r): task rows as in View, the source box under the caret in mono also on a heading. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .mdx:not(.mdx-view) .cm-line:has(.lp-task) {
+    min-height: 45px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .mdx:not(.mdx-view) .cm-activeLine,
+  .mdx:not(.mdx-view) .cm-activeLine * {
+    font-family: var(--mono);
+    font-size: var(--ph-15);
+    font-weight: 400;
+    line-height: 24px;
+  }
+}
+
+/* The boards h2 line is 28 high on the iPad (10e, 10q); CodeMirror rounds it to 29. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .mdx-view .cm-line.mdx-h2 {
+    height: 28px;
   }
 }

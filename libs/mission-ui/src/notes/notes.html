@@ -56,7 +56,7 @@
       @if (store.recent().length > 0) {
         <span class="ph-label">{{ 'notes.recent' | t }}</span>
         @for (entry of store.recent(); track entry.path) {
-          <button type="button" class="ph-note-row" (click)="openNote(entry.path)">
+          <button type="button" class="ph-note-row" [class.cur]="pad() && entry.path === store.path()" (click)="openNote(entry.path)">
             <span class="ph-note-body">
               <span class="ph-note-name ph-ellipsis">{{ entry.name }}</span>
               <span class="ph-note-sub ph-ellipsis">{{ entry.path }} · {{ when(entry) }}</span>

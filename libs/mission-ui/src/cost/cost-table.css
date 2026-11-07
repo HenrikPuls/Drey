@@ -166,3 +166,54 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
+
+/* The iPad's five columns (boards 10e, 10q): the head above, the total under a rule. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .ct-title {
+    display: none;
+  }
+  .ct-grid {
+    gap: 6px;
+    font-size: var(--ph-15);
+    line-height: 24px;
+  }
+  .ct-row {
+    grid-template-columns: 1.3fr 1.2fr 0.7fr 0.6fr 0.7fr;
+    gap: 6px 10px;
+    align-items: center;
+    padding: 0;
+    border: 0;
+  }
+  .ct-head {
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .ct-phase,
+  .ct-cost {
+    font-weight: 400;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ct-model,
+  .ct-tokens,
+  .ct-time,
+  .ct-none {
+    color: var(--text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ct-pending {
+    display: none;
+  }
+  .ct-total {
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  .ct-total span {
+    font-weight: 600;
+    color: var(--text);
+  }
+}

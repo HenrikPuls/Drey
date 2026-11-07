@@ -247,3 +247,264 @@ export const ESTIMATES: Record<string, unknown> = {
   'build/ben': estimate('build', 'ben', 'qwen3-coder', 3, 2, 4),
   'review/tessa': estimate('review', 'tessa', 'sonnet', 2, 1.5, 2.4),
 };
+
+/**
+ * Wave row 4.6: what only the iPad boards (5b-5i, 10e-10s) draw, laid over the
+ * phone sample when the desk starts with `pad: true`. The phone's shots keep
+ * their sample byte for byte.
+ */
+export const PAD_TICKET_TEXT: Record<string, string> = {
+  'T-0118': `---\nid: T-0118\n---\n\n## Goal\n\nOne Ctrl+P opens one palette, also when the machine is slow and the key repeats.\n\n## Verification\n\nTested on 2026-11-04 by Tessa\n\n- [x] One palette after a double Ctrl+P\n- [x] Escape closes it, the editor keeps focus\n- [x] A slow machine still opens one\n- [x] The second press does nothing\n\n### Video\n\n![](../videos/t-0118.webm)\n\n- 0:48 The second press does nothing\n\n## Verlauf\n\n${COST_118}\n`,
+};
+
+/** Board 5b / 5c: T-0130 as it reads while Paul shapes it: the chapters the Shaping face draws as rows. */
+PAD_TICKET_TEXT['T-0130'] = [
+  '---',
+  'id: T-0130',
+  'form: ship',
+  '---',
+  '',
+  '## Goal',
+  '',
+  'Press one global hotkey, speak, and get a ticket in the inbox. No window to manage, no typing.',
+  '',
+  '## Decisions',
+  '',
+  '- Windows dictation (Win+H) is the speech engine; Drey only opens the capture window and focuses it.',
+  '- The first sentence becomes the title; the rest stays in the description.',
+  '',
+  '## Constraints',
+  '',
+  '- Nothing leaves the machine.',
+  '- The hotkey is configurable (ADR-0073).',
+  '',
+  '## Open questions',
+  '',
+  '- How many parts does this need? Asked in Mission Control.',
+  '',
+  '## Acceptance criteria',
+  '',
+  '- [ ] Hotkey raises Drey and opens the capture window with the caret in it',
+  '- [ ] A spoken sentence ends up as one inbox ticket',
+  '- [ ] Escape closes the window without creating anything',
+  '',
+  '## Plan',
+  '',
+  '### Parts',
+  '',
+  '- Capture hotkey and window',
+  '- Dictation hand-off (Win+H)',
+  '- Ticket from transcript',
+  '',
+].join('\n');
+
+/** 5b: who edited which decision since the model's last turn. */
+export const PAD_PLAN_130 = {
+  ok: true,
+  version: 7,
+  edits: 0,
+  summary: null,
+  marks: [
+    { no: 1, text: 'Windows dictation (Win+H) is the speech engine; Drey only opens the capture window and focuses it.', by: 'model' },
+    { no: 2, text: 'The first sentence becomes the title; the rest stays in the description.', by: 'you' },
+  ],
+};
+
+/** 5b: the question open on T-0130, in place of the phone sample's pushback. */
+export const PAD_SHAPE_QUESTION = {
+  kind: 'question',
+  phase: 'plan',
+  ticketId: 'T-0130',
+  title: 'Voice capture for tickets',
+  summary: 'How many parts does this need?',
+  runId: 'run-paul',
+  shaped: {
+    question: 'How many parts does this need?',
+    context: null,
+    where: null,
+    why: null,
+    recommended: 1,
+    recommendationWhy: null,
+    options: [
+      { n: 1, label: '3 parts', consequence: 'hotkey and window, dictation hand-off, ticket from transcript' },
+      { n: 2, label: 'One ticket', consequence: 'about 2 days of work for one builder' },
+    ],
+  },
+};
+
+/** 5b / 5c: the board with Paul as T-0130's worker (the Worker row); the phone's board keeps its card as it was. */
+export const PAD_BOARD = {
+  ...BOARD,
+  columns: BOARD.columns.map((column) => ({
+    ...column,
+    tickets: column.tickets.map((t) => (t.id === 'T-0130' ? { ...t, meta: { ...t.meta, persona: 'paul' } } : t)),
+  })),
+};
+
+/** 5c: the three parts as the board words them: when each starts, and why it is a part. */
+export const PAD_PARTS_130 = {
+  ...PARTS_130,
+  parts: PARTS_130.parts.map((part, i) => ({
+    ...part,
+    reason: ['Mod+Alt+T, focus handling', 'blocked-by P1', 'title from the first sentence'][i]!,
+    start: ['starts first', 'after P1', 'after P2'][i]!,
+    flow: ['Plan', 'Build', 'Review', 'Test'].map((title) => ({ phase: title.toLowerCase(), title, persona: title === 'Build' ? part.persona : null, inserted: false, skipped: false, notify: false })),
+  })),
+};
+
+/** 5h: T-0121 as it reads at the review: a finished build with its Verification and a three-chapter walkthrough. */
+const PAD_COST_121 = [
+  '- {phase: plan, persona: paul, model: Claude sonnet, tokens: 21k, dauer: 4m, cost: 0.34, ausgang: done}',
+  '- {phase: build, persona: ben, model: Claude sonnet, tokens: 52k, dauer: 9m, cost: 0.86, ausgang: done}',
+  '- {phase: review, persona: ralf, model: Claude sonnet, tokens: 0, dauer: 0m, cost: 0, ausgang: done}',
+].join('\n');
+
+/** 5h only: T-0121 once it has a report; 10e and 10s draw it still building. */
+export const PAD_REVIEW_TEXT_121 = [
+  '---',
+  'id: T-0121',
+  '---',
+  '',
+  '## Goal',
+  '',
+  'Drag headings in the Outline panel to reorder a note. The text under a heading is part of the move.',
+  '',
+  '## Verification',
+  '',
+  'Tested on 2026-11-06 by Tessa',
+  '',
+  '- [x] Dragging a heading moves its whole section',
+  '- [x] Undo restores it in one step',
+  '- [x] Dropping a heading on itself does nothing',
+  '- [x] The tree and the buffer stay in step',
+  '',
+  '### Video',
+  '',
+  '![](../videos/t-0121.webm)',
+  '',
+  '- 0:06 Drag a heading',
+  '- 0:21 Undo once',
+  '- 0:35 Last heading',
+  '',
+  '## Verlauf',
+  '',
+  PAD_COST_121,
+  '',
+].join('\n');
+
+/** 5h: a patch of one hunk as the board draws it, then the lines that make up the file's count. */
+const padPatch = (head: string[], add: number, del: number, at: number): string =>
+  [
+    ...head,
+    `@@ -${at + 20},${del} +${at + 20},${add} @@`,
+    ...Array.from({ length: del }, (_, i) => `-  legacy${i}();`),
+    ...Array.from({ length: add }, (_, i) => `+  next${i}();`),
+  ].join('\n');
+
+/** 5h: the diff route's answer for T-0121: drag.ts (+84 −6, the board's hunk first), tree.ts, drag.spec.ts. */
+export const PAD_DIFF_121 = {
+  truncated: false,
+  files: [
+    {
+      status: 'M',
+      path: 'plugins/outline/renderer/drag.ts',
+      patch: padPatch(
+        [
+          '@@ -41,7 +41,12 @@ function onDrop',
+          ' function onDrop(event: DragEvent, tree: OutlineTree): void {',
+          '   const target = tree.nodeAt(event.clientY);',
+          '-  tree.moveHeading(source, target);',
+          '+  const range = tree.sectionRange(source);',
+          '+  if (range === null) { return; }',
+          '+  tree.moveRange(range, target, { withBody: !event.altKey });',
+          '   view.dispatch({ effects: refresh.of(null) });',
+          ' }',
+        ],
+        81,
+        5,
+        60,
+      ),
+    },
+    { status: 'M', path: 'plugins/outline/renderer/tree.ts', patch: padPatch([], 22, 3, 10) },
+    { status: 'A', path: 'plugins/outline/renderer/drag.spec.ts', patch: ['@@ -0,0 +1,61 @@', ...Array.from({ length: 61 }, (_, i) => `+  it('case ${i}', () => {});`)].join('\n') },
+  ],
+};
+
+/** 5c: the estimate the board's first part shows. */
+export const PAD_ESTIMATES: Record<string, unknown> = {
+  ...ESTIMATES,
+  'build/ben': estimate('build', 'ben', 'qwen3-coder', 1.45, 1.1, 1.8),
+};
+
+/** 5i: the flow of T-0130's third part as the desk answers it before Paul's draft (the board's sample says part 3 whichever part is opened). */
+const flowStep = (index: number, phase: string, title: string, extra: Record<string, unknown>) => ({
+  index,
+  phase,
+  title,
+  state: 'future',
+  inserted: false,
+  skipped: false,
+  moved: false,
+  notify: false,
+  persona: null,
+  pinned: false,
+  model: null,
+  owner: false,
+  locked: false,
+  ...extra,
+});
+const FLOW_BASE_STEPS = [
+  flowStep(1, 'build', 'Build', { persona: 'ben', pinned: true, model: 'opus' }),
+  flowStep(2, 'review', 'Review', { persona: 'ralf', model: 'sonnet' }),
+  flowStep(3, 'verify', 'Verify', { persona: 'tessa', model: 'sonnet' }),
+  flowStep(4, 'accept', 'Accept', { owner: true }),
+];
+export const PAD_FLOW_130 = {
+  ok: true,
+  ticket: 'T-0130',
+  title: 'Voice capture for tickets',
+  scope: { kind: 'part', index: 2, title: 'Ticket from transcript' },
+  chain: [],
+  saved: [],
+  steps: FLOW_BASE_STEPS,
+  phases: [
+    { id: 'build', title: 'Build' },
+    { id: 'review', title: 'Review' },
+    { id: 'security', title: 'Security' },
+    { id: 'verify', title: 'Verify' },
+    { id: 'accept', title: 'Accept' },
+  ],
+  personas: [
+    { id: 'ralf', kind: 'agent', title: 'Ralf', color: 'var(--accent-peach)', model: 'sonnet' },
+    { id: 'ben', kind: 'agent', title: 'Ben', color: 'var(--accent)', model: 'opus' },
+    { id: 'paul', kind: 'agent', title: 'Paul', color: 'var(--accent-peach)', model: 'sonnet' },
+    { id: 'tessa', kind: 'agent', title: 'Tessa', color: 'var(--ok)', model: 'sonnet' },
+    { id: 'you', kind: 'human', title: 'You', color: 'var(--text)', model: '' },
+  ],
+  readOnly: null,
+  reason: null,
+};
+
+/** 5i: Paul's draft (what `POST /api/tickets/T-0130/flow-draft` answers): a security pass by Ralf after the review, with a card for the owner. */
+export const PAD_FLOW_130_DRAFT = {
+  ...PAD_FLOW_130,
+  chain: ['insert security after review'],
+  steps: [
+    FLOW_BASE_STEPS[0],
+    FLOW_BASE_STEPS[1],
+    flowStep(3, 'security', 'Security', { inserted: true, persona: 'ralf', pinned: true, model: 'sonnet', notify: true }),
+    { ...FLOW_BASE_STEPS[2], index: 4 },
+    { ...FLOW_BASE_STEPS[3], index: 5 },
+  ],
+  reason: 'Part 3 touches the command parser, so I added a security pass by Ralf after the review. You would be told when it is done.',
+};
+
+/** 5d: the iPad's crew list: Paul runs a two-entry pool (the local model first, Claude Code as overflow). */
+export const PAD_PERSONAS = PERSONAS.map((p) => (p.id === 'paul' ? { ...p, model: 'qwen3-coder', pool: ['opencode', 'claude-code'] } : p));
+
+/** 5d: what the persona page asks besides the list: no proposals, an empty thread, twelve memory entries. */
+export const PAD_PERSONA_IMPROVEMENTS = { persona: null, proposals: [], openCount: 0, frictionCount: 0 };
+export const PAD_PERSONA_THREAD = { messages: [] };
+export const PAD_PERSONA_MEMORY = {
+  entries: Array.from({ length: 12 }, (_, i) => ({ text: `Memory entry ${i + 1}`, pinned: i === 0 })),
+};

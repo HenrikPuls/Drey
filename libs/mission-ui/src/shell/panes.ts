@@ -139,6 +139,12 @@ export class Panes {
     this.right = computed(() => this.states[this.orientation()]().right);
   }
 
+  /**
+   * A surface took the right pane's room (boards 5h, 5i: Review, Flow; set by
+   * the surface itself). The saved state stays; the toggle reads unpressed.
+   */
+  readonly covered = signal(false);
+
   /** The state of the current orientation. */
   current(): PaneState {
     return this.states[this.orientation()]();

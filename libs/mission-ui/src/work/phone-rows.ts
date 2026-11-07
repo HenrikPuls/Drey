@@ -15,6 +15,8 @@ export interface PhoneWorkRow {
   readonly key: string;
   readonly title: string;
   readonly meta: string;
+  /** The iPad's grey line (10e): the same words without the age. */
+  readonly padMeta: string;
   readonly cost: string | null;
   /** The ticket row's view model; null on a need without a board row or a done entry. */
   readonly ticket: TicketVm | null;
@@ -73,6 +75,7 @@ function needRow(need: NeedVm, tickets: readonly TicketVm[], now: number, t: Tra
     key: need.key,
     title: ticket?.title ?? need.need.title,
     meta: parts.join(' · '),
+    padMeta: [id, ticket?.phaseTitle ?? null, needWord(need, ticket, t)].filter((part): part is string => part !== null && part !== '').join(' · '),
     cost: ticket?.costLabel ?? null,
     ticket,
     need,
@@ -92,11 +95,12 @@ function runWord(vm: TicketVm, runs: readonly McLiveRunSlice[], now: number, t: 
   return rowAgeOf(run.startedAt, now, t);
 }
 
-function ticketRow(vm: TicketVm, word: string): PhoneWorkRow {
+function ticketRow(vm: TicketVm, word: string, padWord = ''): PhoneWorkRow {
   return {
     key: vm.id,
     title: vm.title,
     meta: [vm.id, vm.phaseTitle, word].filter((part) => part !== '').join(' · '),
+    padMeta: [vm.id, vm.phaseTitle, padWord].filter((part) => part !== '').join(' · '),
     cost: vm.costLabel,
     ticket: vm,
     need: null,
@@ -140,7 +144,10 @@ export function phoneGroupsOf(
       title: t('work.phone.running'),
       hot: false,
       startsOpen: true,
-      rows: running.tickets.map((vm) => ticketRow(vm, runWord(vm, runs, now, t))),
+      rows: running.tickets.map((vm) => {
+        const word = runWord(vm, runs, now, t);
+        return ticketRow(vm, word, word);
+      }),
     });
   }
   const plain = (name: string | null, group: (typeof phases)[number], startsOpen: boolean): PhoneWorkGroup => ({
@@ -175,6 +182,7 @@ export function phoneGroupsOf(
       key: entry.id,
       title: entry.title === null || entry.title === '' ? entry.id : entry.title,
       meta: entry.id,
+      padMeta: entry.id,
       cost: null,
       ticket: null,
       need: null,

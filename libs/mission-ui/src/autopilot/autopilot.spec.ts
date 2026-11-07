@@ -109,7 +109,7 @@ describe('the panel', () => {
     const last = set.mock.calls.at(-1)![0];
     expect(last.state).toBe('paused');
     expect(new Date(last.resumeAt!).getTime()).toBe(new Date(2026, 10, 6, 18, 30).getTime());
-    expect(el(fixture).querySelector('.resume-label')!.textContent).toMatch(/^\s*Resume at /);
+    expect(el(fixture).querySelector('.pd-resume span')!.textContent).toMatch(/^\s*Resume at /);
   });
 
   it('arms Stop-now on the first tap and calls the existing stop-all on the second', async () => {

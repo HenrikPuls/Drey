@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–197, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–199, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-126 (the frame follow-ups of wave 4.2: no strip on a one-panel bottom dock, a view badge, a view's own tabs), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -95,12 +95,6 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   but `ticketIdOfPath` and `idOfDocumentPath` expect the path to start at `tickets/`: such a document gets no header and no
   widgets, only the `▸ Frontmatter` pill. The vault the checkout prompt adds is the checkout itself, so that route is not
   affected. Fix: the renderer has to learn the prefix from main, or main hands it the checkout-relative path.
-
-- **D-38 — Mission Control's Autopilot does not match its board** (M; found 2026-11-07 fixing D-36, read from the code, not
-  run). `libs/mission-ui/src/autopilot/panel.html` draws plain rows with a dot on both devices. `Autopilot.png` wants on the iPad
-  the desktop's popover in 380 px (title and chord, segments 44 px high, sentence, chips, divider, Stop) and on the phone
-  a sheet whose 56 px rows carry an icon and their sentence, with the resume time in the sheet's title row. The sentences are in the
-  catalog since D-36 (`autopilot.sentence.*`). Done when screenshots match the board.
 
 - **D-39 — A context-menu flyout closes on the way to it** (S; owner request, outside the list, 2026-11-07). The flyout cannot be
   selected with the mouse: it folds away between its row and its panel. By the code, not reproduced yet: the one flyout in the app,
@@ -251,10 +245,6 @@ owner builds without the tickets system.
   fetches the whole video through the bearer header instead of
   streaming (a `<video>` tag cannot send it; the route itself answers
   Range), and the Drey-hosted Work panel shows no player.
-- **E11-2b — Diff review, wide layout.** The iPad board's master-detail
-  split (file list left, one file's diff right) and the viewed marks on
-  the desk instead of per device; E11-2 shipped both inside the proof
-  card's accordion.
 - **E11-2c — Viewed marks on the desk, not per device** (split out of E11-2b by wave 4.6, Q7, 2026-11-07). E11-2b's look ships with the iPad fidelity row (board 5h: file tiles over one diff); what stays is the data half: a file's "viewed" mark lives on the desk (engine route + ticket review record) so every device shows the same marks, instead of today's per-device memory. Needs the engine route, the record in the review report, the clients reading it.
 - **E10-4b — Plan to accept follow-ups.** The desktop widget shipped as milestone 196;
   here: the parent ticket leaves "needs shaping" once its parts are
@@ -903,6 +893,9 @@ rest are kept so they still match `docs/11`.
   own.
 
 ### Follow-ups of shipped milestones (none committed)
+
+- **req-135 — Ask about this note on the iPad (follow-up of milestone 198, board 10n; id proposed, the integrator may renumber).** Board 10n draws no Ask, because Mission Control sits beside the note. The composer is there, but nothing names the note any more, which `Ask about this note` did. To decide with the owner where that goes.
+- **req-136 — The chats list on the iPad: search, running now, waiting cards (follow-up of milestone 198, board 10f; id proposed).** The chat's history sheet had a search, the live session's `running now` row and a badge of waiting cards. Board 10f's list draws the sessions by day only, so these three are not on the iPad yet.
 
 - **req-119 — A ticket's Type: Ship / Fix (boards 7b, 7c, 7j; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). `TicketMeta` has no `type`, only `track`; neither the concept nor `specs/ticket-schema.md` defines Ship/Fix. Needs the schema field, the engine reading it, the card row (Type left, Worker right as the boards place them) and the fixtures.
 - **req-120 — Start build from the ticket card (board 9a; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). the card's primary button starts the build phase for a Prioritized ticket: one engine call (the transition the chain would make), the button only in the states the board shows it, confirmation per the `tools` write policy.

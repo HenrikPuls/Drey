@@ -1,4 +1,100 @@
-@if (phone()) {
+@if (pad()) {
+  <section class="pd-crew" [attr.aria-label]="'shell.crew' | t">
+    <div class="pd-bar">
+      <b>{{ 'shell.crew' | t }}</b>
+      <span class="pd-sum">{{ padSummary() }}</span>
+      @if (canPauseAll()) {
+        <button type="button" class="pd-bbtn" [attr.aria-label]="halted() ? ('crew.phone.resume_all' | t) : ('crew.phone.pause_all_long' | t)" [attr.title]="halted() ? ('crew.phone.resume_all' | t) : ('crew.phone.pause_all_long' | t)" (click)="pauseAll()">
+          <mc-ph-icon [name]="halted() ? 'play' : 'pause'" />
+        </button>
+        <button type="button" class="pd-bbtn pd-danger" [class.armed]="stopAllArmed()" [attr.aria-label]="stopAllArmed() ? ('crew.phone.confirm' | t) : ('crew.phone.stop_all' | t)" [attr.title]="stopAllArmed() ? ('crew.phone.confirm' | t) : ('crew.phone.stop_all' | t)" (click)="stopAll()">
+          <mc-ph-icon name="stop" />
+        </button>
+      }
+    </div>
+    <div class="pd-body">
+      <div class="pd-col" [attr.aria-label]="'crew.pad.list' | t">
+        @if (capacity().length > 0) {
+          <div class="pd-caps">
+            @for (cap of capacity(); track cap.provider) {
+              <span class="pd-cap">{{ capLabel(cap) }} <b>{{ cap.running }}/{{ cap.size }}</b></span>
+            }
+          </div>
+        }
+        <div class="pd-list">
+          @for (persona of personas() ?? []; track persona.id) {
+            <article class="pd-card" [class.pd-sel]="selectedId() === persona.id">
+              <button type="button" class="pd-head" [attr.aria-current]="selectedId() === persona.id ? 'true' : null" (click)="pick(persona)">
+                <mc-ph-avatar [name]="persona.title" [color]="persona.color" [size]="36" />
+                <span class="pd-who">
+                  <b class="ph-ellipsis">{{ persona.title }}</b>
+                  <span class="pd-role ph-ellipsis">{{ roleLineOf(persona) }}</span>
+                </span>
+                <span class="pd-state">
+                  <span class="pd-sdot" [attr.data-tone]="stateToneOf(persona)"></span>{{ phoneStateOf(persona) }}
+                </span>
+              </button>
+              @if (dayCostFootOf(persona); as foot) {
+                <div class="pd-budget">
+                  <div class="pd-budget-line">
+                    <span class="pd-grey">{{ 'crew.phone.today' | t }}</span>
+                    <span [class.pd-over]="foot.over">{{ foot.text.replace(' today', '') }}</span>
+                  </div>
+                  <div class="pd-bar4">
+                    @if (budgetPctOf(persona); as pct) {
+                      <div class="pd-fill" [style.width.%]="pct" [style.background-color]="persona.color"></div>
+                    }
+                  </div>
+                </div>
+              }
+              @for (row of rowsOf(persona); track row.runId) {
+                <div class="pd-run" [class.pd-stuck]="row.stuck">
+                  <div class="pd-run-top">
+                    <button type="button" class="pd-run-title" (click)="openRow(row)">{{ row.title }}</button>
+                    <span class="pd-age">{{ row.age }}</span>
+                  </div>
+                  <span class="pd-run-line">{{ row.activity }}</span>
+                  @if (row.stuck) {
+                    <div class="pd-stuck-box">
+                      <span class="pd-stuck-text">{{ padStuckWords(row) }}</span>
+                      <div class="pd-tiles">
+                        @if (canNudge()) {
+                          <button type="button" class="pd-tile" [disabled]="busyRun() !== null" [attr.aria-label]="'crew.phone.nudge_long' | t" [attr.title]="'crew.phone.nudge_long' | t" (click)="act(row.runId, 'nudgeRun')">
+                            <mc-ph-icon name="bell" />
+                          </button>
+                        }
+                        @if (canHand()) {
+                          <button type="button" class="pd-tile" [disabled]="busyRun() !== null" [attr.aria-label]="'crew.phone.hand_long' | t" [attr.title]="'crew.phone.hand_long' | t" (click)="act(row.runId, 'handToClaude')">
+                            <mc-ph-icon name="terminal" />
+                          </button>
+                        }
+                        @if (canStopRun()) {
+                          <button type="button" class="pd-tile pd-danger" [disabled]="busyRun() !== null" [attr.aria-label]="'crew.phone.stop' | t" [attr.title]="'crew.phone.stop' | t" (click)="stopAsk.set(row.runId)">
+                            <mc-ph-icon name="stop" />
+                          </button>
+                        }
+                      </div>
+                      @if (stopAsk() === row.runId) {
+                        <div class="pd-confirm" role="alertdialog" [attr.aria-label]="'crew.phone.stop_ask' | t: { name: persona.title }">
+                          <span>{{ 'crew.phone.stop_ask' | t: { name: persona.title } }}</span>
+                          <button type="button" class="pd-cbtn" (click)="stopAsk.set(null)">{{ 'crew.phone.cancel' | t }}</button>
+                          <button type="button" class="pd-cbtn pd-cbtn-danger" (click)="stopAsk.set(null); act(row.runId, 'stopRun')">{{ 'crew.phone.stop' | t }}</button>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </article>
+          }
+          @if (poolEmpty()) {
+            <p class="pd-empty">{{ 'crew.phone.empty' | t }}</p>
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+} @else if (phone()) {
   <section class="ph-team" [attr.aria-label]="'shell.crew' | t">
     <mc-app-bar [title]="'shell.crew' | t" [autopilot]="true" />
     <div class="ph-scroll ph-crew">

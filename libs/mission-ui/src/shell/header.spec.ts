@@ -19,7 +19,6 @@ import { ShellHeader, type ShellArea } from './header';
       [left]="left()"
       [right]="right()"
       [settingsOn]="settingsOn()"
-      [needsCount]="needs()"
       (toggleLeft)="lefts = lefts + 1"
       (toggleRight)="rights = rights + 1"
       (areaChange)="picked = $event"
@@ -35,7 +34,6 @@ class Host {
   readonly left = signal(true);
   readonly right = signal(false);
   readonly settingsOn = signal(false);
-  readonly needs = signal(2);
   lefts = 0;
   rights = 0;
   settings = 0;
@@ -64,11 +62,9 @@ describe('ShellHeader (req-96)', () => {
   it('switch: Work and Crew, Notes only behind the flag; the active area is marked', () => {
     const { fixture, el, host } = mount();
     const labels = () => Array.from(el.querySelectorAll('.switch .sw')).map((b) => b.textContent!.replace(/\s+/g, ' ').trim());
-    expect(labels()).toEqual(['Work 2', 'Crew']);
+    expect(labels()).toEqual(['Work', 'Crew']);
     expect(el.querySelector('.switch .sw.on')!.textContent).toContain('Work');
-    expect(el.querySelector('.switch .sw.on .bdg')!.textContent).toBe('2');
     host.notes.set(true);
-    host.needs.set(0);
     fixture.detectChanges();
     expect(labels()).toEqual(['Notes', 'Work', 'Crew']);
     expect(el.querySelector('.bdg')).toBeNull();

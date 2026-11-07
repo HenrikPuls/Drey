@@ -1,0 +1,17 @@
+<div class="head">
+  <b class="title">{{ 'shell.chats' | t }}</b>
+  <button type="button" class="new" [attr.aria-label]="'menu.new_chat' | t" [attr.title]="'menu.new_chat' | t" (click)="newChat.emit()">
+    <mc-ph-icon name="plus" />
+  </button>
+</div>
+<div class="list">
+  @for (group of groups(); track group.label) {
+    <span class="label">{{ groupLabel(group.label) }}</span>
+    @for (entry of group.entries; track entry.file) {
+      <button type="button" class="row" [class.cur]="entry.file === activeFile()" (click)="openChat.emit(entry)">
+        <span class="name">{{ entry.title }}</span>
+        <span class="when">{{ age(entry) }}</span>
+      </button>
+    }
+  }
+</div>

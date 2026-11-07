@@ -211,7 +211,7 @@
 }
 
 /* The phone's note (boards 10l, 10p). */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   :host {
     display: flex;
     flex: 1 1 auto;

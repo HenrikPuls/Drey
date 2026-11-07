@@ -24,6 +24,114 @@ board elements from its own files and handed them to the frame; the owner ruled 
   docs/05 §5.0, the manual's Capacity paragraph.
 - **Roadmap:** req-126 entered and left with this change.
 
+### Milestone 198 — wave row 4.6: Mission Control on the iPad matches its boards
+
+**Not yet manually verified by the owner.** Boards 5b, 5c, 5d, 5f, 5h, 5i, 10e, 10f, 10n, 10q, 10r, 10s and the iPad part of
+10t. The iPad draws row 10's one mobile system: `touchFaceSignal()` (phone or iPad) widens 4.5's phone templates, `padSignal()`
+marks what differs by size, every iPad rule sits in a `pad.css` inside `(min-width: 768px) and (hover: none) and (pointer: coarse)`.
+Desktop web (a mouse, decision 13) keeps its wide templates; the rulings Q1–Q9 of the measure sheet are below.
+
+- **The frame** (`app.css`, `shell/header`). The phone's type scale on `.shell.ipad`; header 53 on `--bg`, segments 44, no badge on
+  Work, a bordered Autopilot chip (`On` alone in portrait); panes 301 / 341, 281 in portrait; a `.pd-wide-bar` row over centre and
+  right (5b, 5c). The Assistant head replaces the old tabs and the chat's bar (Q1: `Mission Control | Capacity`).
+- **Crew, Settings, Review, Flow, the thread** take the right pane's room (Q3): the toggle reads unpressed, pressing it opens the
+  Assistant as an overlay, the saved state is untouched (`Panes.covered`, `overlayOpen`).
+- **Work and ticket** (10e, 10q, 10s): list head with the day's cost, 40 px groups, rows with a needs dot; ticket head 44, the face
+  with avatar, decision link, Proof group, five-column cost table. The question and the decision leave the list and the face for the
+  Assistant's card (Q9, `shell/pad-card.ts`): the surface owns the calls, the chat draws them.
+- **Thread** (10f, Q2): `Thread` on a ticket opens its conversation in the centre with the chats on the left (`shell/pad-chats`), back
+  returns to the ticket; the one exception to req-96 (`decisions.md`).
+- **Shape, Plan** (5b, 5c): sections as rows with the plan's edit marks (`ticket/shape-face.ts`), Plan to accept rows, the Flow card.
+  A row with an open question opens the ticket, one without opens the plan. Accept is `Accept it as it stands?` in the Assistant.
+- **Review** (5h): one file's diff under file tiles, line comments, footer with Send back and Accept (Q4). The review face now loads
+  the diff itself (`TicketVm.loadDiff`): nothing called `loadDiff()` before, so the wide client's diff card never drew.
+- **Flow** (5i): horizontal gate strip, Paul's draft, gate card with selects, footer with Reset, Discard, Save.
+- **Crew** (5d): bar, persona list, persona page; Setup's face is pool cards, `Edit setup` opens the existing form (Q8).
+- **Settings** (5f, Q5): categories, search, scope, sections with the client's Appearance, Chat, Devices, Engine and Autopilot;
+  `Change…` opens the existing page in place. Fixes the right pane drawn over Settings.
+- **Notes** (10n, 10r): the phone's pieces in a column, the seven-icon bar; Autopilot popover (10t, D-38's iPad half).
+- **Where each affordance the boards drop went, on the iPad:**
+  - Attach in the composer: gone for now, req-114 (Q6).
+  - `Ask about this note`: the Assistant's composer beside the note; naming the note in the message is gone for now, req-135.
+  - The plan's pinned accept: the Assistant's card `Accept it as it stands?` (Q9); `Run part 1 only`: a chip in the expanded first part row.
+  - The plan's reply bar: the Assistant's composer. The plan's back: ⋯ → Back to the ticket.
+  - Part chip `Change flow`: the Flow card's `Change flow ›`, which opens the first open part's flow.
+  - Work's inline question and accept cards: the Assistant's card of the open ticket, after a tap on its row (Q9). A report's Promote: the ticket's ⋯.
+  - The chat's history sheet: the chats list of 10f, reached by `Thread` (Q2), with `+` for a new chat; its search, `running now` row and waiting badge are gone for now, req-136.
+  - Per-card Pause: the persona head's Pause. Pause all and Stop all: the Crew bar.
+  - The proposals count on the persona's first tab: kept, `Chat · n` while there are any (the board's state has none).
+  - The review face's gate bar: the ticket face's Flow row, and its ⋯ → the gate chain. The review face's Ticket / Thread / Review tabs: the bar's back to the ticket, `Thread` there.
+- **Specs:** `ticket/shape-face.spec.ts`, `withoutEmptyHeadings`; `shell/header.spec` loses the badge; `autopilot.spec` reads the resume label on the popover's chip. New
+  `e2e/mission-control-ipad-fidelity.spec.ts`; `startFakeDesk({ boards: true, pad: true })` overlays the phone's sample, which stays as
+  it was. iPad assertions changed in `mission-control-shell` (header 53, the target segment, rows for cards, `pane-team`,
+  `pane-settings`), `-notes` (rows, no modes while viewing, no Ask), `-work-settings` (Settings' `Change…`); phone assertions untouched.
+- **Phone and desktop web unchanged, measured:** 4.5's 14 shots and four desktop-web shots against a baseline from before the first
+  edit: the same but for the desktop's pulsing LEDs and 8–40 pixels of at most 3 colour levels (summed over RGB) on three phone shots
+  beside CodeMirror lines. The cause of those was not found.
+- **Roadmap:** E11-2b and D-38 done; E11-2c, req-127 to req-131 carry what is not built.
+
+**Fidelity:** boards as above, screenshots `test-results/fidelity/<Board>.png` (`Autopilot-ipad.png`), 1194×834 and 834×1194, device
+scale factor 1, touch, safe areas 24 / 20 over CDP, built client on the fake desk. Compared by reading both PNGs region by region plus
+a per-region pixel diff (delta over 30 summed over RGB; the rows below give the raw share of differing pixels for 5b, 5d, 5f, 10e, 10q and 10s, the highest raw differences, and each region's share, `+23` = measured with
+the screenshot shifted down by the Flow line's second row); `boards/compare.html` itself was not opened. Fixed rows: scale, header, panes,
+heads, rows, every layout on the measure sheet. Open rows: none.
+
+| Board | Region | Board shows | Build shows | Justification |
+|---|---|---|---|---|
+| 5b | composer | no chip | `1 new edit of yours goes along` only while an edit of the owner is pending | not visible in the board's state; the existing way to leave an edit out (integrator's ruling) |
+| phone | 10d, 10j, 10p shots | baseline before this row | 8–40 pixels of at most 3 colour levels beside editor lines | cause unknown; not visible, kept as a row (integrator's ruling) |
+| all | mono text | Consolas stack | `--mono` | token in place of a hex |
+| all | radii | 12, 6, 18 | 8, 4, 16 | owner decision: the 4 / 8 / 16 scale (decision 4, milestone 195) |
+| all | text | headless Edge | Chromium | text rasterization, no CSS difference found |
+| 10e, 10q, 10n, 10r, 5b, 5c | Assistant target | `Model · Mission Control` | `Mission Control · Capacity` | owner decision (decisions.md 2026-11-06) + feature not yet built — req-127 |
+| 10e, 10q, 10s, 5b | Flow | Plan · Build · Review · Test · Accept on one line | the six states, two lines, so everything under it sits 23 px lower | data instead of sample content (phases arrive with req-99c) |
+| 10e | decision link | `Ben asks about heading drag` | `Ben has a question` | data instead of sample content |
+| 10e, 10s | Parts | spent `$0.58`, per-part estimates | empty, one estimate per persona | feature not yet built — req-116 |
+| 10q | Checks | `tessa · 0:12` | the tester | feature not yet built — req-117 |
+| 10q | tiles | two screenshots, video | what the report holds | data instead of sample content |
+| 10q, 10e | Assistant message | `Tessa via Mission Control`, the session's text | the sample session or none | data instead of sample content |
+| 10f | bar | no back | `‹ T-0121` | owner decision Q2 |
+| 10f | chat times, link line | `Mon`, `Question from Ben` | the sample's weekday, `Building · question from Ben` | data instead of sample content |
+| 10n, 10r | counts | `84 notes`, `14` | absent | feature not yet built — req-115 |
+| 10n, 10r | titles, ticket chip | titles apart from file names, `See T-0121` | the file's name, the sample's text | data instead of sample content |
+| 5b | mark age | `· 2 min ago` | absent | feature not yet built — req-128 |
+| 5c | step rows | `✓ Shape…`, `✓ Plan…` | absent | feature not yet built — req-129 |
+| 5c | parts | three estimates, `opus pinned on P3` | one per persona, no pin | data instead of sample content |
+| 5d | Setup, tabs | slot bars, Runs after, Notify, Week, Typical, Remove from crew, Friction | absent | feature not yet built — E13-19 |
+| 5d | personas | `waiting`, a queued run, `1 queued`, a chip per pool entry | `running`, live runs only, a chip on the default model | data instead of sample content |
+| 5f | controls | This vault, Show only changed, Open sidebars, Editor, Tickets | absent | feature not yet built — req-130 |
+| 5f | categories | Appearance, Assistant, Editor, Tickets | Appearance, Chat, Devices, Engine, Autopilot | owner decision Q5 |
+| 5h | viewed marks | on the desk | per device | feature not yet built — E11-2c |
+| 5h | range hint, video length | press-and-drag, `0:48` | `Tap a second line…`, the last chapter's time | feature not yet built — E11-2c; data instead of sample content |
+| 5i | gate card | `View as command`, dictate, model select, `Paul proposes…` | Undo draft, none, read-only, none | feature not yet built — req-131, E10-5b |
+| 5i | Who, Model | `Ralf · reviewer`, `Ralf’s default · sonnet` | `Ralf`, `sonnet` | data instead of sample content |
+| all | Attach | none | none | owner decision Q6, req-114 |
+| 5d, 19.6 % raw | Crew bar 2.1 % | `2 running · 1 stuck · 1 queued` | `3 running · 1 stuck` | data instead of sample content |
+| 5d | Paul's card 0.4 %; persona head 2.1 %; pool 1.5 % | `waiting`, a longer line, `sonnet` chip, slot bars | `running`, the role alone, no chip on entry 2, no slot bars | data instead of sample content; slots: feature not yet built — E13-19 |
+| 5d | list from Ben down 39.6 % | Ben with two runs, Ralf queued, Tessa at 896 | one live run each, so every card below sits higher | data instead of sample content (live runs only) |
+| 5d | tabs 17.3 % + 9.1 % | Chat, `Memory · 12`, `Friction · 3`, Setup | no Friction, so Setup sits 104 px left | feature not yet built — E13-19 |
+| 5d | under the pool 43.0 % | Runs after, Notify, three cost tiles, Remove from crew | one tile, Edit setup higher | feature not yet built — E13-19 |
+| 5b, 5.2 % raw | head and list 0.0–0.1 %, card 0.0 % | | | fixed |
+| 5b | grid 10.6 % | `Shape (with you) · Plan · …`, one line | `✓ Inbox Shaping (step 1 of 3)`, two lines | data instead of sample content |
+| 5b | Goal 0.0 % +23; Decisions 10.5 % +23 | `Paul edited · 2 min ago`; text wraps at 338 | `Paul edited`; wraps later without the age | feature not yet built — req-128 |
+| 5b | Assistant head 35.8 % | `Model · Mission Control` | `Mission Control · Capacity` | owner decision Q1, req-127 |
+| 5b | thread 12.2 % | a third message from Pia | two sample messages | data instead of sample content |
+| 10s, 6.6 % raw | head, head row, list 0.0–0.2 %; link 0.0 % +23 | | | fixed |
+| 10s | grid 8.7 %, Goal 1.7 % +23, Parts 1.7 % +23 | Plan · Build · …, one line; `$0.58` | six states, two lines, all below 23 px lower; no spent cost | data instead of sample content; req-116 |
+| 10s | under the Parts 34.7 % | empty | Cost by phase | owner decision: decision 19, the table is on every device (10e and 10q draw it) |
+| 10q, 12.7 % raw | head, head row, list 0.0–0.1 %; link 0.0 % +23 | | | fixed |
+| 10q | grid 9.3 %; Goal 0.5 % +23 | as 10s | as 10s | data instead of sample content |
+| 10q | Proof strip 4.0 % +23, checks 3.2 % +23 | `$1.84` in `--text`, three checks with `tessa · 0:12` | four checks of the sample with the tester | data instead of sample content; req-117 |
+| 10q | tiles, thread 4.1 % | two screenshots and the video; Tessa's message | the video tile below the fold; the sample session | data instead of sample content |
+| 10q, 5b, 5c, 10e | composer 5.6–6.6 % | `Message Mission Control` in the browser's default grey | `--control-border`, 15 px | a token in place of a hex |
+| 5f, 9.2 % raw | header, bar, first category, Appearance head, theme row 0.0–0.1 %; Text row 1.0 % | | | fixed |
+| 5f | the other categories 1.6 % | Assistant, Editor, Tickets | Chat, Devices, Engine, Autopilot | owner decision Q5 |
+| 5f | search zone 4.0 % | filter icon, `This vault` | absent | feature not yet built — req-130 |
+| 5f | under the Text row 32.8 % | Layout row, then Assistant, Editor at 699 | no Layout row, so the next sections sit higher, with the client's names | feature not yet built — req-130; owner decision Q5 |
+| 10e, 6.8 % raw | header, list, head, head row, card 0.0–0.1 % | | | fixed |
+| 10e | grid 9.1 %, link 2.8 % +23, Goal and Parts 1.2 % +23 | Plan · Build · …, one line; `Ben asks about heading drag`; `$0.58` | six states, two lines; `Ben has a question`; no spent cost | data instead of sample content; req-116 |
+| 10e | Assistant head 35.8 % | `Model · Mission Control` | `Mission Control · Capacity` | owner decision Q1, req-127 |
+
 ### Milestone 197 — wave 4.4: Settings and the desktop Autopilot item match boards 7g and 10t
 
 **Not yet manually verified by the owner.** Wave row 4.4 (`desk-settings-autopilot`). Boards: `DeskSettings` (7g) and the desktop part of

@@ -6,6 +6,8 @@ import {
   computed,
   effect,
   inject,
+  input,
+  output,
   signal,
   untracked,
   viewChild,
@@ -16,8 +18,11 @@ import { MC_WORK_STATE, questionCardOf, ticketPersonaOf, type McBoard, type Ques
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import { AnswerCard, type AnswerOption } from '../phone/answer-card';
+import { PhoneAvatar } from '../phone/avatar';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
+import { PadCards } from '../shell/pad-card';
+
 import { COMPOSER_PLACEHOLDER } from '../../../../shared/composer-placeholder';
 import { Dictation, browserDictationEnv, clockOf } from './dictation';
 import { PlanPane } from '../plan/plan-pane';
@@ -507,9 +512,9 @@ interface SheetEntry {
 @Component({
   selector: 'mc-chat',
   templateUrl: './chat.html',
-  styleUrls: ['../phone/kit.css', './chat.css', './phone.css'],
+  styleUrls: ['../phone/kit.css', './chat.css', './phone.css', './pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, PlanPane, AppBar, AnswerCard, McI18nPipe, PhoneIcon],
+  imports: [NgTemplateOutlet, PlanPane, AppBar, AnswerCard, McI18nPipe, PhoneAvatar, PhoneIcon],
 })
 export class Chat {
   protected readonly state: McChatState =
@@ -1078,8 +1083,41 @@ export class Chat {
     };
   });
 
+  /** The shape session's planner as the iPad draws it above his answers (board 5b, 5c). */
+  protected readonly shapeWho = computed(() => {
+    const name = 'Paul';
+    return { name, color: this.work?.personas.find((persona) => persona.title === name)?.color ?? 'var(--text-2)' };
+  });
+
   /** Paul's unanswered question: the last thing in the thread is his answer card. */
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
+  /** The iPad's right pane (10e): the shell draws the Assistant head, the card of the open ticket shows here. */
+  readonly assistant = input(false);
+  /** The iPad's thread in the centre (10f): the ticket it was opened from. */
+  readonly padThread = input<string | null>(null);
+  readonly threadBack = output<void>();
+  private readonly padCards = inject(PadCards);
+  protected readonly padCard = computed(() => (this.assistant() ? this.padCards.card() : null));
+  /** The card grows with a mark: the Assistant keeps its foot in view, as the board shows it. */
+  private readonly followPadCard = effect(() => {
+    this.padCard()?.selected();
+    const el = this.thread()?.nativeElement;
+    if (el !== undefined && this.assistant()) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  });
+  /** The bar's back control: only the thread's, to its ticket. */
+  protected readonly barBack = computed(() => {
+    const ticket = this.padThread();
+    return ticket === null || ticket === '' ? null : ticket;
+  });
+  /** The padded column's meta line: the Assistant's has no time. */
+  protected metaOf(at: string): string {
+    return this.assistant() ? this.i18n.t('menu.mission_control') : this.i18n.t('chat.phone.meta', { time: this.timeOf(at) });
+  }
   private readonly i18n = inject(McI18n);
 
   /** A message's clock time for the phone's meta line. */

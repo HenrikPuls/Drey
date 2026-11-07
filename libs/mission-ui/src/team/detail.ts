@@ -24,7 +24,11 @@ import {
   type AcceptArmState,
 } from '../ticket/ticket.model';
 import { AppBar } from '../app-bar/app-bar';
-import { initialsOf } from './team';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { PhoneAvatar } from '../phone/avatar';
+import { PhoneIcon } from '../phone/icon';
+import { padSignal } from '../phone/phone';
+import { dayCostFootOf, initialsOf, isPersonaPaused, MC_TEAM_STATE } from './team';
 
 // --- pure logic ----------------------------------------------------------------
 
@@ -279,12 +283,67 @@ export const MC_TEAM_DETAIL = new InjectionToken<TeamDetailVm>('mc-team-detail',
 @Component({
   selector: 'mc-persona-detail',
   templateUrl: './detail.html',
-  styleUrls: ['../seg.css', './detail.css'],
+  styleUrls: ['../seg.css', './detail.css', './detail-pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, AppBar],
+  imports: [NgTemplateOutlet, AppBar, McI18nPipe, PhoneAvatar, PhoneIcon],
 })
 export class PersonaDetail {
   private readonly vm = inject(MC_TEAM_DETAIL);
+  private readonly team = inject(MC_TEAM_STATE);
+
+  // --- the iPad's right part (board 5d) -----------------------------------------------
+
+  protected readonly pad = padSignal();
+
+  /** The persona's card on the team list: its pause flag, day cost and budget. */
+  private readonly teamPersona = computed(() => this.team.team()?.find((p) => p.id === this.vm.open()?.id) ?? null);
+
+  /** The head's Pause is offered when the desk can pause and the device may act. */
+  protected readonly canPause = computed(() => this.team.personaPause !== undefined && !this.vm.readOnly());
+
+  protected readonly paused = computed(() => {
+    const persona = this.teamPersona();
+    return persona !== null && isPersonaPaused(persona, this.team.pausedPersonas?.() ?? []);
+  });
+
+  protected togglePause(): void {
+    const id = this.vm.open()?.id;
+    if (id !== undefined) {
+      void this.team.personaPause?.(id, !this.paused());
+    }
+  }
+
+  /** The Setup tab shows the existing form instead of the cards. */
+  protected readonly editing = signal(false);
+
+  /** The model pool in order: the provider's label and, for the first entry, the default model. */
+  protected readonly poolRows = computed(() => {
+    const facts = this.persona();
+    if (facts === null) {
+      return null;
+    }
+    const pool = (facts.pool ?? []).length > 0 ? facts.pool! : (facts.worker ?? '') === '' ? [] : [facts.worker!];
+    if (pool.length === 0) {
+      return null;
+    }
+    const capacity = this.team.capacity?.() ?? [];
+    return pool.map((provider, index) => ({
+      key: `${index}:${provider}`,
+      label: capacity.find((cap) => cap.provider === provider)?.label ?? provider,
+      model: index === 0 ? (facts.model ?? '') : '',
+    }));
+  });
+
+  /** The Cost tile: what the persona settled today and the budget it is held against. */
+  protected readonly costToday = computed(() => {
+    const persona = this.teamPersona();
+    const foot = persona === null ? null : dayCostFootOf(persona);
+    if (persona === null || foot === null) {
+      return null;
+    }
+    const budget = persona.budget;
+    return { today: foot.text.split(' ')[0]!, budget: budget === null ? null : `$${budget.toFixed(2)}` };
+  });
 
   protected readonly isOpen = computed(() => this.vm.open() !== null);
 
@@ -349,6 +408,7 @@ export class PersonaDetail {
         this.setupBusy.set(null);
         this.setupError.set(null);
         this.sheet.set(null);
+        this.editing.set(false);
       }
     });
   }

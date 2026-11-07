@@ -14,7 +14,7 @@ import {
 import type { MarkdownViewHandle } from '@markdown-surface/create-view';
 import { StateEffect } from '@codemirror/state';
 import type { ToolbarAction } from '@markdown-surface/toolbar-commands';
-import { phoneSignal } from '../phone/phone';
+import { touchFaceSignal } from '../phone/phone';
 
 import { MD_MODES, MD_MODE_LABEL, deviceStorage, storedMode, storeMode, type MdMode } from './mode';
 
@@ -163,7 +163,7 @@ export class Markdown implements OnDestroy {
         onChange: (next) => this.textChange.emit(next),
         onOpenLink: (href) => this.linkOpened.emit(href),
       });
-      if (phoneSignal()()) {
+      if (touchFaceSignal()()) {
         const { phoneSurfaceExtension } = await import('./phone-surface');
         if (!this.destroyed) {
           this.handle.view.dispatch({ effects: StateEffect.appendConfig.of(phoneSurfaceExtension()) });

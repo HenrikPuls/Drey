@@ -1,0 +1,329 @@
+/* The iPad's Settings (board 5f). Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .pd-set {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    font-size: var(--ph-17);
+    line-height: 24px;
+    color: var(--text);
+    background: var(--bg);
+  }
+  :host-context(.no-left) .pd-cats {
+    display: none;
+  }
+  .pd-cats {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    box-sizing: content-box;
+    width: 240px;
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .pd-cats-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    box-sizing: content-box;
+    height: 44px;
+    padding: 0 16px;
+    font-size: var(--ph-15);
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .pd-cat {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 52px;
+    padding: 0 16px;
+    font: inherit;
+    font-size: var(--ph-16);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-cat.on {
+    background: var(--panel-2);
+  }
+  .pd-grow {
+    flex-grow: 1;
+    min-width: 0;
+  }
+  .pd-count {
+    flex: none;
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-main {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  .pd-bar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 12px;
+    box-sizing: content-box;
+    height: 52px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pd-bar-title {
+    flex: none;
+    font-size: var(--ph-17);
+    line-height: 22px;
+  }
+  .pd-bar-sub {
+    flex-grow: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-back {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-left: -8px;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+  .pd-back mc-ph-icon {
+    transform: rotate(180deg);
+  }
+  .pd-search-zone {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pd-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 6px 0 12px;
+    color: var(--text-2);
+    background: var(--panel-2);
+    border-radius: var(--radius-control);
+  }
+  .pd-field input {
+    flex-grow: 1;
+    min-width: 0;
+    height: 44px;
+    padding: 0;
+    font: inherit;
+    font-size: var(--ph-17);
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    outline: none;
+    appearance: none;
+  }
+  .pd-field input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .pd-clear {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--text-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+  .pd-scope {
+    display: flex;
+    gap: 2px;
+    align-self: flex-start;
+    padding: 2px;
+    background: var(--panel);
+    border-radius: var(--radius-control);
+  }
+  .pd-scope-btn {
+    height: 44px;
+    padding: 0 18px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-chip);
+  }
+  .pd-scope-btn.on {
+    font-weight: 600;
+    color: var(--text);
+    background: var(--panel-2);
+  }
+  .pd-list {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 12px 16px 24px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .pd-list > * {
+    flex: none;
+  }
+  .pd-none {
+    font-size: var(--ph-15);
+    color: var(--text-2);
+  }
+  .pd-sec {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-sec-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 0 16px;
+    font: inherit;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-sec-head.on {
+    background: var(--panel-2);
+  }
+  .pd-sec-head mc-ph-icon {
+    flex: none;
+    color: var(--text-2);
+  }
+  .pd-sec-title {
+    flex-grow: 1;
+    min-width: 0;
+    font-size: var(--ph-17);
+  }
+  .pd-sec-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 8px;
+    border-top: 1px solid var(--line);
+  }
+  .pd-sub {
+    padding: 14px 0 4px;
+    font-size: var(--ph-13);
+    line-height: 18px;
+    letter-spacing: 0.02em;
+    color: var(--text-2);
+  }
+  .pd-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-sizing: content-box;
+    min-height: 64px;
+    padding: 8px 0;
+    border-top: 1px solid var(--panel-2);
+  }
+  .pd-row-text {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .pd-row-label {
+    font-weight: 600;
+  }
+  .pd-row-desc {
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-row-error {
+    font-size: var(--ph-15);
+    line-height: 20px;
+  }
+  .pd-row-end {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 340px;
+  }
+  .pd-row-value {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-change,
+  .pd-time {
+    height: 44px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-select {
+    width: 80px;
+    height: 44px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    margin-right: 8px;
+    appearance: none;
+  }
+  .pd-page {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .pd-page > * {
+    flex: none;
+    max-width: 720px;
+  }
+}

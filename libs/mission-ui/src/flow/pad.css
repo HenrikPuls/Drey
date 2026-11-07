@@ -1,0 +1,458 @@
+/* The iPad's flow editor (board 5i). Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .pd-flow {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 0;
+    font-size: var(--ph-17);
+    line-height: 24px;
+    color: var(--text);
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+  }
+  .pd-fbody {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+    padding: 16px 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .pd-fbody > * {
+    flex: none;
+  }
+  .pd-fnote {
+    margin: 0;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-fflow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pd-ftitle {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .pd-fchip {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: 30px;
+    padding: 0 10px;
+    font-size: var(--ph-13);
+    color: var(--accent-pink);
+    border: 1px solid var(--accent-pink);
+    border-radius: var(--radius-control);
+  }
+  .pd-fstrip {
+    display: flex;
+    align-items: center;
+    padding: 8px 0 4px;
+    overflow: auto hidden;
+    overscroll-behavior: contain;
+  }
+  .pd-fcell {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+  .pd-fgate {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+    box-sizing: border-box;
+    width: 132px;
+    min-height: 96px;
+    padding: 10px;
+    font: inherit;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-fgate.sel {
+    border-color: var(--control-border);
+  }
+  .pd-fgate.draft {
+    background: var(--panel-2);
+    border: 1px dashed var(--control-border);
+  }
+  .pd-fgate.skip {
+    opacity: 0.6;
+  }
+  .pd-fgate.skip b {
+    text-decoration: line-through;
+  }
+  .pd-fcaps {
+    font-family: var(--mono);
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .pd-fwho {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+  }
+  .pd-fwho b {
+    min-width: 0;
+    font-size: var(--ph-16);
+  }
+  .pd-fsub,
+  .pd-fmark {
+    max-width: 100%;
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-fmark {
+    color: var(--accent-pink);
+  }
+  .pd-fmark.run {
+    color: var(--accent);
+  }
+  .pd-fins {
+    position: relative;
+    flex: none;
+    width: 30px;
+    height: 44px;
+    padding: 0;
+    color: var(--text-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-fins-line {
+    position: absolute;
+    top: 21px;
+    right: 0;
+    left: 0;
+    height: 2px;
+    background: var(--control-border);
+  }
+  .pd-fins-dot {
+    position: absolute;
+    top: 10px;
+    left: 3px;
+    box-sizing: content-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: var(--ph-17);
+    line-height: 22px;
+    background: var(--bg);
+    border: 1px solid var(--control-border);
+    border-radius: 50%;
+  }
+  .pd-fins:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pd-fadd {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pd-fpick {
+    height: 44px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+  }
+  .pd-fexplain {
+    margin: 0;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-fpaul,
+  .pd-fcard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-fcard {
+    gap: 12px;
+  }
+  .pd-fvia {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-fp {
+    font-size: var(--ph-16);
+    line-height: 22px;
+  }
+  .pd-flink {
+    display: flex;
+    align-items: center;
+    align-self: flex-start;
+    min-height: 44px;
+    padding: 0;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-fhead {
+    display: flex;
+    gap: 10px;
+  }
+  .pd-fhead b {
+    min-width: 0;
+    font-size: var(--ph-17);
+  }
+  .pd-fgrey {
+    font-size: var(--ph-13);
+    color: var(--text-2);
+  }
+  .pd-fgrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .pd-ffield {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .pd-flabel {
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-fsel {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    padding: 0 10px;
+    font: inherit;
+    font-size: var(--ph-16);
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-fsel.ro:disabled {
+    color: var(--text);
+    opacity: 1;
+  }
+  .pd-ftell {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    min-width: 0;
+    min-height: 44px;
+  }
+  .pd-ftext {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .pd-fhint {
+    display: block;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-fswitch {
+    position: relative;
+    box-sizing: border-box;
+    flex: none;
+    width: 51px;
+    height: 31px;
+    padding: 0;
+    cursor: pointer;
+    background: var(--panel-2);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-dialog);
+  }
+  .pd-fswitch.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .pd-fswitch:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pd-fknob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 25px;
+    height: 25px;
+    background: var(--text);
+    border-radius: 50%;
+    transition: transform 0.15s;
+  }
+  .pd-fswitch.on .pd-fknob {
+    transform: translateX(20px);
+  }
+  .pd-fbtns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pd-fgrow {
+    flex: 1 1 0;
+  }
+  .pd-fbtn {
+    box-sizing: border-box;
+    height: 44px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-fbtn.dashed {
+    border: 1px dashed var(--control-border);
+  }
+  .pd-fbtn.danger {
+    color: var(--danger);
+    border-color: var(--control-border);
+  }
+  .pd-fbtn:disabled,
+  .pd-ffbtn:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pd-fask {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 6px 6px 6px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-dialog);
+  }
+  .pd-fask:focus-within {
+    border-color: var(--control-border);
+  }
+  .pd-fsr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .pd-fin {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 24px;
+    padding: 0;
+    font: inherit;
+    font-size: var(--ph-17);
+    line-height: 24px;
+    color: var(--text);
+    resize: none;
+    background: transparent;
+    border: 0;
+    outline: none;
+  }
+  .pd-fsend {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--on-accent);
+    cursor: pointer;
+    background: var(--accent);
+    border: 0;
+    border-radius: 50%;
+  }
+  .pd-fsend:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .pd-ffoot {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px var(--pd-foot, 20px);
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+  }
+  .pd-ferror {
+    margin: 0;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--danger);
+  }
+  .pd-frow {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .pd-fstatus {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pd-ffbtn {
+    display: flex;
+    flex: none;
+    align-items: center;
+    box-sizing: border-box;
+    height: 48px;
+    padding: 0 18px;
+    font: inherit;
+    font-size: var(--ph-16);
+    color: var(--text);
+    white-space: nowrap;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-ffbtn.save {
+    font-size: var(--ph-17);
+    font-weight: 600;
+    color: var(--on-accent);
+    background: var(--accent-mint);
+    border: 0;
+  }
+}

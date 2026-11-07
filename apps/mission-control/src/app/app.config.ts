@@ -184,6 +184,9 @@ export const appConfig: ApplicationConfig = {
           get runs() {
             return state.team().runs;
           },
+          get openTicketId() {
+            return state.ticketOpen()?.id ?? state.approvalTicket();
+          },
           get today() {
             return todayOfPersonas(state.team().personas as unknown as readonly { dailyCost?: number; budget?: number | null }[] | null);
           },
@@ -218,6 +221,7 @@ export const appConfig: ApplicationConfig = {
           chainMaster: computed(() => state.team().chainMaster ?? null),
           pausedPersonas: computed(() => state.team().pausedPersonas ?? []),
           openPersona: (id) => state.openPersona(id),
+          openPersonaId: computed(() => state.personaDetail()?.id ?? null),
           openTicket: (ticketId) => state.openTicket(ticketId),
           toggleChainMaster: (paused) => state.chainMaster(paused),
           personaPause: (id, paused) => state.personaPause(id, paused),
@@ -384,6 +388,7 @@ export const appConfig: ApplicationConfig = {
             return detail === null ? null : (phaseColors().get(detail.phase) ?? null);
           },
           diff: () => state.diff() as ReturnType<TicketVm['diff']>,
+          loadDiff: () => state.loadDiff(),
           readOnly: () => state.readOnly(),
           attachmentUrl: (name) => {
             const url = state.attachmentUrl(name);
@@ -418,6 +423,7 @@ export const appConfig: ApplicationConfig = {
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),
           openChat: () => state.openChat(),
+          openPadThread: (id) => state.openPadThread(id),
           save: async (text) => {
             const reply = await state.saveTicket(text);
             return reply.ok ? { ok: true } : { ok: false, error: reply.error };

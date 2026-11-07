@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signa
 import { AppBar } from '../app-bar/app-bar';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
 import { phoneGroupsFiltered, phoneGroupsOf, todayCostTextOf, type PhoneWorkGroup, type PhoneWorkRow } from './phone-rows';
 import { McI18n } from '../i18n/i18n.service';
 import {
@@ -57,7 +57,7 @@ import {
 @Component({
   selector: 'mc-work',
   templateUrl: './work.html',
-  styleUrls: ['../phone/kit.css', './work.css'],
+  styleUrls: ['../phone/kit.css', './work.css', './pad.css'],
   imports: [AppBar, McI18nPipe, NgTemplateOutlet, PhoneIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -81,7 +81,8 @@ export class Work {
 
   // --- the phone's list (board 10c): rows only; a decision is taken in the ticket ---
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
   protected readonly searchOpen = signal(false);
   protected readonly query = signal('');
   /** The folded state the owner set; a group not named here starts as its kind says. */
@@ -122,7 +123,9 @@ export class Work {
 
   /** A row without a board card: its ticket, else the need's persona. */
   protected openPhoneRow(row: PhoneWorkRow): void {
-    if (row.plan && row.ticketId !== null && this.state?.openPlan !== undefined) {
+    // The iPad: an open question is shaped on the ticket (5b), the plan to accept comes after it (5c).
+    const toPlan = row.plan && !(this.pad() && row.need?.need.kind === 'question');
+    if (toPlan && row.ticketId !== null && this.state?.openPlan !== undefined) {
       this.state.openPlan(row.ticketId);
     } else if (row.ticketId !== null) {
       this.state?.openTicket?.(row.ticketId);

@@ -31,18 +31,24 @@ test.describe('iPad landscape (1194×834)', () => {
   test('the Appearance page takes the middle and the right area, not a narrow column', async ({ page }) => {
     await openApp(page);
     await page.locator('mc-shell-header').getByRole('button', { name: 'Settings' }).click();
-    await page.locator('mc-settings .cats .row', { hasText: 'Appearance' }).click();
     const settingsWidth = await width(page, 'mc-settings');
-    const pageWidth = await width(page, 'mc-settings .page');
     expect(settingsWidth).toBeGreaterThan(800);
+    // Appearance starts open; Change… opens the existing page in place.
+    await page.locator('mc-settings .pd-row', { hasText: 'Color theme' }).getByRole('button', { name: 'Change…' }).click();
+    const pageWidth = await width(page, 'mc-settings .pd-page');
     expect(pageWidth).toBeGreaterThan(450);
-    // The five text steps sit side by side, each at least a 44 pt target.
-    const steps = page.locator('mc-settings .sizes .size');
-    await expect(steps).toHaveText(['S', 'M', 'L', 'XL', 'XXL']);
-    for (const box of await steps.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()))) {
-      expect(box.width).toBeGreaterThanOrEqual(44);
-      expect(box.height).toBeGreaterThanOrEqual(44);
+    const slider = page.getByRole('slider', { name: 'Text size' });
+    await expect(slider).toHaveAttribute('aria-valuetext', 'L, 17 px');
+    const box = (await slider.boundingBox())!;
+    await page.mouse.click(box.x + box.width, box.y + 22);
+    await expect(slider).toHaveAttribute('aria-valuetext', 'XXL, 21 px');
+    // The 44 pt target holds on what the page offers.
+    for (const target of await page.locator('mc-settings .pd-page .ph-tile, mc-settings .pd-page .ph-dot').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()))) {
+      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.height).toBeGreaterThanOrEqual(44);
     }
+    await page.getByRole('button', { name: 'Back to settings' }).click();
+    await expect(page.locator('mc-settings .pd-sec')).not.toHaveCount(0);
   });
 });
 

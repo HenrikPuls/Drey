@@ -141,11 +141,12 @@ test.describe('iPad landscape (1194×834)', () => {
     await expect(page.locator('.pane-right mc-chat')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('mc-ipad-notes-list.png') });
 
-    await page.locator('mc-notes .group .row', { hasText: 'Welcome' }).first().click();
+    await page.locator('mc-notes .ph-note-row', { hasText: 'Welcome' }).first().click();
     const note = page.locator('mc-note.pane-center');
     await expect(note).toBeVisible();
     await expect(page.locator('mc-notes.pane-left')).toBeVisible();
-    await expect(note.locator('.mdx-seg-btn[aria-pressed="true"]')).toHaveText('View');
+    // 10n: the note in View mode, only the pencil; the modes come with editing.
+    await expect(note.getByRole('tab')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('mc-ipad-note-view.png') });
 
     // 10r: editing in the centre while the list and the chat stay.
@@ -157,8 +158,8 @@ test.describe('iPad landscape (1194×834)', () => {
     await expect(note.getByRole('button', { name: 'Edit note' })).toBeVisible();
     expect(NOTES_FIXTURE.files.get('Welcome.md')!.text).toContain('iPad.');
 
-    // Ask about this note: the chat pane (already mounted) adopts the line.
-    await note.getByRole('button', { name: 'Ask about this note' }).click();
-    await expect(page.locator('.pane-right mc-chat textarea')).toHaveValue('About the note Welcome.md:');
+    // 10n draws no Ask: Mission Control sits beside the note, its composer is the way to ask.
+    await expect(note.getByRole('button', { name: 'Ask about this note' })).toBeHidden();
+    await expect(page.locator('.pane-right mc-chat textarea')).toBeVisible();
   });
 });

@@ -97,3 +97,12 @@
 .send:disabled {
   opacity: 0.55;
 }
+
+/* In the iPad's Assistant (10e): tighter, and the card stands off the pane on the page's ground. */
+:host-context(.pad-right) .card {
+  padding: 12px;
+  background: var(--bg);
+}
+:host-context(.pad-right) .opt {
+  padding: 8px 12px;
+}

@@ -9,6 +9,7 @@
   >
     <span class="dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
     <span class="txt">{{ text() }}</span>
+    <span class="word">{{ word() }}</span>
   </button>
   @if (open()) {
     <div class="pop" role="dialog" [attr.aria-label]="title()">

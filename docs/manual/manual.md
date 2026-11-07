@@ -1613,8 +1613,10 @@ status or button. The bar stays put while the page scrolls beneath it.
 
 On an iPad the app works like the desktop: a header with the **left sidebar** toggle, the
 **Notes · Work · Crew** switch and the **right sidebar** toggle. The left sidebar lists the area (the
-tickets, the crew), the middle shows the open ticket, persona or settings, the right sidebar
-switches between the Mission Control chat and **Capacity**. Held sideways the iPad opens all three; held upright it opens the
+tickets, the crew), the middle shows the open ticket or persona, the right sidebar is the **Assistant**,
+which switches between Mission Control and **Capacity**. A ticket's question or decision waits there as a card; **Go to the card**
+on the ticket opens it. **Thread** on a ticket opens its conversation in the middle, with your chats on the left. Crew, Settings,
+Review and Flow use the room of the right sidebar; its toggle calls the Assistant over them. Held sideways the iPad opens all three; held upright it opens the
 list and the middle, and the right sidebar slides over the page. Which sidebars are open is
 remembered on that iPad, separately for each way it is held.
 
@@ -1627,11 +1629,11 @@ meantime, Mission Control shows both versions and you keep yours or the computer
 its tags, a link to its ticket when its header says `ticket: T-0123`, and **Ask about this
 note**, which opens the Mission Control chat with the note named. **+** in the list makes a new
 note in the open folder. A device paired **Read only** can read and search notes but has no
-pencil and no **+**. On an iPad the list is the left sidebar and the note sits in the middle.
+pencil and no **+**. On an iPad the list is the left sidebar and the note sits in the middle, with Mission Control beside it instead of **Ask about this note**.
 
 Settings → **Appearance** sets the **text size** in five steps — **S, M, L, XL, XXL** (XXL is
 the largest, 21 px body text) — with the preview underneath; it is kept per device and applies at
-once. On an iPad the Settings page uses the middle and right area. In **Work** every ticket is
+once. On an iPad Settings has its categories on the left, then a search and one section per category; **Change…** opens a section's page. In **Work** every ticket is
 one row — id and age, title, a line saying what it waits for, the persona and the cost so far
 (**$1.20 so far**); a ticket that needs you is shown once, under **Needs you**.
 

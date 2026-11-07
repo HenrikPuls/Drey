@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal } from '@angular/core';
 import {
   AUTOPILOT_KINDS,
   autopilotRefusalCodeOf,
@@ -12,9 +12,10 @@ import {
 import { MC_AUTOPILOT } from '../autopilot/autopilot-state';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { PhoneIcon, type PhoneIconName } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
 import { AppBar } from '../app-bar/app-bar';
 import { McI18n } from '../i18n/i18n.service';
+import type { MessageKey } from '../../../../shared/i18n';
 import { deviceListOf } from './device-list';
 import {
   ACCENTS,
@@ -52,6 +53,34 @@ interface PhoneSettingsRow {
   readonly value: string;
 }
 
+/** The iPad's sections (board 5f): the page groups plus Autopilot. */
+export type PadSectionId = SettingsPage | 'autopilot';
+
+/** The scopes the iPad's search zone offers; "This vault" waits for req-130. */
+export type PadScope = 'all' | 'device';
+
+interface PadRow {
+  readonly id: 'theme' | 'text' | 'page' | 'pilot' | 'resume';
+  readonly label: string;
+  readonly desc: string;
+  readonly value: string;
+  readonly page: SettingsPage | null;
+}
+
+interface PadBlock {
+  readonly sub: string;
+  readonly rows: readonly PadRow[];
+}
+
+interface PadSection {
+  readonly id: PadSectionId;
+  readonly label: string;
+  readonly group: PadScope;
+  /** Every setting the section holds, searched or not (the count the board draws). */
+  readonly count: number;
+  readonly blocks: readonly PadBlock[];
+}
+
 export const SETTINGS_PAGES: readonly { readonly id: SettingsPage; readonly label: string; readonly sub: string }[] = [
   { id: 'appearance', label: 'Appearance', sub: 'Theme, highlight color, text size, density' },
   { id: 'chat', label: 'Chat', sub: 'Model, connection' },
@@ -74,7 +103,7 @@ export const VIDEOS_IN_GIT_WARNING =
 @Component({
   selector: 'mc-settings',
   templateUrl: './settings.html',
-  styleUrls: ['../phone/kit.css', './settings.css'],
+  styleUrls: ['../phone/kit.css', './settings.css', './pad.css'],
   imports: [AppBar, McI18nPipe, NgTemplateOutlet, PhoneIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -85,7 +114,9 @@ export class Settings {
 
   // --- the phone's list and Appearance (boards 10g, 10h) --------------------------
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly autopilotState = inject(MC_AUTOPILOT, { optional: true });
   protected readonly query = signal('');
   protected readonly phoneAccents = PHONE_ACCENTS;
@@ -123,6 +154,128 @@ export class Settings {
         return this.view() === null ? '' : this.i18n.t('settings.phone.engine_running');
       default:
         return this.summaryOf(id);
+    }
+  }
+
+  // --- the iPad's sections (board 5f) ---------------------------------------------
+
+  protected readonly scope = signal<PadScope>('all');
+  protected readonly padCat = signal<PadSectionId>('appearance');
+  private readonly openSections = signal<ReadonlySet<PadSectionId>>(new Set<PadSectionId>(['appearance']));
+
+  /** Every section with its rows, before the query and the scope narrow them. */
+  private readonly padAll = computed<readonly PadSection[]>(() => {
+    const t = (key: MessageKey): string => this.i18n.t(key);
+    const pageRow = (page: SettingsPage, descKey: MessageKey): PadRow => ({
+      id: 'page',
+      label: this.labelOf(page),
+      desc: t(descKey),
+      value: this.phoneValueOf(page),
+      page,
+    });
+    const sections: PadSection[] = [
+      {
+        id: 'appearance',
+        label: this.labelOf('appearance'),
+        group: 'device',
+        count: 2,
+        blocks: [
+          {
+            sub: t('settings.pad.sub_theme'),
+            rows: [{ id: 'theme', label: t('settings.pad.color_theme'), desc: t('settings.pad.color_theme_desc'), value: THEME_LABEL[this.theme.name()], page: 'appearance' }],
+          },
+          {
+            sub: t('settings.pad.sub_text'),
+            rows: [
+              {
+                id: 'text',
+                label: t('settings.pad.text_size'),
+                desc: this.i18n.t('settings.pad.text_size_desc', { size: this.theme.textSize(), px: TEXT_BODY_PX[this.theme.textSize()] }),
+                value: '',
+                page: null,
+              },
+            ],
+          },
+        ],
+      },
+      { id: 'chat', label: this.labelOf('chat'), group: 'device', count: 1, blocks: [{ sub: t('settings.pad.sub_model'), rows: [pageRow('chat', 'settings.pad.chat_desc')] }] },
+      { id: 'devices', label: this.labelOf('devices'), group: 'all', count: 1, blocks: [{ sub: t('settings.pad.sub_devices'), rows: [pageRow('devices', 'settings.pad.devices_desc')] }] },
+      { id: 'engine', label: this.labelOf('engine'), group: 'all', count: 1, blocks: [{ sub: t('settings.pad.sub_videos'), rows: [pageRow('engine', 'settings.pad.engine_desc')] }] },
+    ];
+    if (this.autopilot() !== null) {
+      sections.push({
+        id: 'autopilot',
+        label: t('autopilot.title'),
+        group: 'all',
+        count: 2,
+        blocks: [
+          {
+            sub: t('autopilot.title'),
+            rows: [
+              { id: 'pilot', label: t('autopilot.title'), desc: t('settings.pad.autopilot_desc'), value: '', page: null },
+              { id: 'resume', label: t('settings.phone.resume_at'), desc: t('settings.pad.resume_desc'), value: '', page: null },
+            ],
+          },
+        ],
+      });
+    }
+    return sections;
+  });
+
+  /** The category column: every section, whatever the scope. */
+  protected readonly padCats = computed(() => this.padAll().map((s) => ({ id: s.id, label: s.label, count: s.count })));
+
+  /** The sections the scope and the query leave; a section named by the query keeps all its rows. */
+  protected readonly padSections = computed<readonly PadSection[]>(() => {
+    const needle = this.query().trim().toLowerCase();
+    const scope = this.scope();
+    const has = (text: string): boolean => text.toLowerCase().includes(needle);
+    return this.padAll()
+      .filter((s) => scope === 'all' || s.group === scope)
+      .map((s) => {
+        if (needle === '' || has(s.label)) {
+          return s;
+        }
+        const blocks = s.blocks
+          .map((b) => ({ sub: b.sub, rows: b.rows.filter((r) => has(r.label) || has(r.desc) || has(r.value) || has(b.sub)) }))
+          .filter((b) => b.rows.length > 0);
+        return { ...s, blocks };
+      })
+      .filter((s) => s.blocks.length > 0);
+  });
+
+  protected isOpen(id: PadSectionId): boolean {
+    return this.query().trim() !== '' || this.openSections().has(id);
+  }
+
+  protected toggleSection(id: PadSectionId): void {
+    const next = new Set(this.openSections());
+    if (!next.delete(id)) {
+      next.add(id);
+    }
+    this.openSections.set(next);
+  }
+
+  /** A category tap: leaves any open page, opens the section and scrolls to it. */
+  protected pickCat(id: PadSectionId): void {
+    this.padCat.set(id);
+    this.page.set(null);
+    this.openSections.set(new Set(this.openSections()).add(id));
+    setTimeout(() => this.host.nativeElement.querySelector(`#pd-sec-${id}`)?.scrollIntoView({ block: 'start' }), 0);
+  }
+
+  protected pickScope(scope: PadScope): void {
+    this.scope.set(scope);
+  }
+
+  protected clearQuery(): void {
+    this.query.set('');
+  }
+
+  protected onSizeSelect(event: Event): void {
+    const size = TEXT_SIZES.find((s) => s === (event.target as HTMLSelectElement).value);
+    if (size !== undefined) {
+      this.pickSize(size);
     }
   }
 

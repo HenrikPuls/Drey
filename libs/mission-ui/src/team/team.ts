@@ -2,8 +2,9 @@ import { NgTemplateOutlet } from '@angular/common';
 import { AppBar } from '../app-bar/app-bar';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
+import { PhoneAvatar } from '../phone/avatar';
 import { PhoneIcon } from '../phone/icon';
-import { phoneSignal } from '../phone/phone';
+import { padSignal, touchFaceSignal } from '../phone/phone';
 import { todayOfPersonas } from '../work/phone-rows';
 import {
   ChangeDetectionStrategy,
@@ -92,6 +93,8 @@ export interface McTeamState {
    * cards stay read-only, as they did before the detail existed.
    */
   openPersona?(id: string): void;
+  /** The persona whose 1:1 is open right now (the iPad marks its card); absent or null = none. */
+  readonly openPersonaId?: Signal<string | null>;
   /** Opens the ticket screen (E5c) for the card's live run; absent = the ghost hides. */
   openTicket?(ticketId: string): void;
   /**
@@ -383,9 +386,9 @@ export function budgetPctOf(persona: Pick<McPersonaView, 'budget' | 'dailyCost'>
 @Component({
   selector: 'mc-team',
   templateUrl: './team.html',
-  styleUrls: ['../phone/kit.css', './team.css'],
+  styleUrls: ['../phone/kit.css', './team.css', './pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, AppBar, McI18nPipe, PhoneIcon],
+  imports: [NgTemplateOutlet, AppBar, McI18nPipe, PhoneAvatar, PhoneIcon],
 })
 export class Team {
   private readonly state = inject(MC_TEAM_STATE);
@@ -416,7 +419,39 @@ export class Team {
 
   // --- the phone's Crew (board 10i) ---------------------------------------------
 
-  protected readonly phone = phoneSignal();
+  protected readonly phone = touchFaceSignal();
+  protected readonly pad = padSignal();
+
+  /** The persona whose 1:1 is open in the right part (the iPad's selected card). */
+  protected readonly selectedId = computed(() => this.state.openPersonaId?.() ?? null);
+
+  /** The iPad bar's summary: personas, running, stuck and what today cost against the budget. */
+  protected readonly padSummary = computed(() => {
+    const parts = [this.summaryLine()];
+    const today = todayOfPersonas((this.personas() ?? []) as readonly { dailyCost?: number; budget?: number | null }[]);
+    if (today !== null && today.cost !== null) {
+      const cost = `$${today.cost.toFixed(2)}`;
+      parts.push(
+        today.budget === null
+          ? this.teamI18n.t('crew.pad.today_only', { cost })
+          : this.teamI18n.t('crew.pad.today_of', { cost, budget: Number.isInteger(today.budget) ? `$${today.budget}` : `$${today.budget.toFixed(2)}` }),
+      );
+    }
+    return parts.join(' · ');
+  });
+
+  /** A stuck run's warning as the iPad board words it. */
+  protected padStuckWords(row: RunRowVm): string {
+    const n = row.silentMinutes ?? 0;
+    return row.contextPct === null
+      ? this.teamI18n.t('crew.phone.stuck_text', { n })
+      : this.teamI18n.t('crew.pad.stuck_context', { n, pct: row.contextPct });
+  }
+
+  /** The card tap on the iPad: the persona's 1:1 opens in the right part. */
+  protected pick(persona: McTeamPersona): void {
+    this.state.openPersona?.(persona.id);
+  }
   private readonly teamI18n = inject(McI18n);
   /** The stuck run whose Stop was pressed: the question under its tiles. */
   protected readonly stopAsk = signal<string | null>(null);

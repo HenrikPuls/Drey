@@ -417,7 +417,7 @@ button.run-title {
 }
 
 /* The phone's Crew (board 10i). */
-@media (max-width: 767.98px) {
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
   :host,
   .ph-team {
     display: flex;

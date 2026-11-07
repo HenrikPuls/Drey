@@ -28,6 +28,8 @@ one means moving it back to the roadmap with a new justification.
   one continuous line. Both are 37 px; the tab bar, meta bar and editor stay on the board's position, the dock
   contents sit 4 px higher than drawn.
 
+- **2026-11-07: req-96's 'the chat is never the centre on the iPad' gets one exception, the Thread state of board 10f** (integrator's ruling Q2, wave row 4.6). `Thread` opens the ticket's conversation in the centre with the chats on the left; everywhere else the chat stays the right pane.
+
 - **The Autopilot board's radii 12 and 6 in the build** (owner, 2026-11-07; milestone 189, D-36).
   `Autopilot.png` draws the popover at 12 and the segments and Stop at 6. The design-scale guard
   (`shared/design-scale.spec.ts`, 4 / 8 / 16) stays: the tickets plugin uses dialog 16 and control 8, and

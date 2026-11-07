@@ -9,6 +9,9 @@
         <mc-ph-icon name="check" [stroke]="2.25" />
       </button>
     </header>
+    @if (pad()) {
+      <span class="ph-path pd-editpath">{{ 'notes.pad.editing' | t: { path: store.path() ?? '' } }}</span>
+    }
     <div class="ph-tabs-wrap">
       <div class="ph-tabs" role="tablist" [attr.aria-label]="'notes.mode' | t">
         @for (m of modes; track m) {

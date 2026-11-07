@@ -1,0 +1,59 @@
+/* The iPad's ticket list (boards 10e, 10q, 10s, 5b–5i). Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  :host {
+    font-size: var(--ph-16);
+  }
+  .pd-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    height: 45px;
+    padding: 0 4px 0 16px;
+    font-size: var(--ph-15);
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .pd-grow {
+    flex-grow: 1;
+  }
+  .pd-today {
+    font-size: var(--ph-13);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .ph-ghead {
+    flex: none;
+    height: 40px;
+    padding: 6px 16px 0;
+    font-size: var(--ph-13);
+  }
+  .ph-gtitle {
+    font-size: var(--ph-15);
+  }
+  .ph-ghead .ph-hot {
+    display: none;
+  }
+  .ph-trow {
+    flex: none;
+    gap: 10px;
+    min-height: 77px;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .ph-trow.cur {
+    background: var(--panel-2);
+  }
+  .ph-ttitle {
+    font-size: var(--ph-16);
+  }
+  .ph-tmeta {
+    font-size: var(--ph-13);
+    line-height: 18px;
+  }
+  .ph-scroll {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+}

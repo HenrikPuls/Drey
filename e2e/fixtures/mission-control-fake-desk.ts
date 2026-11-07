@@ -134,25 +134,38 @@ export interface FakeDeskOptions {
   readonly refuseAutopilot?: 'read_only' | 'bad_resume_at' | 'runner_down';
   /** Serves the phone boards' sample (10a–10t) in place of the demo data: the fidelity spec's state. */
   readonly boards?: boolean;
+  /** With `boards`: the iPad boards' overlay (5b-5i, 10e-10s). */
+  readonly pad?: boolean;
 }
 
 /** The answers of the board sample, by path; undefined = not a sample route. */
-function boardsRoute(pathname: string): unknown {
+function boardsRoute(pathname: string, pad: boolean): unknown {
   const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\//.exec(pathname);
   if (estimate !== null) {
-    return BOARDS.ESTIMATES[`${estimate[1]}/${estimate[2]}`] ?? { ok: false, error: 'no basis' };
+    return (pad ? BOARDS.PAD_ESTIMATES : BOARDS.ESTIMATES)[`${estimate[1]}/${estimate[2]}`] ?? { ok: false, error: 'no basis' };
   }
   const ticket = /^\/api\/tickets\/([^/]+)(\/parts|\/plan)?$/.exec(pathname);
   if (ticket !== null) {
     const id = decodeURIComponent(ticket[1]!);
     if (ticket[2] === '/parts') {
-      return id === 'T-0130' ? BOARDS.PARTS_130 : id === 'T-0121' ? BOARDS.PARTS_121 : { ok: false, error: 'no parts' };
+      return id === 'T-0130' ? (pad ? BOARDS.PAD_PARTS_130 : BOARDS.PARTS_130) : id === 'T-0121' ? BOARDS.PARTS_121 : { ok: false, error: 'no parts' };
     }
     if (ticket[2] === '/plan') {
-      return id === 'T-0130' ? BOARDS.PLAN_130 : { ok: true, version: null, edits: 0, summary: null, marks: [] };
+      return id === 'T-0130' ? (pad ? BOARDS.PAD_PLAN_130 : BOARDS.PLAN_130) : { ok: true, version: null, edits: 0, summary: null, marks: [] };
     }
-    const found = BOARDS.BOARD.columns.flatMap((c) => c.tickets).find((t) => t.id === id);
-    return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
+    const found = (pad ? BOARDS.PAD_BOARD : BOARDS.BOARD).columns.flatMap((c) => c.tickets).find((t) => t.id === id);
+    return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: (pad ? BOARDS.PAD_TICKET_TEXT[id] : undefined) ?? BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
+  }
+  if (pad && /^\/api\/tickets\/T-0130\/flow\/\d+$/.test(pathname)) {
+    return BOARDS.PAD_FLOW_130;
+  }
+  const diff = /^\/api\/tickets\/([^/]+)\/diff$/.exec(pathname);
+  if (pad && diff !== null) {
+    return decodeURIComponent(diff[1]!) === 'T-0121' ? BOARDS.PAD_DIFF_121 : { files: [], truncated: false };
+  }
+  const personaPage = /^\/api\/personas\/[^/]+\/(improvements|thread|memory)$/.exec(pathname);
+  if (pad && personaPage !== null) {
+    return { improvements: BOARDS.PAD_PERSONA_IMPROVEMENTS, thread: BOARDS.PAD_PERSONA_THREAD, memory: BOARDS.PAD_PERSONA_MEMORY }[personaPage[1] as 'improvements' | 'thread' | 'memory'];
   }
   const session = /^\/api\/chat\/sessions\/(.+)$/.exec(pathname);
   if (session !== null) {
@@ -161,11 +174,11 @@ function boardsRoute(pathname: string): unknown {
   }
   switch (pathname) {
     case '/api/board':
-      return BOARDS.BOARD;
+      return pad ? BOARDS.PAD_BOARD : BOARDS.BOARD;
     case '/api/needs':
       return BOARDS.NEEDS;
     case '/api/personas':
-      return BOARDS.PERSONAS;
+      return pad ? BOARDS.PAD_PERSONAS : BOARDS.PERSONAS;
     case '/api/fleet':
       return BOARDS.FLEET;
     case '/api/chat/sessions':
@@ -209,7 +222,7 @@ export async function startFakeDesk(
       return;
     }
     if (options.boards === true && (req.method === 'GET' || req.method === 'HEAD')) {
-      const answer = url.pathname === '/api/fleet' ? { ...BOARDS.FLEET, chain: { ...BOARDS.FLEET.chain, ...(chain['autopilotSet'] === true ? { autopilot: chain['autopilot'] } : {}) } } : boardsRoute(url.pathname);
+      const answer = url.pathname === '/api/fleet' ? { ...BOARDS.FLEET, chain: { ...BOARDS.FLEET.chain, ...(chain['autopilotSet'] === true ? { autopilot: chain['autopilot'] } : {}) } } : boardsRoute(url.pathname, options.pad === true);
       if (answer !== undefined) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(answer));

@@ -259,34 +259,56 @@
   }
 }
 
-/* -- iPad (req-96): header, then [left | centre | right] by named areas ------ */
+/* -- iPad (req-96, boards 5b–5i, 10e–10s): header, then [left | centre | right] ------ */
 
+/* The same scale as the phone: the boards' px at text size L, the other four steps scaled. */
 .shell.ipad {
+  --mc-scale: calc(var(--mc-text, 1.13333) / 1.13333);
+  --ph-13: max(13px, calc(13px * var(--mc-scale)));
+  --ph-14: calc(14px * var(--mc-scale));
+  --ph-15: calc(15px * var(--mc-scale));
+  --ph-16: calc(16px * var(--mc-scale));
+  --ph-17: calc(17px * var(--mc-scale));
+  --ph-18: calc(18px * var(--mc-scale));
+  --ph-19: calc(19px * var(--mc-scale));
+  --ph-20: calc(20px * var(--mc-scale));
+  --ph-24: calc(24px * var(--mc-scale));
+  --ph-26: calc(26px * var(--mc-scale));
+  --ph-safe-bottom: 0px;
+  /* The footers' strip above the home indicator (5h, 5i, 10f). */
+  --pd-foot: max(20px, env(safe-area-inset-bottom));
+  --pd-bar-extra: 341px;
   display: grid;
-  grid-template-areas:
-    'header header header'
-    'left centre right';
-  grid-template-columns: 320px minmax(0, 1fr) 360px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 301px minmax(0, 1fr) 341px;
+  grid-template-rows: auto 0 minmax(0, 1fr);
+  font-size: var(--ph-17);
+  line-height: 24px;
+  background: var(--bg);
 }
 
-/* A closed sidebar folds to nothing: the centre takes its room. */
+/* 5b, 5c: the ticket's bar runs over the centre and the right pane. */
+.shell.ipad:has(.pd-wide-bar) {
+  grid-template-rows: auto 53px minmax(0, 1fr);
+}
+
 .shell.ipad.no-left {
-  grid-template-columns: 0 minmax(0, 1fr) 360px;
+  grid-template-columns: 0 minmax(0, 1fr) 341px;
 }
 
 .shell.ipad.no-right {
-  grid-template-columns: 320px minmax(0, 1fr) 0;
+  --pd-bar-extra: 0px;
+  grid-template-columns: 301px minmax(0, 1fr) 0;
 }
 
 .shell.ipad.no-left.no-right {
   grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
-/* Portrait: the left pane is narrower, so the document keeps its width. */
 @media (orientation: portrait) {
-  .shell.ipad {
-    grid-template-columns: 300px minmax(0, 1fr) 0;
+  .shell.ipad,
+  .shell.ipad.no-right {
+    --pd-bar-extra: 0px;
+    grid-template-columns: 281px minmax(0, 1fr) 0;
   }
 
   .shell.ipad.no-left {
@@ -295,32 +317,46 @@
 }
 
 .shell.ipad .pad-header {
-  grid-area: header;
+  grid-column: 1 / -1;
+  grid-row: 1;
 }
 
 .shell.ipad .pane {
+  display: flex;
   flex: none;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: hidden;
 }
 
 .shell.ipad .pane-left {
-  grid-area: left;
+  grid-column: 1;
+  grid-row: 2 / -1;
   border-right: 1px solid var(--line);
 }
 
+.shell.ipad.no-left .pane-left {
+  display: none;
+}
+
 .shell.ipad .pane-center {
-  grid-area: centre;
+  grid-column: 2;
+  grid-row: 2 / -1;
   min-height: 0;
 }
 
-/* Settings (E12-14, board 5f): the detail page takes the middle and the right area. */
+/* Settings (5f): its own categories and page over the whole width. */
 .shell.ipad .pane-settings {
-  grid-column: 2 / 4;
-  grid-row: 2;
+  grid-column: 1 / -1;
+  grid-row: 2 / -1;
   background: var(--bg);
 }
 
 .shell.ipad .pane-right {
-  grid-area: right;
+  grid-column: 3;
+  grid-row: 3;
+  background: var(--panel);
   border-left: 1px solid var(--line);
 }
 
@@ -330,9 +366,70 @@
   min-height: 0;
 }
 
-/* The Crew list in the left pane: the team view's own layout, in a sidebar's width. */
+/* The Assistant's head (10e): the title and the target segment. */
+.pd-ahead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 45px;
+  padding: 0 12px 0 16px;
+  font-size: var(--ph-15);
+  border-bottom: 1px solid var(--line);
+}
+
+.pd-aseg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.pd-aseg button {
+  height: 36px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--ph-13);
+  color: var(--text-2);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-chip);
+}
+
+.pd-aseg button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+/* Crew (5d): its bar and list over the whole width, the persona in the slot beside the list. */
 .shell.ipad .pane-team {
-  grid-area: left;
+  grid-column: 1 / -1;
+  grid-row: 2 / -1;
+  border-right: 0;
+}
+
+.shell.ipad.crew {
+  grid-template-columns: 321px minmax(0, 1fr) 0;
+  grid-template-rows: auto 53px minmax(0, 1fr);
+}
+
+.shell.ipad.crew .persona-layer,
+.shell.ipad.crew .pane-center {
+  grid-column: 2 / -1;
+  grid-row: 3;
+}
+
+.shell.ipad.crew .pane-team {
+  grid-column: 1 / -1;
+  grid-row: 2 / -1;
+}
+
+.shell.ipad.crew.no-left {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
 .shell.ipad .persona-layer,
@@ -342,29 +439,49 @@
   position: relative;
   inset: auto;
   z-index: auto;
-  grid-area: centre;
+  grid-column: 2;
+  grid-row: 2 / -1;
   min-height: 0;
   min-width: 0;
-  overflow-x: hidden;
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
-/* Portrait: the right pane opens as an overlay over the centre, under a scrim. */
+/* The bar of 5b / 5c reaches out of its cell. */
+.shell.ipad:has(.pd-wide-bar) .ticket-layer,
+.shell.ipad:has(.pd-wide-bar) .approve-layer {
+  overflow: visible;
+}
+
+/* Review and Flow (5h, 5i), the thread (10f): the centre takes the right pane's room. */
+.shell.ipad.wide-centre {
+  grid-template-columns: 301px minmax(0, 1fr) 0;
+}
+
+.shell.ipad.wide-centre.no-left {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+.shell.ipad .ticket-layer > mc-ticket-edit {
+  display: contents;
+}
+
+/* Portrait, or a surface that covers it: the right pane is an overlay, under a scrim. */
 .shell.ipad.right-overlay .pane-right {
   position: absolute;
-  top: calc(52px + env(safe-area-inset-top));
+  top: calc(53px + env(safe-area-inset-top));
   right: 0;
   bottom: 0;
   z-index: 25;
-  width: 380px;
+  width: 341px;
   max-width: 90vw;
-  background: var(--bg);
   border-left: 1px solid var(--line);
   box-shadow: -8px 0 24px rgb(0 0 0 / 35%);
 }
 
 .shell.ipad .right-scrim {
   position: absolute;
-  inset: calc(52px + env(safe-area-inset-top)) 0 0 0;
+  inset: calc(53px + env(safe-area-inset-top)) 0 0 0;
   z-index: 24;
   background: rgb(0 0 0 / 30%);
 }

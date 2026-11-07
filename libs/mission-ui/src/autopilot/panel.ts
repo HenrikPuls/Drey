@@ -13,6 +13,8 @@ import { PhoneIcon, type PhoneIconName } from '../phone/icon';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import { MC_AUTOPILOT, type McAutopilotReply } from './autopilot-state';
+import { todayCostTextOf } from '../work/phone-rows';
+import { MC_WORK_STATE } from '../work/work.model';
 
 /**
  * The three Autopilot states as rows (On / Paused / Off), the resume time
@@ -38,6 +40,10 @@ export class AutopilotPanel {
   readonly sheet = input(false);
   /** A state was taken (On or Off): the host closes its popover or sheet. */
   readonly done = output<void>();
+
+  private readonly work = inject(MC_WORK_STATE, { optional: true });
+  /** The popover's spend chip (board 10t); null hides it. */
+  protected readonly todayText = computed(() => todayCostTextOf(this.work?.today ?? null, (key, params) => this.i18n.t(key, params)));
 
   protected readonly kinds = AUTOPILOT_KINDS;
   protected readonly view = computed(() => this.state?.autopilot() ?? null);

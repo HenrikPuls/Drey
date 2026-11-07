@@ -8,7 +8,9 @@
   [class.desktop]="isDesktop()"
   [class.docked]="showDock()"
   [class.no-left]="isPad() && !panes.left()"
-  [class.no-right]="isPad() && (!panes.right() || rightOverlay())"
+  [class.no-right]="isPad() && (!padRight() || rightOverlay())"
+  [class.crew]="crewFull()"
+  [class.wide-centre]="centreCovers()"
   [class.right-overlay]="rightOverlay()"
 >
   @if (isDesktop()) {
@@ -83,11 +85,10 @@
       [area]="area()"
       [notesEnabled]="notesEnabled"
       [left]="panes.left()"
-      [right]="panes.right()"
+      [right]="padRight()"
       [settingsOn]="wideTab() === 'settings'"
-      [needsCount]="needsCount()"
       (toggleLeft)="panes.toggleLeft()"
-      (toggleRight)="panes.toggleRight()"
+      (toggleRight)="onToggleRight()"
       (areaChange)="onArea($event)"
       (settings)="onPadSettings()"
     >
@@ -110,6 +111,12 @@
   @if (showWork()) {
     <mc-work class="pane pane-work pane-left" />
   }
+  @if (showPadChats()) {
+    <mc-pad-chats class="pane pane-left" [sessions]="sessions()" [activeFile]="activeSessionFile()" (openChat)="onPadChat($event)" (newChat)="onMenuNewChat()" />
+  }
+  @if (padThread() !== null && !padSettings()) {
+    <mc-chat class="pane pane-center" [padThread]="padThread()" (threadBack)="closePadThread()" />
+  }
   @if (showNotesList()) {
     <mc-notes class="pane pane-notes pane-left" />
   }
@@ -117,7 +124,7 @@
     <mc-note class="pane pane-center" />
   }
   @if (showTeam()) {
-    <mc-team class="pane pane-center" [class.pane-left]="isPad()" [class.pane-team]="isPad()" />
+    <mc-team class="pane pane-center" [class.pane-team]="isPad()" />
   }
   @if (showPlan()) {
     <mc-plan-pane class="pane pane-center" />
@@ -146,17 +153,20 @@
         <mc-capacity class="dock-body" />
       }
     </aside>
-  } @else if (isPad() && panes.right()) {
+  } @else if (isPad() && padRight()) {
     @if (rightOverlay()) {
-      <div class="right-scrim" (click)="panes.setRight(false)"></div>
+      <div class="right-scrim" (click)="onToggleRight()"></div>
     }
     <aside class="pane pane-right pad-right" [attr.aria-label]="'shell.right_pane' | t">
-      <div class="dock-tabs" role="tablist" [attr.aria-label]="'shell.right_pane' | t">
-        <button type="button" role="tab" [attr.aria-selected]="dockTab() === 'chat'" (click)="dockTab.set('chat')">{{ 'menu.mission_control' | t }}</button>
-        <button type="button" role="tab" [attr.aria-selected]="dockTab() === 'capacity'" (click)="dockTab.set('capacity')">{{ 'shell.capacity' | t }}</button>
+      <div class="pd-ahead">
+        <b>{{ 'shell.assistant' | t }}</b>
+        <div class="pd-aseg" role="group" [attr.aria-label]="'shell.assistant_target' | t">
+          <button type="button" [attr.aria-pressed]="dockTab() === 'chat'" (click)="dockTab.set('chat')">{{ 'menu.mission_control' | t }}</button>
+          <button type="button" [attr.aria-pressed]="dockTab() === 'capacity'" (click)="dockTab.set('capacity')">{{ 'shell.capacity' | t }}</button>
+        </div>
       </div>
       @if (dockTab() === 'chat') {
-        <mc-chat class="dock-body" />
+        <mc-chat class="dock-body" [assistant]="true" />
       } @else {
         <mc-capacity class="dock-body" />
       }
