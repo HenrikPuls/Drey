@@ -130,6 +130,7 @@ export class WidgetRegistryService {
         ...(status !== undefined
           ? { status: (context: WidgetStatusContext) => status(context) }
           : {}),
+        ...(contrib.shown !== undefined ? { shown: () => contrib.shown!() } : {}),
         ...(contrib.headerActions !== undefined
           ? { headerActionsMount: (el: HTMLElement) => contrib.headerActions!(el) }
           : {}),

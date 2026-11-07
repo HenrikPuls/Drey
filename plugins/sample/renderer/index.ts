@@ -226,6 +226,7 @@ const plugin: PluginRendererModule = {
       defaultOpen: true,
       defaultFlex: 140,
       status: () => `evt ${bufferEvents}`,
+      // shown (SDK 1.52): return false while the panel draws nothing; only a one-panel bottom dock reads it.
       mount: (body) => {
         body.appendChild(buildWidget(api));
         return () => undefined;

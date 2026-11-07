@@ -97,6 +97,41 @@ describe('DockService', () => {
     expect(dock.closed('calendar')).toBe(true);
   });
 
+  it('a one-panel bottom dock whose panel says shown() false shows nothing, and is back when it shows (SDK 1.52, D-47)', () => {
+    const dock = make();
+    const registry = TestBed.inject(WidgetRegistryService);
+    let shown = true;
+    registry.registerPluginWidget({
+      id: 'band',
+      title: 'Band',
+      defaultDock: 'bottom',
+      defaultOpen: false,
+      defaultFlex: 100,
+      shown: () => shown,
+      mount: () => () => undefined,
+    });
+    dock.move('band', 'bottom', 0);
+    expect(dock.bottomIds()).toEqual(['band']);
+    expect(dock.bottomShowsNothing()).toBe(false);
+
+    shown = false;
+    registry.bumpStatusTick();
+    expect(dock.bottomShowsNothing()).toBe(true);
+
+    shown = true;
+    registry.bumpStatusTick();
+    expect(dock.bottomShowsNothing()).toBe(false);
+
+    // A second panel brings the strip back; the dock is never "nothing" then,
+    // and a side dock ignores `shown`.
+    shown = false;
+    dock.move('calendar', 'bottom', 1);
+    expect(dock.bottomShowsNothing()).toBe(false);
+    dock.move('band', 'left', 0);
+    dock.move('calendar', 'bottom', 0);
+    expect(dock.bottomShowsNothing()).toBe(false);
+  });
+
   it('drops widget ids the registry no longer knows from a stored blob (the removed entry panel)', () => {
     localStorage.setItem(
       'drey.dock',

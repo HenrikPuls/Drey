@@ -13,6 +13,12 @@
   width: 100%;
 }
 
+/* The one panel says it draws nothing (SDK 1.52, D-47): no band at all. The
+   panel stays mounted, so it can show again when its tab does. */
+:host(.shows-nothing) {
+  display: none;
+}
+
 /* The dock the drag would drop into: a soft dark wash over the whole
    column, no accent ring -- low-profile, matches the panel headers. */
 :host(.drop-target) {

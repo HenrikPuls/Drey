@@ -61,6 +61,7 @@ async function loadPaneLeaf(): Promise<Type<unknown> | null> {
     '[style.minWidth.px]': 'hostWidth()',
     '[style.height.px]': 'hostHeight()',
     '[class.bottom]': 'side() === "bottom"',
+    '[class.shows-nothing]': 'side() === "bottom" && dock.bottomShowsNothing() && !dock.dragActive()',
     '[class.drop-target]': 'isDropTarget()',
     '[class.drag-active]': 'dock.dragActive() && isEmpty()',
   },

@@ -89,6 +89,9 @@ function restoreScrolls(strip: HTMLElement, pane: HTMLElement | null, reveal: bo
     }
     if (pane !== null) {
       pane.scrollTop = rememberedDetailTop;
+      // The restore signal: nothing the pane's scroll was set to before this
+      // frame survives it, so a reader (the e2e spec) waits for the mark.
+      pane.dataset['scrollRestored'] = 'true';
     }
     if (reveal) {
       strip.querySelector('.kcard.selected')?.scrollIntoView({ inline: 'center', block: 'nearest' });

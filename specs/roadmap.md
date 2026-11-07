@@ -140,18 +140,10 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   ticket's stage is building. Also check: does one action target the wrong ticket (T-0091 is the first of Prioritized)?
 
 
-- **D-47 — An empty band stays under a tab whose Capacity panel is hidden** (S; owner request, outside the list, 2026-11-07; found by wave 4.9 on the Persona and Crew tabs). The Capacity panel shows only with the Board tab (milestone 194); on every other tab it hides its body, but the bottom dock keeps its height, so an empty band sits under the editor. Done when a bottom dock whose only panel draws nothing takes no height (the frame: `Dock` / `DockService`, the one-panel rule of milestone 199), proved by a spec and the 7k / 7f screenshots.
-
 - **D-49 — `e2e/work-panel.spec.ts:104` failed 4 of 4 on the integration checkout at d24d09b5, not reproduced anywhere else** (S; owner request, outside the list, 2026-11-07). After one pushed `fleet-changed`, `toHaveCount(3)` passed and a line later the question row (T-0104) was gone or behind the review row — something replaced the pushed runs. req-146 ran the same test 16 of 16 green on a fresh build of the same commit and found no second `fleet-changed` in a main-process trace; the test now re-pushes its state every 100 ms, so it no longer shows the cause. Open: what replaced the runs on that checkout (a `fleetStatus` reply or `fleet` signal from a live engine adopted from the owner's home? the checkout is the owner's integration folder, not a temp home). **Explained (2026-11-07, integrator):** the one-push test fails 3 of 4 on that checkout; the screenshot shows both pushed runs gone (T-0104 "Build · queued", T-0107 "Plan · queued", Needs you 2): the activation-time `fleetStatus` reply resolved *after* the pushed `fleet-changed` and `applyFleetSnapshot` let the older reply replace the newer event — on a warm checkout the engine answers late, on a cold worktree early, hence 16 of 16 green there. A real ordering hole (an event between request and reply is clobbered), test-triggered. Fix: a stale reply never replaces a newer snapshot (applied counter or a sequence from main); handed to the desktop-defects session (milestone 205); the spec goes back to one push.
 
 - **D-46 — `persona.skills` never reaches a run** (M; owner request, outside the list, 2026-11-07; found by wave 4.9 reading the engine). The persona record carries `skills`, the boards (7k, 5d, 10i) say the skills ride along, and the runner never loads them into a run's prompt or workspace. Done when a run of a persona with skills has them in its prompt/workspace, proved by an engine spec; the 7k Skills sentence stays a "feature not yet built — D-46" row until then.
 
-- **D-44 — `tickets-remote.spec.ts` "keeps the ticket detail scroll across live redraws" (iPad) is flaky** (S; owner request,
-  outside the list, 2026-11-07; found by the e2e run after the 9a merge). Fails 20–50 % of runs on every commit from 7156413b
-  to 877d835c (fresh builds, 10+ runs each), so no merge broke it: after `padMove` the old detail node is gone (asserted) but
-  `.detail` scrollTop reads 0 instead of ≥ 280 — the redraw restores the scroll later than the poll, or not at all. Done when
-  12 of 12 runs pass; the fix is either the client restoring scroll synchronously on the redraw or the spec waiting for the
-  restore signal, decided by what the client actually does (docs/testing-flakes.md gets the row).
 
 (D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.; what the wave-3 smoke could not see — the Autopilot status item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 

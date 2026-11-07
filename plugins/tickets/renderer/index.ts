@@ -80,7 +80,7 @@ import { createConversationProvider } from './conversation/targets';
 import { mountTeam } from './team/team-view';
 import { PERSONA_KIND, personaIdOfKey, personaKeyOf } from './team/persona-model';
 import { mountPersonaPage, personaWordCountOf } from './team/persona-page';
-import { bandHeaderStatusOf, bandStatusOf, mountCapacity } from './team/capacity-view';
+import { bandHeaderStatusOf, bandShownFor, bandStatusOf, mountCapacity } from './team/capacity-view';
 import { mountBoard } from './board/board-view';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -3117,6 +3117,8 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       defaultFlex: 120,
       flush: true,
       status: () => bandHeaderStatusOf(fleetRuns, chain),
+      // SDK 1.52: off the Board tab the panel draws nothing, so the bottom dock takes no height (D-47).
+      shown: () => bandShownFor(api.documents.active()?.path ?? null),
       // Board 7e: one hover action, Pause all (a second press lets the chain run again).
       headerActions: (host) => {
         const pause = el('button', 'icon-btn');

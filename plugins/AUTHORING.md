@@ -113,6 +113,9 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.52 adds `PluginWidgetContrib.shown?()` (default true, re-read on the `status` tick): `false` means the panel
+  draws nothing right now. Only the bottom dock with that one panel reads it -- it then takes no height and
+  no splitter until `shown()` is true again; a side dock ignores it (its strip icon and header stay).
   1.51 adds `layout.bottomH` to view presets (board 7e, milestone 203): the bottom dock's first
   height in px, clamped like a user's resize and used only when the view's layout is seeded.
   Also in 1.51, without a new field: `DocumentRoute.title` is asked for every document, owned or

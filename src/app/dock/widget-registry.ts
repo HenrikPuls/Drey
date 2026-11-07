@@ -64,6 +64,8 @@ export interface WidgetDescriptor {
   capabilities: readonly WidgetCapability[];
   /** Header status value (right-aligned, dimmed); recomputed on change detection. */
   status?(context: WidgetStatusContext): string | null;
+  /** `false` while the panel draws nothing (SDK 1.52); only the one-panel bottom dock reads it. */
+  shown?(): boolean;
   /**
    * Builds the panel's own control row into the shared header (plugin
    * widgets only — core panels use the `[appPanelHeaderActions]` template).
