@@ -745,6 +745,15 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 
 ### Later
 
+- **req-112 — A model budget for the Crew, controlled by the engine** (owner request, outside the list, 2026-11-07; details
+  still to be thought through by the owner — do not build before they are). The way the owner now runs the agent sessions of
+  this redesign — a fixed pool of slots per model (today Fable 3, Opus 2, Sonnet 1), every task ranked by importance and
+  complexity and given the *smallest model that is sufficient* — is to become a Crew function in Drey. Unlike the manual
+  pool, **the engine controls it**: it holds the budget, and a session (a worker run, a persona, a Mission Control ask)
+  must *request* a slot and a model from the engine before it starts, and gets the smallest sufficient one or waits.
+  Open until the owner decides: what counts as a slot (concurrent sessions, tokens, cost), who ranks a task (the persona
+  setup, the flow gate, Paul), what a waiting session does, how the budget shows in Crew and Settings. Touches the chain
+  orchestrator (ADR-0077), the per-gate model of E10-3b, the persona setup (7k) and the Crew tab (7f).
 - **Text completion (autocomplete).** ⚠️ Latency with a local model is the
   open question — run a spike (time to first suggestion on the target
   model) before any design. Today only `#tag` and `:emoji:` completion exist.
