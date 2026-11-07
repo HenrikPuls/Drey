@@ -149,6 +149,7 @@ Order: 4.0 first, alone; then 4.1–4.6 in parallel within the pool; 4.7 last.
 | 4.5 | `mc-phone` | Sonnet | 10a–10d, 10g–10m, 10o, 10p, 10t phone part | `libs/mission-ui/src/**` phone templates/CSS, `apps/mission-control/src/app/app.*` phone rules | each board at 390×844 = screenshot |
 | 4.6 | `mc-ipad` | Sonnet | 5b–5i, 10e, 10f, 10n, 10q, 10r, 10s, 10t iPad part | `libs/mission-ui/src/**` wide templates/CSS, `shell/` | each board at 1194×834 / 834×1194 = screenshot |
 | 4.7 | `fidelity-review` | **Opus** | all | — (reads; small fixes only) | one deviation table over all 40 boards, every row fixed or owner-accepted |
+| 4.8 | `desk-assistant` | Sonnet | 9a right side: the Assistant panel body without the rail (composer, chips, answer cards) — split out of 4.0 on 2026-11-07 (owner decision 4 of the 9a measure sheet); the ticket card in the editor belongs to 4.3 | `plugins/assistant/renderer/**` panel body + CSS | 9a right side = screenshot |
 
 Engine-side items still open (req-99c phases in Building, E12-3b, E14-9b, the persisted ids) run as before in Opus sessions when the pool allows; they change no appearance.
 
