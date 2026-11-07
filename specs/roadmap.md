@@ -114,12 +114,41 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   add more rounds in the first second after a start. From reading the code a real click could get lost in a rebuild and a focused
   card could lose focus; neither was seen. Done when a refresh that changes nothing rebuilds nothing, proved by a spec.
 
-- **D-41 — T-0091 starts on its own** (M; owner request, outside the list, 2026-11-07). Three runs on 2026-11-06: 21:53:40, 18 s after the
-  T-0092 run with the Autopilot on; 22:00:56 and 22:39:11 with the Autopilot off. `runner.log` says "explicit fresh start" and "explicit
-  resume with a native compact first", so a client asked for the start with a concrete mode; `engine.log` has no remote line for them.
-  T-0091 is the first ticket in Prioritized. Together about 3.7 million input tokens. Cause open. On the cut-over branch
-  `claude/w3-e14-7-cutover-cee921` the same finding is D-36 (`968078bf`); that merge renames it to this id, because D-36 here is the
-  Autopilot popover.
+- **D-27 — a new ticket on a store fails to open** (cut-over smoke, owner, 2026-11-06). After Create:
+  `ENOENT ... E:\projects\drey-tickets\tickets\inbox\T-0092.md`. `plugins/tickets/renderer/index.ts:1014` opens the card's
+  made-up path with `openTicketFile` instead of the store route `openDricketDocument`. The ticket is fine; opening it
+  from the board works.
+- **D-28 — the Files panel misses a store's new files** (same smoke; the cause read from the code, not run). After Create,
+  T-0092 was not in the tree of the checkout vault. The base's `VaultWatcher` follows the active vault only
+  (`electron/app-services.ts:100`), and no path event for the checkout was found: `hub.emitPaths` is fed by
+  `notes.onChanged` (`server/engine.ts:191`). An open document changed by a run or a terminal `dk put` probably goes
+  stale too; to be checked with the fix.
+- **D-29 — a run starts in Inbox and moves the ticket on** (same smoke). T-0092, in Inbox, ran from there (column `inbox`,
+  203k tokens in), went gate green and moved to Shaping, though `pipeline.md` says the fleet takes nothing from the
+  owner's columns and Building is the one agent column. The owner's words: it never showed as running and stopped by itself.
+- **D-30 — a run leaves a legacy ticket file on a store board** (same smoke; who writes it is open). During that run
+  `tickets/10-inbox/T-0092.md` appeared untracked in the meta vault, in the legacy format
+  (`entered-inbox: 2026-11-06T20:54:42Z`), though the ticket lives in the store. Left in place for the fix to look at.
+- **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
+  counts only `- [ ] \`command\`` lines; the message should say so.
+
+- **D-33 — "Accepted." stays on the Work card while the ticket waits** (same smoke). `libs/mission-ui/src/work/work.ts:427` keeps the text
+  as local state, so after D-32 the card in Needs you says Accepted and offered the owner no second Accept.
+- **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
+  T-0030's `R-20261104T13124-2vrn`, `detached`, its pid gone since before the cut-over.
+
+- **D-42 — the runner still commits to the legacy vault after the cut-over** (cut-over smoke, 2026-11-06). On its start at 20:53:20Z the
+  runner removed T-0030's stale `run:` stamp from `tickets/10-inbox/T-0030.md`, added "the runner restarted" to its Log and committed
+  that to the meta vault (`b5b60c3`), though T-0030 lives in the store. Its run `R-20261104T13124-2vrn` from before the freeze is the
+  one D-34 counts. Possibly the same route as D-30; not checked. Harmless for the store, but the legacy tree should stop changing.
+
+- **D-41 — a Prioritized ticket starts on its own with the Autopilot off; the owner put the fix off on 2026-11-07, Prioritized was emptied instead** (cut-over smoke, 2026-11-06; owner: "it was
+  pulled in automatically", he started none of them; the source is not found). T-0091 started three times on the real board, each time around
+  the owner's work on T-0092: 20:53:40Z, 18 s after T-0092's run, master on; 21:00:56Z and 21:39:11Z after `autopilot: off` (20:57:45Z in
+  `runner.log`), 38 s before an Accept. Together 3.7M tokens in, eight uncommitted files, each stopped by hand. The runner logs "explicit fresh
+  start" twice and "explicit resume with a native compact first", so a client sent a handover mode; `engine.log` has no `remote` line for
+  them, which points away from Mission Control's route and at Drey's `fleetStart` or another path. Runs carry `column=prioritized` while the
+  ticket's stage is building. Also check: does one action target the wrong ticket (T-0091 is the first of Prioritized)?
 
 - **D-44 — `tickets-remote.spec.ts` "keeps the ticket detail scroll across live redraws" (iPad) is flaky** (S; owner request,
   outside the list, 2026-11-07; found by the e2e run after the 9a merge). Fails 20–50 % of runs on every commit from 7156413b
@@ -128,7 +157,8 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   12 of 12 runs pass; the fix is either the client restoring scroll synchronously on the redraw or the spec waiting for the
   restore signal, decided by what the client actually does (docs/testing-flakes.md gets the row).
 
-(D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.)
+(D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.; what the wave-3 smoke could not see — the Autopilot status item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
+
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
@@ -632,7 +662,10 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   is also the store's checkout would make dk flag it `unexpected-path` — keep them
   two folders; (7) the real check on a second instance (answer from the phone, a
   send-back from the Ready card) — only the engine services ran, on a scratch store.
-- **E14-7 — Cut-over (wave 3, the owner present).** One start, prepared by E14-7a (milestone 175) and
+- **E14-7 — Cut-over (wave 3, the owner present).** **Steps 1 to 8 ran on 2026-11-06, the board runs on the store
+  ([`cutover-2026-11-06.md`](../docs/design/dricket/cutover-2026-11-06.md)). Open: step 9, the owner's first round. Owner, 2026-11-07:
+  after the UI integration, which may still change what the round would check. Nothing else of this item is left, and
+  it moves to the changelog with that round.** One start, prepared by E14-7a (milestone 175) and
   rehearsed on a copy of the real vault
   ([`rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md), milestone 169). The
   owner's real `drey-tickets` is only touched here. req-99a is merged, so the store is written
@@ -753,6 +786,17 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   Open until the owner decides: what counts as a slot (concurrent sessions, tokens, cost), who ranks a task (the persona
   setup, the flow gate, Paul), what a waiting session does, how the budget shows in Crew and Settings. Touches the chain
   orchestrator (ADR-0077), the per-gate model of E10-3b, the persona setup (7k) and the Crew tab (7f).
+- **req-109 — Measure what a run uses, against a directly started session (owner request 2026-11-06, outside the list).** The
+  smoke's figures looked high: 203k tokens in (192k cached) over 18 calls to create and commit one file; T-0091, two runs, 3.3M in
+  (about 3.1M cached) without a commit of its own, the second run starting its reading over. Measure the consumption of a fleet run and of
+  the same task in a session started directly with the same model: calls, fresh and cached input, output, cost. Then decide from the
+  numbers what to cut. The runner shows `cost=0` for these runs, so the cost has to come from the provider.
+
+- **req-108 — Choose the run in a ticket's Thread (owner request 2026-11-06, outside the list).** After a second run on
+  a ticket the Thread shows only that one, so the first run cannot be reached (cut-over smoke: the owner lost the way to the run).
+  The Thread needs a session picker. Sequence, the owner's ruling: **designed with Claude Design first, signed off by the owner, and
+  integrated only as part of the run's redesign**, not on its own before it.
+
 - **Text completion (autocomplete).** ⚠️ Latency with a local model is the
   open question — run a spike (time to first suggestion on the target
   model) before any design. Today only `#tag` and `:emoji:` completion exist.
