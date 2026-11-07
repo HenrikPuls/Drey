@@ -357,7 +357,7 @@ function groupHead(
   return head;
 }
 
-/** Ideas: the first five rows, then "<n> more" unfolds the rest (remembered). */
+/** Ideas and Prioritized: the first IDEAS_SHOWN rows (board 7a: two), then "<n> more" unfolds the rest (remembered). */
 function appendIdeas(
   deps: WorkPanelDeps,
   snap: BoardSnapshot,

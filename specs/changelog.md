@@ -179,6 +179,7 @@ the Board's head, columns and cards, the Capacity band, the Crew head, cards and
 | Counts, names, ages, costs, ticket text, estimates (`$3.00–5.20`), `Prioritized`/`Inbox` totals, the Tasks icon in both docks | sample | the seeded English vault; settled costs, not estimates | data |
 | Model chip, stop-confirm buttons (7f) | radius 6 px | 4 px (`--radius-chip`) | owner decision (`notes.md` 4): radii are 4 / 8 / 16 |
 | Row title text | canvas export | Electron | text rasterization: same font, size, weight, line height; no CSS difference found |
+- **Spec follow-up (2026-11-07, at integration):** `e2e/tickets-dricket-live.spec.ts` still read the wave-3 panel — it waited for a seeded row behind the new "N more" fold (two plain rows per group here) and for the plain fold placeholder of `## Log`, which milestone 196 hides behind board 9a's Log head. The spec now unfolds the groups first and looks for `.tickets-doc-log`; no product change.
 
 ### Milestone 193 — D-43: e2e engines left by an aborted run are swept
 

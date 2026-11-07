@@ -139,6 +139,15 @@ test('a foreign dk write, a burst, own moves and the editor save all reach the b
   }
   const panel = page.locator('.tickets-panel').filter({ visible: true });
   const row = (id: string) => panel.locator(`.work-row[data-id="${id}"]`);
+  // Board 7a (milestone 194): a plain group shows two rows and "<n> more"; the fold is
+  // remembered, so one click per group shows every row for the rest of the test.
+  const unfoldAll = async (): Promise<void> => {
+    for (const more of await panel.locator('.work-ideas-more', { hasText: 'more' }).all()) {
+      await more.click();
+    }
+  };
+  await expect(panel.locator('.work-row').first()).toBeVisible({ timeout: 30_000 });
+  await unfoldAll();
   const seen = async (id: string, since: number, label: string): Promise<void> => {
     await expect(row(id)).toBeVisible({ timeout: 20_000 });
     note(`${label}: ${id} on the board after ${Date.now() - since} ms`);
@@ -161,7 +170,11 @@ test('a foreign dk write, a burst, own moves and the editor save all reach the b
   }
   await seen('T-0012', since, 'burst of 8 dk adds (last one)');
   await expect(panel.locator('.work-group-ideas')).toContainText('12');
-  await panel.getByText(/^\d+ more$/).click();
+  // The groups were unfolded above (the fold is remembered), so the burst shows in full; a fresh fold would show the button again.
+  const foldedMore = panel.getByText(/^\d+ more$/);
+  if ((await foldedMore.count()) > 0) {
+    await foldedMore.first().click();
+  }
   for (let n = 1; n <= 12; n++) {
     await expect(row(`T-${String(n).padStart(4, '0')}`)).toBeVisible();
   }
@@ -196,8 +209,9 @@ test('a foreign dk write, a burst, own moves and the editor save all reach the b
   await page.getByText('Open ticket', { exact: true }).first().click();
   await expect(page.locator('app-editor .tickets-head-id').first()).toHaveText('T-0001', { timeout: 20_000 });
   const editor = page.locator('app-editor .cm-content').first();
-  // Milestone 185: the `## Log` holding `terminal add t-1` opens folded.
-  await expect(page.locator('app-editor .cm-foldPlaceholder').first()).toBeVisible();
+  // Milestone 185: the `## Log` holding `terminal add t-1` opens folded; since milestone 196 its head is
+  // board 9a's chevron + 'Log' + entry count (`.tickets-doc-log`), and the plain fold placeholder is hidden there.
+  await expect(page.locator('app-editor .cm-line.tickets-doc-log').first()).toBeVisible();
   await expect(editor).not.toContainText('terminal add t-1');
   const putsOfT1 = (): number => git('log', '--oneline', '--grep=put t-1').split('\n').filter((line) => line !== '').length;
   const putsBefore = putsOfT1();
@@ -229,6 +243,15 @@ test('a remote store: the periodic dk sync brings a foreign push to the board, o
   }
   const panel = page.locator('.tickets-panel').filter({ visible: true });
   const row = (id: string) => panel.locator(`.work-row[data-id="${id}"]`);
+  // Board 7a (milestone 194): a plain group shows two rows and "<n> more"; the fold is
+  // remembered, so one click per group shows every row for the rest of the test.
+  const unfoldAll = async (): Promise<void> => {
+    for (const more of await panel.locator('.work-ideas-more', { hasText: 'more' }).all()) {
+      await more.click();
+    }
+  };
+  await expect(panel.locator('.work-row').first()).toBeVisible({ timeout: 30_000 });
+  await unfoldAll();
   await expect(row('T-0001')).toBeVisible({ timeout: 30_000 });
   await expect(row('T-0002')).toBeVisible();
 
