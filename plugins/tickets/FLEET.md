@@ -417,6 +417,35 @@ tickets plugin itself (Settings → Tickets → Remote access, default port
 the runner's port and token stay on loopback and are never handed to a
 device. Its own log lines start with `remote:` in the plugin log.
 
+## What the Autopilot governs (req-154)
+
+The Autopilot decides one thing: whether tickets are **moved on or started
+by themselves** (On), only finish what runs (Paused), or wait for the owner
+(Off). It does not decide whether anyone may talk to an agent:
+
+- **Chats need the chat bridge, not the chain.** Mission Control (desktop
+  Assistant target, iPad, phone), Shape with Paul and a Crew 1:1 run
+  through the engine's `ChatService` and the `chat.*` config (the LLM over
+  HTTP) or write the persona thread file — none of them reads the
+  Autopilot, the chain status or whether the runner is up.
+- **What genuinely needs the runner starts it on demand, Autopilot or not.**
+  A run start (`FleetClient.start`), a message to a run (`send` — a
+  reopenable ended run resumes under a fresh runner) and the Autopilot
+  switch itself go through `ensureRunner`. Reads (`runs`, `chainStatus`)
+  never spawn; answering a permission or question only makes sense for a
+  live run and uses `withRunner`.
+- **The runner's own lifecycle stays (req-110).** A runner started for a
+  chat-run boots with the Autopilot Off (the boot rule); every POST resets
+  its idle clock and a live run keeps it, so it never leaves mid-run, and
+  once the run settles it leaves after the idle span. Only an explicit Off
+  ends it at once.
+- **A down runner reads as Off (D-51).** No runner means `chain: null` in
+  the fleet snapshot; every client shows that as Off and the switch turns
+  it On from there. A start that fails is refused with its cause
+  (`runner_down` + the error), never a bare "not running".
+- The 1:1 that routes into a runner session (the coaching thread) is
+  req-152's design and not covered here yet.
+
 ## Lifecycle gotchas
 
 - **Which checkout runs it**: the runner was spawned by some Drey instance.

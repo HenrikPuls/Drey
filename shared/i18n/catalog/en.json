@@ -17,6 +17,8 @@
   "autopilot.refused.bad_resume_at": "That resume time is not in the future.",
   "autopilot.refused.bad_state": "The runner does not know that state.",
   "autopilot.refused.runner_down": "The runner is not running.",
+  "autopilot.refused.runner_failed": "The runner could not be started: {reason}",
+  "autopilot.refused.failed": "The change failed: {reason}",
   "autopilot.refused.unknown": "The change was refused.",
 
   "state.inbox": "Inbox",

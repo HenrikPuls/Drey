@@ -3333,6 +3333,43 @@ never reset it — before req-110 every request did, and the engine's
 lived. The route is new rather than a `/shutdown` flag so that a runner
 from before req-110 answers 404 instead of reading it as the stop-all.
 
+### Switching the Autopilot on with no runner (D-51, milestone 207)
+
+Because the runner leaves whenever the Autopilot is Off and nothing is
+live, "no runner" is the ordinary state, and the switch must work from it.
+A missing chain block (`chain: null` in the fleet snapshot) reads as Off on
+every client (`autopilotSwitchViewOf`), so the popover, the Settings row's
+*Change…* and Mission Control's chip open on Off, and the On brings the
+runner up on its way:
+
+```mermaid
+sequenceDiagram
+    participant D as Drey (popover / Settings)
+    participant P as tickets plugin (main)
+    participant E as Engine (FleetClient)
+    participant R as Runner
+    Note over D: chain null → shows Off
+    D->>P: chainAutopilot {state: on}
+    P->>E: invoke setAutopilot
+    E->>E: ensureRunner → spawnRunner
+    alt the runner comes up
+        E->>R: POST /chain/autopilot
+        alt R is still leaving (an Off a moment ago)
+            R-->>E: 503 {code: leaving}
+            E->>E: wait until it is gone, spawn a fresh one, post again (once)
+        end
+        R-->>E: chain status
+        E-->>D: {ok: true, status} + fleet change
+    else the start fails
+        E-->>D: {ok: false, code: runner_down, error: <cause>}
+        Note over D: "The runner could not be started: <cause>"
+    end
+```
+
+An invoke that throws (no answer at all) reads as "The change failed:
+<message>" — never as "the runner is not running", which only the engine
+says.
+
 ## 6.66 The chain dispatches: the board drains itself (milestone 85, [ADR-0077](09_architecture_decisions/0077-continuous-orchestration.md))
 
 ```mermaid

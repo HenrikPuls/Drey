@@ -48,6 +48,60 @@ export function autopilotViewOf(chain: unknown): AutopilotView | null {
   return master === 'run' ? { state: 'on' } : { state: 'off' };
 }
 
+/**
+ * The state the switch shows and starts from (D-51). Without a runner the
+ * chain block is null (req-110 lets the runner leave when the Autopilot is
+ * Off and nothing is live), and that reads as Off — a switch that can be
+ * turned On, never a missing switch. Null only without a tickets vault.
+ */
+export function autopilotSwitchViewOf(hasTicketsVault: boolean, chain: unknown): AutopilotView | null {
+  if (!hasTicketsVault) {
+    return null;
+  }
+  return autopilotViewOf(chain) ?? { state: 'off' };
+}
+
+/** A refusal as catalog words: the key and, where the engine gave one, its reason. */
+export interface AutopilotRefusalWords {
+  readonly key: MessageKey;
+  readonly params?: { readonly reason: string };
+}
+
+const reasonOf = (error: unknown): string | null => {
+  if (typeof error !== 'string') {
+    return null;
+  }
+  const trimmed = error.trim();
+  return trimmed === '' || trimmed === 'runner_down' ? null : trimmed;
+};
+
+/**
+ * The words of a refused Autopilot write (D-51): a named code reads as its
+ * catalog sentence; `runner_down` with the engine's reason (why the runner
+ * could not be started) carries that reason; an unnamed refusal with an
+ * error text says it instead of a bare "refused".
+ */
+export function autopilotRefusalWordsOf(reply: unknown): AutopilotRefusalWords {
+  const obj = typeof reply === 'object' && reply !== null ? (reply as { code?: unknown; error?: unknown }) : {};
+  const code = obj.code ?? autopilotRefusalCodeOf(reply);
+  const reason = reasonOf(obj.error);
+  if (code === 'runner_down') {
+    return reason !== null && reason !== 'the fleet runner is not running'
+      ? { key: 'autopilot.refused.runner_failed', params: { reason } }
+      : { key: 'autopilot.refused.runner_down' };
+  }
+  if (code === 'read_only' || code === 'bad_resume_at' || code === 'bad_state') {
+    return { key: autopilotRefusalKeyOf(code) };
+  }
+  return reason !== null ? { key: 'autopilot.refused.failed', params: { reason } } : { key: 'autopilot.refused.unknown' };
+}
+
+/** The words of a write that did not get an answer at all (the IPC or the engine threw). */
+export function autopilotFailureWordsOf(error: unknown): AutopilotRefusalWords {
+  const reason = reasonOf(error instanceof Error ? error.message : typeof error === 'string' ? error : null);
+  return reason !== null ? { key: 'autopilot.refused.failed', params: { reason } } : { key: 'autopilot.refused.unknown' };
+}
+
 /** The catalog key of a refusal; anything the engine did not name reads as `unknown`. */
 export function autopilotRefusalKeyOf(code: unknown): MessageKey {
   return code === 'read_only' || code === 'bad_resume_at' || code === 'bad_state' || code === 'runner_down'

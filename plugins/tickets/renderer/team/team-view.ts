@@ -10,7 +10,7 @@
  * share and the week / typical-run costs (E12-16, E13-19). Plain DOM over
  * the model in `team-model.ts`.
  */
-import { autopilotToneOf, autopilotViewOf } from '../../../../shared/autopilot';
+import { autopilotSwitchViewOf, autopilotToneOf } from '../../../../shared/autopilot';
 import type { PersonaView } from '../../shared/remote-protocol';
 import type { PersonaMemoryReply, PersonaThreadReply } from '../../shared/remote-protocol';
 import { h, textButton, type DeskDeps } from '../desk-deps';
@@ -386,10 +386,10 @@ function detailNode(deps: DeskDeps, store: TeamStore, card: PersonaCardModel, pe
 
 /**
  * The Autopilot chip of the head (board 7f): the state with its dot, and a click opens the
- * same popover the status bar's item does. Absent without a chain config (no tickets vault).
+ * same popover the status bar's item does. A down runner reads as Off (D-51).
  */
 function autopilotChipOf(deps: DeskDeps): HTMLElement | null {
-  const view = autopilotViewOf(deps.chain());
+  const view = autopilotSwitchViewOf(true, deps.chain());
   if (view === null) {
     return null;
   }

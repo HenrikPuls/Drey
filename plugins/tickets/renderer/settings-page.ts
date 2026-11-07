@@ -130,10 +130,13 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
           void reload();
         }, 250);
       });
+      // The Autopilot row follows the fleet: the popover's switch and the runner's own exit (D-51).
+      const offFleet = api.backend.on('fleet-changed', () => desk.repaintAutopilot());
       void reload();
       return () => {
         disposed = true;
         off();
+        offFleet();
         if (timer !== null) {
           clearTimeout(timer);
         }
