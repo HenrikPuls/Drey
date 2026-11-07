@@ -114,6 +114,15 @@ runner's idle clock — the documented "~15 min idle" exit never fired once the 
 - **Docs:** `plugins/tickets/FLEET.md` (route table, "Lifecycle gotchas"), docs/05 (the fleet row), docs/06 §6.65
   "When the runner leaves", the manual §13.
 - **Roadmap:** req-110 left with this change.
+- **Fix, 2026-11-07 (same day, before the owner's verification):** the runner left right after **"Run the chain"** on a
+  vault without a chain config — `leaveIfDeactivated` ran after *every* `/chain/master` and `/chain/autopilot` request,
+  and with no `/chain/config` yet `keepsRunnerAlive` is false, so an On / run request read as "nothing to keep". Found by
+  the e2e `tickets-fleet-snapshot` (green on 7156413b, red from the req-110 merge on; bisected). Now the check runs only
+  on the request that deactivates: master `halted`, autopilot `off`, the Notaus. Spec: `runner.spec.ts` "Run the chain
+  on a runner without a chain config keeps it". And the other half of the same finding: with the runner gone the fleet snapshot
+  carries no chain, and the status-bar item **hid** instead of reading "Autopilot · Off" — the switch the owner needs to
+  turn it on (board 10t). The renderer now reads a down runner as Off and hides the item only without a tickets vault
+  (`plugins/tickets/renderer/index.ts`, `refreshStatusItem`).
 
 ### Milestone 190 — D-37: `npm run e2e` is green again, the two flakes were stale handles in the specs
 

@@ -380,7 +380,10 @@ const refreshStatusItem = (): void => {
     cost: team.todayCost,
     budget: team.todayBudget,
     needsYou: needs,
-    autopilot: autopilotViewOf(chain)?.state ?? null,
+    // No runner (req-110: it leaves when the Autopilot is Off and nothing is live) means
+    // Off, not "no item": the switch is how the owner turns it on (board 10t). Hidden
+    // only without a tickets vault.
+    autopilot: snapshot === null || snapshot.vaultId === null ? null : (autopilotViewOf(chain)?.state ?? 'off'),
     inNotesView: statusApi.ui.activeViewId() === 'notes',
   });
 };

@@ -21,7 +21,7 @@ export interface StatusSlotInput {
   readonly budget: number | null;
   /** Tickets and alerts that wait on the owner. */
   readonly needsYou: number;
-  /** What the engine reports; null = no chain config yet (the Autopilot item hides). */
+  /** The chain's state; a down runner reads as off (req-110); null = no tickets vault (the item hides). */
   readonly autopilot: AutopilotState | null;
   /** True while the Notes view is active: the needs-you item then says where. */
   readonly inNotesView: boolean;

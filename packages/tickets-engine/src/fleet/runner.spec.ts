@@ -81,6 +81,20 @@ describe('fleet runner exit (req-110)', () => {
     expect(health.body['live']).toBe(0);
   });
 
+  it('"Run the chain" on a runner without a chain config keeps it — an On / run request is never a deactivation', async () => {
+    // No /chain/config yet: keepsRunnerAlive is false, exactly the fresh-vault case of the e2e.
+    expect((await call('POST', '/chain/master', { mode: 'run' })).status).toBe(200);
+    expect((await call('POST', '/chain/autopilot', { state: 'on' })).status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(exits).toEqual([]);
+    expect(await descriptorGone()).toBe(false);
+    expect((await call('GET', '/health')).status).toBe(200);
+    // Halting it is the deactivation: now it goes.
+    expect((await call('POST', '/chain/master', { mode: 'halted' })).status).toBe(200);
+    await exited();
+    expect(await descriptorGone()).toBe(true);
+  });
+
   it('deactivated — the Autopilot switched Off with nothing live — it exits and removes runner.json', async () => {
     await call('POST', '/chain/config', { ticketsVaultPath: vault });
     const reply = await call('POST', '/chain/autopilot', { state: 'off' });

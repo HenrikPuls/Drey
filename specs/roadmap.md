@@ -121,6 +121,13 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   `claude/w3-e14-7-cutover-cee921` the same finding is D-36 (`968078bf`); that merge renames it to this id, because D-36 here is the
   Autopilot popover.
 
+- **D-44 — `tickets-remote.spec.ts` "keeps the ticket detail scroll across live redraws" (iPad) is flaky** (S; owner request,
+  outside the list, 2026-11-07; found by the e2e run after the 9a merge). Fails 20–50 % of runs on every commit from 7156413b
+  to 877d835c (fresh builds, 10+ runs each), so no merge broke it: after `padMove` the old detail node is gone (asserted) but
+  `.detail` scrollTop reads 0 instead of ≥ 280 — the redraw restores the scroll later than the poll, or not at all. Done when
+  12 of 12 runs pass; the fix is either the client restoring scroll synchronously on the redraw or the spec waiting for the
+  restore signal, decided by what the client actually does (docs/testing-flakes.md gets the row).
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field

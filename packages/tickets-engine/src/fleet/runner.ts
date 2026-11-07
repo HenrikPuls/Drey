@@ -440,7 +440,9 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
           return;
         }
         respond(200, await orchestrator.setMaster(body.mode as ChainMaster));
-        leaveIfDeactivated();
+        if (body.mode === 'halted') {
+          leaveIfDeactivated();
+        }
         return;
       }
       if (req.method === 'POST' && pathname === '/chain/autopilot') {
@@ -450,7 +452,9 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
           return;
         }
         respond(200, await orchestrator.setAutopilot(parsed.value));
-        leaveIfDeactivated();
+        if (parsed.value.state === 'off') {
+          leaveIfDeactivated();
+        }
         return;
       }
       if (req.method === 'POST' && pathname === '/chain/column') {
@@ -678,7 +682,13 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
     log(`${why} — exiting (the engine respawns the runner on the next start)`);
     setTimeout(() => shutdown(0), 100);
   };
-  /** The Autopilot was switched Off: deactivated, so the runner leaves unless a run is live. */
+  /**
+   * The Autopilot was switched Off (or the master halted, or the Notaus): deactivated, so the
+   * runner leaves unless a run is live. Called only on the request that switched it off —
+   * never on an On / run request: a runner without a chain config (no `/chain/config` yet,
+   * which is every fresh vault) reads as "nothing to keep alive" and would leave right after
+   * answering "Run the chain" (the fleet-snapshot e2e caught it, 2026-11-07).
+   */
   const leaveIfDeactivated = (): void => {
     const state = liveness();
     if (retireVerdict(state).exiting) {
