@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures/drey';
+import { test, expect, refreshFiles } from './fixtures/drey';
 
 /**
  * Git vaults (plugins/git, milestone 65, ADR-0065): the seeded vault is
@@ -51,7 +51,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await expect(panel.locator('.git-change[data-status="deleted"] .name')).toHaveText('old.md');
 
     // Files panel: the changed file carries tone + badge, its folder the tone.
-    await page.locator('button[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     const folder = page.locator('app-files-panel .node.folder', { hasText: 'docs' });
     await expect(folder).toHaveAttribute('data-status', 'modified');
     await folder.click();
@@ -225,7 +225,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await expect(panel.locator('.git-change[data-status="untracked"] .name')).toHaveText('notes.md');
 
     // The Files tree decorates the child folder and its files.
-    await page.locator('button[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     const folder = page.locator('app-files-panel .node.folder', { hasText: 'drey' });
     await expect(folder).toHaveAttribute('data-status', 'modified');
     // (The parent seeds its own readme.md at the root — the accessible

@@ -60,6 +60,13 @@ app-panel-frame.closed {
   display: none;
 }
 
+/* Board 9a: one line above every panel but the first shown, none under the
+   last. The strip above the first brings its own. */
+app-panel-frame:not(.closed) ~ app-panel-frame:not(.closed),
+.editor-band ~ app-panel-frame:not(.closed) {
+  border-top: 1px solid var(--border);
+}
+
 /* 2px accent bar at the live drop position during a panel drag -- kept
    above the drop-target wash. */
 .drop-line {
@@ -86,10 +93,10 @@ app-panel-frame.closed {
 }
 
 /* --- The dock's editor band (ADR-0038) --------------------------------
-   One pane living in the dock, above the widget stack: a 32px header
-   (title = the pane's active tab name) over that pane's own PaneLeaf.
-   Same chrome as the widget panel headers (panel-frame.css), minus the
-   click-to-hide and the uppercase -- a document name, not a label.
+   One pane living in the dock, above the widget stack: a header (title =
+   the pane's active tab name) over that pane's own PaneLeaf. Same chrome
+   as the widget panel headers (panel-frame.css), minus the chevron and the
+   menu -- a document, not a panel.
    With no widget below, the band flexes to fill the dock; the stored px
    height applies again once a widget arrives. */
 .editor-band {
@@ -97,7 +104,6 @@ app-panel-frame.closed {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -108,11 +114,11 @@ app-panel-frame.closed {
 .editor-band .head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   flex: none;
   height: var(--panel-head-h);
-  padding: 0 10px 0 12px;
-  color: var(--text-4);
+  padding: 0 6px 0 8px;
+  color: var(--text-primary);
   cursor: grab;
   user-select: none;
   outline: none;
@@ -120,7 +126,7 @@ app-panel-frame.closed {
 
 .editor-band .head:hover,
 .editor-band .head:focus-visible {
-  color: var(--text-2);
+  background: var(--active-bg);
 }
 
 .editor-band .title {
@@ -131,22 +137,7 @@ app-panel-frame.closed {
   text-overflow: ellipsis;
   font-family: var(--font-sans);
   font-size: var(--fs-mono-title);
-}
-
-.editor-band .grip {
-  margin-left: auto;
-  flex: none;
-  display: grid;
-  grid-template-columns: repeat(2, 2px);
-  gap: 2px;
-  opacity: 0.3;
-}
-
-.editor-band .grip i {
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: currentColor;
+  font-weight: 600;
 }
 
 .editor-band .band-pane {

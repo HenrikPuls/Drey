@@ -187,7 +187,7 @@ test('a store document shows the header and widgets of a ticket, and its title e
   await expect(editor.locator('.cm-content')).toBeVisible();
   await expect.poll(() => fs.readFileSync(documentFile, 'utf8')).toContain('title: Alpha: export the vault as a zip');
   // The edit reaches the buffer when main has answered: the tab is dirty, then Ctrl+S has something to save.
-  await expect(editor.locator('button[aria-label="Save"]').first()).toBeVisible();
+  await expect(editor.locator('.actions .save')).toBeVisible();
   await page.keyboard.press('Control+S');
   await expect.poll(() => fs.readFileSync(documentFile, 'utf8'), { timeout: 20_000 }).toMatch(/^title: Alpha: renamed: from the header\r?$/m);
   expect(git('log', '--oneline', '-1')).toContain('put t-1');

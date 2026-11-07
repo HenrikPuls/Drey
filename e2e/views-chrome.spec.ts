@@ -97,7 +97,7 @@ test.describe('Views chrome (E12-18)', () => {
     await page.keyboard.press('Escape');
 
     // Open windows: a new note that only Work shows.
-    await page.locator('app-tab-bar .add').first().click();
+    await page.keyboard.press('Control+n');
     // The new tab opens asynchronously; `.last()` before that is plain.md.
     await expect(page.locator('app-tab-bar .tab').last()).toContainText('untitled');
     await page.locator('app-tab-bar .tab').last().click({ button: 'right' });

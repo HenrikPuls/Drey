@@ -49,7 +49,7 @@ describe('DockStrip', () => {
   it('carries the status of a closed panel in its tooltip', () => {
     dock.toggle('windows');
     fixture.detectChanges();
-    expect(buttons()[2].title).toBe('Show Open windows · 0');
+    expect(buttons()[2].title).toBe('Open windows · 0');
   });
 
   it('falls back to the first letter for a plugin widget without an icon', () => {

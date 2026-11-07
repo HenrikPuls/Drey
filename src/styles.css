@@ -111,24 +111,27 @@
 
   /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
   --row-h: 28px; /* every list row */
-  --bar-h: 36px; /* titlebar only -- every other bar sits lower */
-  --meta-h: 40px; /* editor meta bar (path + formatting + save) */
-  /* Panel headers + dock icon strip + tab bar: the tab bar and the docks'
-     icon strips sit side by side under the titlebar, so they share this
-     height and their bottom borders read as one line. */
-  --panel-head-h: 32px;
-  --status-h: 28px; /* status bar */
+  /* The frame's bars (board 9a). The app is border-box, so each value is the
+     whole bar including its 1px line. The tab bar and the docks' icon strips
+     sit side by side under the titlebar and differ in height on purpose. */
+  --bar-h: 41px; /* titlebar */
+  --dock-strip-h: 41px; /* a dock's icon strip */
+  --tab-bar-h: 37px; /* the editor's tab bar */
+  --meta-h: 37px; /* editor meta bar (path + source toggle + more) */
+  --panel-head-h: 28px; /* panel headers, the line above comes on top */
+  --status-h: 29px; /* status bar */
   --field-h: 32px; /* text inputs */
-  --icon-btn: 24px; /* every icon button (milestone 43) */
+  --icon-btn: 24px; /* an icon button inside a panel (milestone 43) */
+  --chrome-btn: 30px; /* an icon button of the frame: titlebar, strip, meta bar */
 
   /* ---- Chrome type sizes ---- Since milestone 43 (ADR-0057) the chrome is
      sentence-case sans; only paths, line numbers and code stay mono. The
      token names keep their historical `mono` prefix so every call site
      keeps working. */
   --fs-mono-title: 13px; /* panel titles */
-  --fs-mono-meta: 12px; /* status bar, panel status, shortcuts */
-  --fs-mono-tab: 13px; /* tabs, file names */
-  --fs-mono-path: 11.5px; /* meta-bar path */
+  --fs-mono-meta: 13px; /* status bar, panel status, shortcuts */
+  --fs-mono-tab: 14px; /* tabs, file names */
+  --fs-mono-path: 13px; /* meta-bar path */
   --fs-mono-num: 10.5px; /* line numbers */
   --fs-mono-tag: 12px; /* tags */
   --ls-mono-title: 0;
@@ -142,7 +145,7 @@
      to the platform monospace, which DESIGN.md accepts. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
   --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Consolas', monospace;
 
   /* Editor heading typeface. `editor-theme.ts` keys its heading rules off this;
      `Editor` overrides it (and `--font-sans`) on its own host per the
@@ -465,11 +468,12 @@ textarea::placeholder {
   outline-offset: -1px;
 }
 
+/* Board 9a: an active icon is grey, never accent -- several are on at once. */
 .icon-btn.on,
 .icon-btn[aria-pressed='true'],
 .icon-btn[aria-selected='true'] {
-  background: var(--accent-surface);
-  color: var(--accent-fg);
+  background: var(--active-bg);
+  color: var(--text-primary);
 }
 
 .icon-btn:disabled {

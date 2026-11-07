@@ -19,7 +19,7 @@
     title="Go back"
     (click)="history.back()"
   >
-    <app-icon name="arrow-left" [size]="15" />
+    <app-icon name="arrow-left" [size]="16" />
   </button>
   <button
     type="button"
@@ -29,7 +29,7 @@
     title="Go forward"
     (click)="history.forward()"
   >
-    <app-icon name="arrow-right" [size]="15" />
+    <app-icon name="arrow-right" [size]="16" />
   </button>
 </span>
 
@@ -69,14 +69,14 @@
     [title]="toggleLabel(side)"
     (click)="dock.toggleSide(side)"
   >
-    <app-icon [name]="icon" [size]="15" />
+    <app-icon [name]="icon" [size]="16" />
   </button>
 </ng-template>
 
 @if (!chrome.isMac()) {
   <div class="controls">
     <button type="button" class="ctl" (click)="chrome.minimize()" aria-label="Minimize">
-      <app-icon name="minus" [size]="9" [strokeWidth]="1.2" />
+      <app-icon name="minus" [size]="14" />
     </button>
     <button
       type="button"
@@ -84,10 +84,10 @@
       (click)="chrome.toggleMaximize()"
       [attr.aria-label]="chrome.maximized() ? 'Restore' : 'Maximize'"
     >
-      <app-icon name="square" [size]="8" [strokeWidth]="1.2" />
+      <app-icon name="square" [size]="13" />
     </button>
     <button type="button" class="ctl close" (click)="chrome.close()" aria-label="Close">
-      <app-icon name="x" [size]="9" [strokeWidth]="1.2" />
+      <app-icon name="x" [size]="14" />
     </button>
   </div>
 }

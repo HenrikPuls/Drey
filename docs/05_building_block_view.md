@@ -520,7 +520,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   / tasks / assistant panels are plugin widgets mounting plain DOM into
   `PluginWidgetHost`. Persisted layout keys on widget ids — plugin
   widgets keep their ids (ADR-0044 rule 5).
-  `PanelFrame` is the identical 32px header every panel shares.
+  `PanelFrame` is the identical 28px header every panel shares (fold
+  chevron, title + status, controls on hover, the right-click menu); folding
+  is `DockService.collapsed`, per view with the layout (ADR-0019 later change).
   `DockService.contentHeight(id)` marks a panel (currently `calendar`)
   that sizes to its content rather than a flex share.
 - `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
@@ -2684,7 +2686,7 @@ graph TB
         subgraph dk["src/app/dock/ (barrel)"]
             DockService["DockService<br/>DockState (dock/flexes/open/leftW/rightW/bottomH/foldedSides),<br/>localStorage['drey.dock'];<br/>beginHeaderPress (click=toggle / drag=move; header + strip icon), shared drag chrome<br/>(src/app/dnd/, ADR-0039), onDragMove/move, startSplit, startDockResize,<br/>reset, toggle/closed (strip, header, View menu), openAndExpand"]
             Dock["Dock [side]<br/>DockStrip (one icon toggle per panel) + widget list;<br/>drop-line + splitter;<br/>dark wash on the drop-target dock; header status values"]
-            PanelFrame["PanelFrame<br/>identical 32px low-profile header (title/status/grip, no chevron);<br/>a closed panel's frame stays mounted, undisplayed;<br/>registers host el; header press -> close or drag"]
+            PanelFrame["PanelFrame<br/>identical 28px header (chevron/title/status, hover controls, menu);<br/>a closed or folded panel stays mounted;<br/>registers host el; header press -> drag"]
             WidgetRegistry["widget-registry.ts<br/>WIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/<br/>defaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);<br/>WIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
             Panels["8 panel components<br/>(CalendarPanel / FilesPanel / TemplatesPanel / SearchPanelHost /<br/>TasksPanel / WindowsPanel / AssistantPanel / EntryPanel)"]
         end

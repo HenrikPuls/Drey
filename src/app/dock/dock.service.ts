@@ -49,6 +49,13 @@ interface DockState {
    * its header", so a stored layout carries over unchanged).
    */
   open: Record<WidgetId, boolean>;
+  /**
+   * Panels folded to their header (board 9a's chevron): open, their strip
+   * icon stays on, the body is hidden. Holds only the folded ones, so an
+   * unfolded layout is the empty record and a layout stored before this
+   * state compares equal to it.
+   */
+  collapsed: Record<WidgetId, boolean>;
   leftW: number;
   rightW: number;
   /** Height of the bottom dock band. */
@@ -69,8 +76,17 @@ const DEFAULT_BOTTOM_H = 280;
 /** A dock layout as a plain value: what a view's "Save view" keeps (ADR-0089, D-6). */
 export type DockLayout = DockState;
 
-function layoutOf({ dock, flexes, open, leftW, rightW, bottomH, foldedSides }: DockState): DockLayout {
-  return { dock, flexes, open, leftW, rightW, bottomH, foldedSides };
+function layoutOf({ dock, flexes, open, collapsed, leftW, rightW, bottomH, foldedSides }: DockState): DockLayout {
+  return { dock, flexes, open, collapsed, leftW, rightW, bottomH, foldedSides };
+}
+
+/** `collapsed` without `id`: revealing a panel always shows its body. */
+function withoutCollapsed(collapsed: Record<WidgetId, boolean>, id: WidgetId): Record<WidgetId, boolean> {
+  if (!collapsed[id]) {
+    return collapsed;
+  }
+  const { [id]: _unfolded, ...rest } = collapsed;
+  return rest;
 }
 
 /** Shallow, order-sensitive array equality. */
@@ -111,6 +127,12 @@ export class DockService {
    * together under one key.
    */
   private slots: Record<string, DockState> = {};
+  /**
+   * The active view's layout as stored. Plugin panels register after the
+   * layout is read, so `merge` does not know them yet; when one arrives it
+   * takes its place, its weight and its state from here.
+   */
+  private storedActive: Partial<DockState> | null = null;
   private readonly _activeView = signal<string>(DockService.DEFAULT_VIEW);
   readonly activeViewId = this._activeView.asReadonly();
   private readonly state = signal<DockState>(this.read());
@@ -193,25 +215,46 @@ export class DockService {
       };
       const flexes = { ...s.flexes };
       const open = { ...s.open };
+      const collapsed = { ...s.collapsed };
+      const stored = this.storedActive;
       let changed = false;
       for (const w of widgets) {
         const placed =
           dock.left.includes(w.id) || dock.right.includes(w.id) || dock.bottom.includes(w.id);
         if (flexes[w.id] === undefined) {
-          flexes[w.id] = w.defaultFlex;
+          const flex = stored?.flexes?.[w.id];
+          flexes[w.id] = typeof flex === 'number' && Number.isFinite(flex) ? flex : w.defaultFlex;
           changed = true;
         }
         if (open[w.id] === undefined) {
-          open[w.id] = w.defaultOpen;
+          const wasOpen = stored?.open?.[w.id];
+          open[w.id] = typeof wasOpen === 'boolean' ? wasOpen : w.defaultOpen;
+          if (stored?.collapsed?.[w.id] === true) {
+            collapsed[w.id] = true;
+          }
           changed = true;
         }
         if (!placed && !disabled.has(w.id)) {
-          dock[w.defaultDock].splice(this.orderedInsertIndex(w.defaultDock, w.id, dock[w.defaultDock]), 0, w.id);
+          this.place(dock, w.id, w.defaultDock);
           changed = true;
         }
       }
-      return changed ? { ...s, dock, flexes, open } : s;
+      return changed ? { ...s, dock, flexes, open, collapsed } : s;
     });
+  }
+
+  /** Puts `id` where the stored layout had it, else into `fallback` at its default slot. */
+  private place(lists: Record<DockSide, WidgetId[]>, id: WidgetId, fallback: DockSide): void {
+    const stored = this.storedActive?.dock;
+    const side = stored && DOCK_SIDES.find((d) => stored[d]?.includes(id));
+    if (!stored || !side) {
+      lists[fallback].splice(this.orderedInsertIndex(fallback, id, lists[fallback]), 0, id);
+      return;
+    }
+    const order = stored[side];
+    const later = new Set(order.slice(order.indexOf(id) + 1));
+    const at = lists[side].findIndex((x) => later.has(x));
+    lists[side].splice(at === -1 ? lists[side].length : at, 0, id);
   }
 
   readonly leftIds = computed(() => this.state().dock.left);  readonly rightIds = computed(() => this.state().dock.right);
@@ -232,6 +275,19 @@ export class DockService {
   /** True while a panel is closed: present in its dock's icon strip only. */
   closed(id: WidgetId): boolean {
     return !this.state().open[id];
+  }
+
+  /** True while an open panel is folded to its header (the header's chevron). */
+  collapsed(id: WidgetId): boolean {
+    return this.state().collapsed[id] === true;
+  }
+
+  /** The header's chevron: fold an open panel to its header, or unfold it. */
+  toggleCollapsed(id: WidgetId): void {
+    this.patch((s) => ({
+      ...s,
+      collapsed: s.collapsed[id] ? withoutCollapsed(s.collapsed, id) : { ...s.collapsed, [id]: true },
+    }));
   }
 
   /** True for a panel sized to its content rather than a `flex-grow` share. */
@@ -292,8 +348,9 @@ export class DockService {
   }
 
   /**
-   * The strip icon / header click / View menu row: open a closed panel or
-   * close an open one. Opening unfolds the panel's side dock; closing the
+   * The strip icon / View menu row / header menu's Close: open a closed panel
+   * or close an open one. Opening shows the panel's body and unfolds its
+   * side dock; closing the
    * last open panel of a side dock folds that dock away rather than leaving
    * an empty column (a dock holding an editor band stays).
    */
@@ -313,7 +370,7 @@ export class DockService {
           foldedSides = [...foldedSides, side];
         }
       }
-      return { ...s, open, foldedSides };
+      return { ...s, open, foldedSides, collapsed: open[id] ? withoutCollapsed(s.collapsed, id) : s.collapsed };
     });
   }
 
@@ -323,13 +380,14 @@ export class DockService {
       const docked = DOCK_SIDES.some((side) => s.dock[side].includes(id));
       const dock = docked ? s.dock : this.withInserted(s.dock, id);
       const foldedSides = this.unfoldedFor(dock, s.foldedSides, id);
-      if (s.open[id] && docked && foldedSides.length === s.foldedSides.length) {
+      if (s.open[id] && !s.collapsed[id] && docked && foldedSides.length === s.foldedSides.length) {
         return s;
       }
       return {
         ...s,
         dock,
         open: { ...s.open, [id]: true },
+        collapsed: withoutCollapsed(s.collapsed, id),
         foldedSides,
       };
     });
@@ -360,6 +418,7 @@ export class DockService {
       dock,
       flexes,
       open,
+      collapsed: {},
       leftW: DEFAULT_LEFT_W,
       rightW: DEFAULT_RIGHT_W,
       bottomH: DEFAULT_BOTTOM_H,
@@ -409,6 +468,7 @@ export class DockService {
     const next = this.slots[to] ?? this.defaultState();
     this.slots = { ...this.slots, [from]: this.state() };
     delete this.slots[to];
+    this.storedActive = null;
     this.state.set(this.merge(this.defaultState(), next));
     this._activeView.set(to);
     this.persist();
@@ -422,6 +482,7 @@ export class DockService {
 
   /** "Revert view": the active view's dock goes back to a layout taken with {@link layout}. */
   applyLayout(layout: DockLayout): void {
+    this.storedActive = null;
     this.state.set(this.merge(this.defaultState(), layout));
     this.persist();
     this.reconcileEnabled(this.settings.widgetsDisabled());
@@ -485,6 +546,7 @@ export class DockService {
 
   /** View -> "Reset layout": the ACTIVE view's dock back to the defaults. */
   reset(): void {
+    this.storedActive = null;
     this.state.set(this.defaultState());
     this.persist();
   }
@@ -504,11 +566,7 @@ export class DockService {
     const placed = new Set<WidgetId>([...lists.left, ...lists.right, ...lists.bottom]);
     for (const w of this.registry.widgets()) {
       if (!disabled.has(w.id) && !placed.has(w.id)) {
-        lists[w.defaultDock].splice(
-          this.orderedInsertIndex(w.defaultDock, w.id, lists[w.defaultDock]),
-          0,
-          w.id,
-        );
+        this.place(lists, w.id, w.defaultDock);
       }
     }
     const same =
@@ -520,7 +578,11 @@ export class DockService {
     }
   }
 
-  /** The first open panel after `id` in the same dock, or null -- what a splitter connects to. */
+  /**
+   * The first open, unfolded panel after `id` in the same dock, or null --
+   * what a splitter connects to (a panel folded to its header has no height
+   * to give or take).
+   */
   nextOpenId(id: WidgetId): WidgetId | null {
     const side = this.sideOf(id);
     if (!side) {
@@ -528,7 +590,7 @@ export class DockService {
     }
     const ids = this.state().dock[side];
     for (let i = ids.indexOf(id) + 1; i < ids.length; i++) {
-      if (this.state().open[ids[i]]) {
+      if (this.state().open[ids[i]] && !this.state().collapsed[ids[i]]) {
         return ids[i];
       }
     }
@@ -567,7 +629,7 @@ export class DockService {
     }
   }
 
-  // ---- panel header / strip icon press: a click toggles, a drag moves ----
+  // ---- strip icon press: a click toggles, a drag moves. Panel header press: a drag moves ----
 
   /** In-flight header press, before it is promoted to a real drag. */
   private headerPress: {
@@ -582,12 +644,25 @@ export class DockService {
   private static readonly DRAG_THRESHOLD_PX = 4;
 
   /**
-   * Mousedown on a panel header or on its strip icon. A release before the
-   * pointer moves `DRAG_THRESHOLD_PX` is treated as a click -> `toggle`;
-   * moving past it promotes the gesture to a panel drag between docks.
+   * Mousedown on a panel's strip icon. A release before the pointer moves
+   * `DRAG_THRESHOLD_PX` is treated as a click -> `toggle`; moving past it
+   * promotes the gesture to a panel drag between docks.
+   */
+  beginStripPress(id: WidgetId, title: string, event: MouseEvent): void {
+    this.beginPress(id, title, event, () => this.toggle(id));
+  }
+
+  /**
+   * Mousedown on a panel header (board 9a): the whole header drags. A plain
+   * click does nothing -- the chevron folds, the strip icon closes.
    */
   beginHeaderPress(id: WidgetId, title: string, event: MouseEvent): void {
-    this.beginPress(id, title, event, () => this.toggle(id));
+    this.beginPress(id, title, event, () => undefined);
+  }
+
+  /** The header menu's "Move to … dock": `id` goes to the end of `side`. */
+  moveToDock(id: WidgetId, side: DockSide): void {
+    this.move(id, side, this.state().dock[side].length);
   }
 
   /**
@@ -958,19 +1033,21 @@ export class DockService {
         views?: Record<string, Partial<DockState>>;
       };
       if (saved.views !== undefined && saved.views !== null && typeof saved.views === 'object') {
-        // The per-view blob (ADR-0089).
+        // The per-view blob (ADR-0089). A parked view stays as stored -- with
+        // its plugin panels -- until `switchView` merges it; only the active
+        // one is read now.
         const active = typeof saved.active === 'string' ? saved.active : DockService.DEFAULT_VIEW;
-        const slots: Record<string, DockState> = {};
-        for (const [id, v] of Object.entries(saved.views)) {
-          slots[id] = this.merge(base, v);
-        }
-        const current = slots[active] ?? base;
-        delete slots[active];
-        this.slots = slots;
+        const { [active]: current, ...parked } = saved.views;
+        this.slots = parked as Record<string, DockState>;
         this._activeView.set(active);
-        return current;
+        if (current === undefined) {
+          return base;
+        }
+        this.storedActive = current;
+        return this.merge(base, current);
       }
       // A layout stored before views: it is the Notes view.
+      this.storedActive = saved;
       return this.merge(base, saved);
     } catch {
       return base;
@@ -1014,6 +1091,12 @@ export class DockService {
           !legacyOff.has(id) &&
             (typeof saved.open?.[id] === 'boolean' ? saved.open[id] : base.open[id]),
         ]),
+      ) as Record<WidgetId, boolean>,
+      collapsed: Object.fromEntries(
+        this.registry
+          .allWidgetIds()
+          .filter((id) => saved.collapsed?.[id] === true)
+          .map((id) => [id, true]),
       ) as Record<WidgetId, boolean>,
       leftW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.leftW, base.leftW))),
       rightW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.rightW, base.rightW))),

@@ -152,12 +152,12 @@ export interface PluginWidgetContrib {
   readonly contentHeight?: boolean;
   /** Body fills the frame instead of scrolling (no second scrollbar). */
   readonly flush?: boolean;
-  /** Header status value (right-aligned, dimmed) — recomputed on shell change detection. */
+  /** Header status value (dimmed, right after the title) — recomputed on shell change detection. */
   status?(context: PluginStatusContext): string | null;
   /**
-   * Builds the panel's own control row into the shared 32px header
-   * (right-aligned before the grip, e.g. a refresh button). The element is
-   * styled by the shell; return cleanup.
+   * Builds the panel's own control row into the shared header (right-aligned,
+   * shown on hover or focus, e.g. a refresh button). The element is styled by
+   * the shell; return cleanup.
    */
   headerActions?(el: HTMLElement): () => void;
   /** Build the panel body; return cleanup (called on unregister). */

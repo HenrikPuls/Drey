@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures/drey';
+import { test, expect, refreshFiles } from './fixtures/drey';
 
 /**
  * Regressions for three post-milestone-15 findings:
@@ -13,7 +13,7 @@ import { test, expect } from './fixtures/drey';
 
 async function openANote(page: import('@playwright/test').Page, vaultDir: string): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, 'diag.md'), 'alpha beta gamma\nsecond line\nthird line\n');
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'diag.md' }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }
@@ -128,7 +128,7 @@ test.describe('View menu — widget visibility (ADR-0034)', () => {
     page,
   }) => {
     const frame = page.locator('app-panel-frame', {
-      has: page.locator('.head[aria-label$="Open windows"]'),
+      has: page.locator('.head .title', { hasText: 'Open windows' }),
     });
     await expect(frame).toBeVisible();
 
@@ -142,11 +142,33 @@ test.describe('View menu — widget visibility (ADR-0034)', () => {
     await expect(frame).toBeVisible();
   });
 
-  test('a strip icon toggles its panel, and a header click closes it', async ({ page }) => {
+  test('a strip icon toggles its panel; the chevron folds it, the header menu moves and closes it', async ({ page }) => {
     const frame = page.locator('app-panel-frame', {
-      has: page.locator('.head[aria-label$="Open windows"]'),
+      has: page.locator('.head .title', { hasText: 'Open windows' }),
     });
-    await frame.locator('.head').click();
+    const head = frame.locator('.head');
+    const body = frame.locator('.body-wrap');
+
+    // A click on the header does nothing.
+    await head.locator('.title').click();
+    await expect(body).toBeVisible();
+
+    // The chevron folds it to its header; the strip icon stays on.
+    await head.getByRole('button', { name: 'Collapse Open windows' }).click();
+    await expect(body).toBeHidden();
+    await expect(head).toBeVisible();
+    await expect(page.locator('app-dock-strip button[aria-label="Hide Open windows"]')).toHaveAttribute('aria-pressed', 'true');
+    await head.getByRole('button', { name: 'Expand Open windows' }).click();
+    await expect(body).toBeVisible();
+
+    // The header's menu moves it to another dock...
+    await head.click({ button: 'right' });
+    await frame.getByRole('menuitem', { name: 'Move to right dock' }).click();
+    await expect(page.locator('app-dock[side="right"] app-panel-frame', { hasText: 'Open windows' })).toBeVisible();
+
+    // ...and closes it.
+    await head.click({ button: 'right' });
+    await frame.getByRole('menuitem', { name: 'Close', exact: true }).click();
     await expect(frame).toBeHidden();
 
     await page.locator('app-dock-strip button[aria-label="Show Open windows"]').click();
@@ -169,7 +191,7 @@ test.describe('Live Preview — checked tasks', () => {
       path.join(vaultDir, 'todos.md'),
       '# Todos\n\n- [ ] open task\n- [x] done task\n',
     );
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'todos.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toBeVisible();
 

@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–190, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169, 171–190 and 192, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -883,7 +883,7 @@ rest are kept so they still match `docs/11`.
 - **Comment composer for store tickets (follow-up of D-12 and E14-6).** The thread shows a store ticket's comments since milestone 181 but cannot write one.
 
 
-- **Board 9a — Drey cleaned up (owner request 2026-11-06, outside the list; req-104).** 28 px dock headers (`--panel-head-h`, today 32 px), the panel chrome, the ticket card, the Assistant without a rail. Base plus the dock; ADR-0019 / ADR-0057 later change.
+- **Detach a dock panel (req-111; owner request 2026-11-07, outside the list; follow-up of req-104).** Board 9a's note names "move / detach / close" for a panel header's right-click; *Move* and *Close* shipped with milestone 192. A panel in a window of its own does not exist in the base yet: it needs a design (where it lives, how a plugin panel mounts there, how it persists).
 
 
 - **Mission Control over the CLI providers (D-1 follow-up, 2026-11-04).**

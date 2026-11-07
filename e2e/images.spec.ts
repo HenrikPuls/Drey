@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Page } from './fixtures/drey';
+import { test, expect, type Page, refreshFiles } from './fixtures/drey';
 import { activeVaultAssetUrl } from './fixtures/asset-url';
 
 /** A 1x1 transparent PNG. */
@@ -9,7 +9,7 @@ const PNG_BASE64 =
 
 async function openNote(page: Page, vaultDir: string, name: string, body = '# pic\n\n'): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, name), body);
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }
@@ -169,7 +169,7 @@ test.describe('inline image sizing — ![alt|W]', () => {
     fs.writeFileSync(path.join(vaultDir, 'assets', 'p.png'), Buffer.from(PNG_BASE64, 'base64'));
     fs.writeFileSync(path.join(vaultDir, 'sized.md'), '# sized\n\n![shot|140](assets/p.png)\n');
 
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'sized.md' }).click();
 
     const img = page.locator('app-editor .cm-content .lp-image img');

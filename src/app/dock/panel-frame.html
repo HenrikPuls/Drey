@@ -1,12 +1,20 @@
+<!-- i18n: catalog -->
 <div
   class="head"
-  role="button"
-  tabindex="0"
-  [attr.aria-label]="'Hide ' + title()"
-  title="Click to hide · drag to move this panel"
+  [attr.title]="'dock.panel.header_hint' | t"
   (mousedown)="onHeaderPress($event)"
-  (keydown)="onHeaderKey($event)"
+  (contextmenu)="openMenu($event)"
 >
+  <button
+    type="button"
+    class="chevron"
+    [attr.aria-expanded]="!collapsed()"
+    [attr.aria-label]="(collapsed() ? 'dock.panel.expand' : 'dock.panel.collapse') | t: { panel: title() }"
+    (mousedown)="$event.stopPropagation()"
+    (click)="toggleCollapsed()"
+  >
+    <app-icon [name]="collapsed() ? 'chevron-right' : 'chevron-down'" [size]="12" [strokeWidth]="2" />
+  </button>
   @if (!titleReplaced()) {
     <span class="title">{{ title() }}</span>
     @if (status(); as s) {
@@ -32,10 +40,25 @@
       <div class="plugin-actions" #pluginActions></div>
     </div>
   }
-  <span class="grip" aria-hidden="true"> <i></i><i></i><i></i><i></i><i></i><i></i> </span>
 </div>
 
-<div class="body-wrap">
+@if (menu(); as m) {
+  <div
+    class="ctx-backdrop"
+    appOverlayGuard
+    (click)="closeMenu()"
+    (contextmenu)="$event.preventDefault(); closeMenu()"
+  ></div>
+  <div class="ctx-menu" role="menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    @for (side of moveTargets(); track side) {
+      <button type="button" role="menuitem" (click)="moveTo(side)">{{ 'dock.panel.move_' + side | t }}</button>
+    }
+    <div class="ctx-sep" role="separator"></div>
+    <button type="button" role="menuitem" (click)="closePanel()">{{ 'common.close' | t }}</button>
+  </div>
+}
+
+<div class="body-wrap" [class.folded]="collapsed()">
   <div class="body" [class.body--flush]="flush()">
     <ng-content />
   </div>

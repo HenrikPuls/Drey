@@ -65,29 +65,29 @@
         {{ zoomPercent() }}%
       </button>
     }
-    <button
-      type="button"
-      class="icon-btn lines"
-      [class.on]="editor.lineNumbers()"
-      (click)="editor.toggleLineNumbers()"
-      [title]="keys.titled('Toggle line numbers', 'editor.toggleLineNumbers')"
-      aria-label="Toggle line numbers"
-    >
-      <app-icon name="list-ordered" [size]="14" [strokeWidth]="1.5" />
-    </button>
-
-    <button
-      type="button"
-      class="icon-btn save"
-      [class.dirty]="dirty"
-      [disabled]="!dirty || editor.isSaving()"
-      (click)="editor.save({ path: shownPath() ?? undefined })"
-      [title]="editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved'"
-      [attr.aria-label]="editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved'"
-    >
-      <app-icon name="save" [size]="14" [strokeWidth]="1.5" />
-    </button>
-
+    @if (dirty) {
+      <button
+        type="button"
+        class="save"
+        [disabled]="editor.isSaving()"
+        (click)="editor.save({ path: shownPath() ?? undefined })"
+        [title]="keys.titled('editor.save' | t, 'note.save')"
+      >
+        {{ (editor.isSaving() ? 'editor.saving' : 'editor.save') | t }}
+      </button>
+    }
+    @if (editor.isMarkdown(shownPath()) && !editor.isHelpDoc(shownPath())) {
+      <button
+        type="button"
+        class="icon-btn source"
+        [attr.aria-pressed]="(shownDoc()?.viewMode ?? 'live') === 'source'"
+        (click)="toggleSource()"
+        [attr.title]="'editor.show_source' | t"
+        [attr.aria-label]="'editor.show_source' | t"
+      >
+        <app-icon name="code" [size]="16" />
+      </button>
+    }
     <button
       #moreBtn
       type="button"
@@ -95,10 +95,10 @@
       aria-haspopup="menu"
       [attr.aria-expanded]="menuOpen()"
       (click)="toggleMenu()"
-      title="More"
-      aria-label="More"
+      [attr.title]="'editor.more' | t"
+      [attr.aria-label]="'editor.more' | t"
     >
-      <app-icon name="more-horizontal" [size]="14" [strokeWidth]="1.5" />
+      <app-icon name="more-horizontal" [size]="16" />
     </button>
   </div>
 </div>
@@ -168,6 +168,23 @@
 
       <div class="menu-sep" role="separator"></div>
     }
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      class="line-numbers"
+      [attr.aria-checked]="editor.lineNumbers()"
+      (click)="closeMenu(); editor.toggleLineNumbers()"
+    >
+      <span class="tick">
+        @if (editor.lineNumbers()) {
+          <app-icon name="check" [size]="13" />
+        }
+      </span>
+      {{ 'editor.line_numbers' | t }}
+      @if (keys.hint('editor.toggleLineNumbers'); as key) {
+        <span class="ctx-key">{{ key }}</span>
+      }
+    </button>
     @if (!isHelp) {
       <button
         type="button"

@@ -10,70 +10,24 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 6px 10px;
+  padding: 0 8px;
 }
 
 /* ---- vault sections (one header row per registered vault, ADR-0051) ---- */
 
-/* The vault header is a SECTION BAND, one level above the tree: bold
-   heading-colored name on a faint resting tint, extra space before each
-   section. Hierarchy inside the tree: vault (600) > folder (500) > file. */
+/* The vault header is the tree's top level (board 9a): a bold name, no band. */
 .node.vault-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  border: 0;
-  background: color-mix(in srgb, var(--text-heading) 3%, transparent);
-  text-align: left;
-  height: var(--row-h);
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--text-heading);
-  overflow: hidden;
-}
-
-/* Every section after the first separates from the one above it. */
-.node.vault-row:not(:first-child) {
-  margin-top: 6px;
-}
-
-.node.vault-row:hover {
-  background: var(--hover-bg);
-  color: var(--text-heading);
+  padding-left: 4px;
 }
 
 .node.vault-row .node-name {
   font-weight: 600;
-  font-size: 13px;
-}
-
-/* The active vault's header: the accent-tinted edge marks the vault that
-   daily notes / capture / chats target. */
-.vault-row.active-vault {
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* A vault whose folder is gone (moved drive, OneDrive unmounted): muted,
    but still registered -- it recovers on its own when the path returns. */
 .vault-row.missing {
   opacity: 0.5;
-}
-
-.active-dot {
-  flex: none;
-  margin-left: auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.vault-row .twist {
-  flex: none;
-  opacity: 0.9;
-  transition: transform 0.12s ease;
 }
 
 .vault-menu-item {
@@ -175,6 +129,9 @@
   overflow-y: auto;
   overflow-x: hidden;
   outline: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 /* In-place editing (milestone 43): a new file / folder or a rename is a
@@ -289,25 +246,28 @@
   color: #e0776d;
 }
 
+/* Board 9a: 30px of row plus a 1px edge all round. */
 .node {
   display: flex;
   align-items: center;
+  flex: none;
   gap: 6px;
   width: 100%;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   text-align: left;
-  height: var(--row-h);
-  padding: 0 8px 0 8px;
-  border-radius: var(--radius-xs);
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--radius-chip);
   cursor: pointer;
-  color: var(--text-3);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-primary);
   overflow: hidden;
 }
 
 .node:hover {
   background: var(--hover-bg);
-  color: var(--text-primary);
 }
 
 /* One line per name; a name longer than the dock fades out at the right
@@ -316,51 +276,44 @@
 .node-name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
   overflow: hidden;
   white-space: nowrap;
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 
-.folder .node-name {
-  font-weight: 500;
-}
-
 .twist {
   flex: none;
-  color: var(--text-6);
+  color: var(--text-4);
   transition: transform 0.12s ease;
+}
+
+/* A file lines up with the names of the folders beside it. */
+.twist-slot {
+  flex: none;
+  width: 14px;
 }
 
 .count {
   flex: none;
   margin-left: auto;
-  font-size: 11px;
-  color: var(--text-7);
+  font-size: 13px;
+  color: var(--text-4);
   font-family: var(--font-sans);
 }
 
-.bullet {
-  width: 3px;
-  height: 3px;
-  flex: none;
-  margin: 0 2.5px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.4;
-}
-
 .file.active {
-  background: var(--accent-surface);
-  color: var(--text-heading);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--active-bg);
 }
 
-/* Roving keyboard selection -- a faint ring so it reads under the pointer
-   hover and the `.active` open-file fill without competing with them. */
-.node.selected {
+/* While working in the tree, selected rows share the open file's fill; the
+   keyboard's position is the ring of the focused row. */
+.tree-scroll:focus-within .node.selected {
+  background: var(--active-bg);
+}
+
+.node:focus-visible {
+  outline: none;
   box-shadow: inset 0 0 0 1px var(--accent-edge);
-  color: var(--text-primary);
 }
 
 /* Hover target of an in-panel drag (req-23): the accent-tinted fill the

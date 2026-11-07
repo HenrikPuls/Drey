@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Page } from './fixtures/drey';
+import { test, expect, type Page, refreshFiles } from './fixtures/drey';
 import { activeVaultAssetUrl } from './fixtures/asset-url';
 
 /** A 1x1 PNG. */
@@ -11,7 +11,7 @@ const PNG_BASE64 =
 async function openNote(page: Page, vaultDir: string, name: string, body: string): Promise<void> {
   fs.mkdirSync(path.dirname(path.join(vaultDir, name)), { recursive: true });
   fs.writeFileSync(path.join(vaultDir, name), body);
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   // Folders start collapsed each session (milestone 31), so a nested note's
   // row is not in the tree until its ancestors are expanded. (The spec's
   // paths use `/`, which Windows path.dirname converts to `\`.)

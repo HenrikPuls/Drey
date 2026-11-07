@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Page } from './fixtures/drey';
+import { test, expect, type Page, refreshFiles } from './fixtures/drey';
 import { activeVaultAssetUrl } from './fixtures/asset-url';
 
 /** A 1x1 PNG. */
@@ -11,7 +11,7 @@ async function openNoteWithImage(page: Page, vaultDir: string): Promise<void> {
   fs.mkdirSync(path.join(vaultDir, 'assets'), { recursive: true });
   fs.writeFileSync(path.join(vaultDir, 'assets', 'p.png'), Buffer.from(PNG_BASE64, 'base64'));
   fs.writeFileSync(path.join(vaultDir, 'has-image.md'), '# pic\n\n![a shot](assets/p.png)\n');
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'has-image.md' }).click();
   await expect(page.locator('app-editor .cm-content .lp-image img')).toBeVisible();
 }
@@ -91,7 +91,7 @@ test.describe('image lens → fullscreen viewer', () => {
 test.describe('image files open as a viewer tab', () => {
   async function openImageFile(page: Page, vaultDir: string): Promise<void> {
     fs.writeFileSync(path.join(vaultDir, 'photo.png'), Buffer.from(PNG_BASE64, 'base64'));
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'photo.png' }).click();
   }
 
@@ -165,7 +165,7 @@ test.describe('image resize handle', () => {
     fs.mkdirSync(path.join(vaultDir, 'assets'), { recursive: true });
     fs.writeFileSync(path.join(vaultDir, 'assets', 'p.png'), Buffer.from(PNG_BASE64, 'base64'));
     fs.writeFileSync(path.join(vaultDir, 'wh.md'), '# pic\n\n![plan|200x100](assets/p.png)\n');
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'wh.md' }).click();
     await expect(page.locator('app-editor .cm-content .lp-image img')).toBeVisible();
 

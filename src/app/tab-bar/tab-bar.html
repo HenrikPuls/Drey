@@ -34,7 +34,7 @@
         (click)="onClose($event, path)"
         [attr.aria-label]="'Close ' + doc.name"
       >
-        <app-icon name="x" [size]="8" [strokeWidth]="1.4" />
+        <app-icon name="x" [size]="12" [strokeWidth]="2" />
       </button>
     </div>
   }
@@ -42,10 +42,6 @@
 @if (dropAtEnd()) {
   <div class="drop-line"></div>
 }
-
-<button type="button" class="add" (click)="editor.newUntitled()" aria-label="New note">
-  <app-icon name="plus" [size]="11" [strokeWidth]="1.2" />
-</button>
 
 @if (menu(); as m) {
   <div

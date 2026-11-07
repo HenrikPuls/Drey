@@ -121,6 +121,15 @@ that row stay the click-to-collapse / drag area. Collapsed, the header
 shows "Calendar" and the month as before. The row gains a **Today** icon
 button that jumps to the current month and opens today's daily note.
 
+## Later change — board 9a sizes the chrome up (milestone 192, req-104)
+
+The chrome stays sentence-case sans with icon-only panel controls, and mono only
+for code and the path. What changes: the status and meta text 13 px, tabs 14 px,
+the path 13 px, the frame's icon buttons 30 px (`--chrome-btn`, panels keep 24),
+panel titles in primary text, and an active icon is **grey, not accent**
+(`.icon-btn` in `styles.css`), plugins included, because several are on at once.
+Panel controls now show on hover or focus only; heights are in ADR-0019.
+
 ## Later change — neutral gray palette and AA contrast (Anthrazit)
 
 The first Anthrazit palette was warm (brownish hue, `#1e1b17 / #262220`) and

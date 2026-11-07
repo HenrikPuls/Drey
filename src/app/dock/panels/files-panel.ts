@@ -412,8 +412,24 @@ export class FilesPanel {
   }
 
   /** Manual "re-read every vault from disk" (a full round in main, ADR-0045). */
-  protected onRefresh(): void {
+  protected onRefreshFromMenu(): void {
+    this.vaultMenu.set(null);
     void this.vault.refresh();
+  }
+
+  /** The row's tooltip: the folder, and which vault new notes go to. */
+  protected vaultTitle(vault: { readonly path: string; readonly active: boolean }): string {
+    return vault.active ? `${vault.path} · Active vault` : vault.path;
+  }
+
+  /** The header's "New file": a name row at the top of the active vault. */
+  protected onNewFile(): void {
+    const target = this.vault.vaults().find((v) => v.active) ?? this.vault.vaults()[0];
+    if (target === undefined) {
+      return;
+    }
+    this.creating.set({ kind: 'file', vaultId: target.id, dir: '' });
+    this.tree.unfoldVault(target.id);
   }
 
   protected async onAddVault(): Promise<void> {

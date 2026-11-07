@@ -4,7 +4,8 @@
   flex: none;
   min-width: 0;
   height: var(--bar-h);
-  padding: 0 4px 0 12px;
+  gap: 2px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-dock);
   -webkit-app-region: drag;
@@ -14,7 +15,7 @@
   display: flex;
   align-items: center;
   flex: none;
-  margin-right: 8px;
+  margin-right: 6px;
 }
 
 /* Leave room for the macOS traffic lights when they sit inset over the bar. */
@@ -23,9 +24,9 @@
 }
 
 .mark {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-chip);
   object-fit: cover;
   flex: none;
 }
@@ -33,14 +34,13 @@
 /* The dock toggles: left one beside the brand, right one before the window
    controls -- each above the dock it folds away. Dimmed while folded. */
 .dock-toggle {
-  width: 28px;
-  height: 26px;
-  margin-right: 6px;
+  width: var(--chrome-btn);
+  height: var(--chrome-btn);
   -webkit-app-region: no-drag;
 }
 
 .dock-toggle.right {
-  margin: 0 6px;
+  margin-right: 10px;
 }
 
 .dock-toggle.folded {
@@ -52,10 +52,18 @@
 .hist-nav {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 2px;
   flex: none;
-  margin: 0 6px;
   -webkit-app-region: no-drag;
+}
+
+.hist-nav .icon-btn {
+  width: var(--chrome-btn);
+  height: var(--chrome-btn);
+}
+
+.hist-nav .icon-btn:disabled {
+  opacity: 1;
 }
 
 .spacer {
@@ -82,27 +90,27 @@
 }
 
 .tb-action:hover {
-  color: var(--text);
-  background: var(--panel-2);
+  color: var(--text-primary);
+  background: var(--hover-bg);
 }
 
 .controls {
   display: flex;
-  gap: 1px;
+  gap: 2px;
   flex: none;
   -webkit-app-region: no-drag;
 }
 
 .ctl {
   width: 40px;
-  height: 26px;
+  height: var(--chrome-btn);
   display: flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-chip);
   background: transparent;
-  color: var(--text-5);
+  color: var(--text-4);
   cursor: pointer;
 }
 
@@ -113,5 +121,5 @@
 
 .ctl.close:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }

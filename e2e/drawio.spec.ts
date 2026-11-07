@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, type Page } from './fixtures/drey';
+import { test, expect, type Page, refreshFiles } from './fixtures/drey';
 import { placeholderDiagramPng, pngDiagramXml } from '../plugins/drawio/renderer/diagram-file';
 
 /**
@@ -132,7 +132,7 @@ test.describe('draw.io diagrams (ADR-0064)', () => {
       return [bitmap.width, bitmap.height];
     }, Array.from(seeded));
     expect(decoded).toEqual([1, 1]);
-    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+    await refreshFiles(page);
     await openFromTree(page, 'bitmap.drawio.png');
     await moveTheBox(page);
 

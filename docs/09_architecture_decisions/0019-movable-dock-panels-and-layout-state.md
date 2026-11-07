@@ -274,4 +274,35 @@ shows its header) and from the "click-to-collapse" later change above.
 The tab bar and the strips sit side by side under the titlebar; since the
 strip shipped, the tab bar uses the same 32px `--panel-head-h` so their
 bottom borders read as one line (ADR-0057 later change) — the "titlebar
-and tab bar 36px" grid note above is historical.
+and tab bar 36px" grid note above is historical. (Board 9a ended the shared
+line, see the next section.)
+
+## Later change — board 9a: fold to the header, a menu on it (milestone 192, req-104)
+
+The owner's board 9a changes three things this record decided.
+
+- **Heights.** Title bar and strips 41, tab bar 37, meta bar 37, panel header
+  28, status bar 29, each the whole bar with its line. The tab bar and the
+  strips no longer share a bottom line; each has its own token.
+- **Folding came back, beside closing.** The "keeping collapse next to close"
+  alternative above was rejected for two near-identical states. The board
+  separates them: a *folded* panel (chevron) keeps its header in the stack and
+  its strip icon on, a *closed* one is only its icon. The cost is one more
+  state per panel (`collapsed` in the layout, per view).
+- **The header is no longer a button.** A click does nothing, a drag moves, a
+  right-click offers Move to left / right / bottom dock and Close. The strip
+  icon is the one way to open and close by click, so a press on a header can
+  never lose a panel by accident. Detach is not built (req-111).
+
+**The frame rule for every panel.** What a panel inherits from `PanelFrame`,
+and may not redraw: the 28 px header with chevron, title and status value right
+after the title, its place in the strip, the line above it, the drag, the menu
+and the grey of an active icon button. What it may draw: its body, and its
+controls in the header (`headerActions`, 24 px `.icon-btn`, icon 14), which show
+on hover or focus only. So nothing a panel must always show belongs in the
+header row; it goes in the status value or the body. Sizes come from the tokens
+(`--panel-head-h`, `--icon-btn`), never a literal.
+
+Stored layouts also keep plugin panels now: the layout is read before plugins
+register, so the service holds it and places each panel as it arrives. Until
+then a plugin panel fell back to its default dock on every start.

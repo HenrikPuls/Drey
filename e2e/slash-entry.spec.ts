@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures/drey';
+import { test, expect, refreshFiles } from './fixtures/drey';
 
 /**
  * Capture through the `/` menu (milestone 43, ADR-0057 — it replaced the
@@ -16,7 +16,7 @@ test('the slash menu offers Entry and vault templates, previews and inserts them
   fs.mkdirSync(path.join(vaultDir, 'templates'), { recursive: true });
   fs.writeFileSync(path.join(vaultDir, 'templates', 'standup.md'), '## Standup\n\n- yesterday\n');
   fs.writeFileSync(path.join(vaultDir, 'note.md'), '# Note\n\n');
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'note.md' }).click();
   const content = page.locator('app-editor .cm-content');
   await expect(content).toBeVisible();
@@ -73,7 +73,7 @@ test('the slash menu opens the template picker: folders, no prompts, arrow keys'
   fs.writeFileSync(path.join(templates, 'meetings', 'sync.md'), '## Sync\n\n- agenda\n');
   fs.writeFileSync(path.join(templates, 'prompts', 'review.md'), '# Review\n> a composer prompt\n');
   fs.writeFileSync(path.join(vaultDir, 'note.md'), '# Note\n\n');
-  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await refreshFiles(page);
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'note.md' }).click();
   const content = page.locator('app-editor .cm-content');
   await expect(content).toBeVisible();
