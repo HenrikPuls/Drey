@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TicketDocuments, askToAddCheckout, type TicketDocumentsDeps } from './ticket-documents';
+import { TicketDocuments, askToAddCheckout, fileTicketTitle, type TicketDocumentsDeps } from './ticket-documents';
 
 const CHECKOUT = '/data/tickets-store';
 const LOCATION = { checkout: CHECKOUT, path: 'tickets/t/0000/t-63/ticket.md' };
@@ -69,6 +69,33 @@ describe('the checkout prompt (D-14)', () => {
     const register = vi.fn(async () => undefined);
     expect(await askToAddCheckout({ window: () => null, showMessageBox: async () => ({ response: 1 }), register }, CHECKOUT)).toBe(false);
     expect(register).not.toHaveBeenCalled();
+  });
+});
+
+describe('the files store ticket as a tab name (fidelity ruling O6)', () => {
+  const text = '---\nid: T-0017\ntitle: A8 large modules\n---\n\n# Body\n';
+
+  it('is id and title, wherever the file sits', () => {
+    expect(fileTicketTitle('tickets/20-prioritized/T-0017.md', text)).toBe('T-0017 · A8 large modules');
+    expect(fileTicketTitle('tickets/archive/T-0017.md', text)).toBe('T-0017 · A8 large modules');
+  });
+
+  it('falls back to the id without a title', () => {
+    expect(fileTicketTitle('tickets/20-prioritized/T-0017.md', '---\nid: T-0017\n---\n')).toBe('T-0017');
+  });
+
+  it('leaves anything else its name: another path, or a header that is not this ticket', () => {
+    expect(fileTicketTitle('notes/T-0017.md', text)).toBeNull();
+    expect(fileTicketTitle('tickets/_meta/pipeline.md', text)).toBeNull();
+    expect(fileTicketTitle('tickets/20-prioritized/T-0018.md', text)).toBeNull();
+    expect(fileTicketTitle('tickets/20-prioritized/T-0017.md', 'no header')).toBeNull();
+  });
+
+  it('reaches the route for a vault the route does not own', async () => {
+    const { documents } = make();
+    await documents.refresh();
+    expect(documents.owns('notes', 'tickets/20-prioritized/T-0017.md')).toBe(false);
+    expect(documents.route.title?.('notes', 'tickets/20-prioritized/T-0017.md', text)).toBe('T-0017 · A8 large modules');
   });
 });
 

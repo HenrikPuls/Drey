@@ -60,6 +60,35 @@ export const MC_APPROVE_STATE = new InjectionToken<McApproveState>('mc-approve-s
 // --- the cards ---------------------------------------------------------------
 
 /** The person a part is built by: the pinned persona, else the default builder. */
+/** The Ready to try stage's id (`pipeline-states.ts`): the lib does not reach the engine at runtime. */
+const READY_STATE = 'ready';
+
+/** The Flow row of the iPad's plan (board 5c): Shape is done, the first step is the one the plan waits at. */
+export interface PadFlowLine {
+  readonly past: string;
+  readonly current: string;
+  readonly note: string | null;
+  readonly rest: string;
+}
+
+/**
+ * The desktop card's line (`flowItemsOf`): a plan page sits after Shape and before its
+ * first step, and the owner's Accept ends the flow, whatever the Ready stage is called.
+ */
+export function padFlowLineOf(flow: readonly McPartFlowStep[], waitsForYou: boolean, i18n: I18n): PadFlowLine | null {
+  const live = flow.filter((step) => !step.skipped && step.phase !== READY_STATE);
+  const [current, ...rest] = live;
+  if (current === undefined) {
+    return null;
+  }
+  return {
+    past: `✓ ${i18n.t('ticket.flow.shape')}`,
+    current: current.title,
+    note: waitsForYou ? i18n.t('ticket.flow.waits_for_you') : null,
+    rest: `· ${[...rest.map((step) => step.title), i18n.t('ticket.flow.accept')].join(' · ')}`,
+  };
+}
+
 export function builderOf(card: McPartCard, approval: McPlanApproval): McPartPersona | null {
   const id = card.persona ?? approval.defaultPersona;
   return id === null ? null : (approval.personas.find((p) => p.id === id) ?? { id, title: id, role: '', color: '', model: '' });

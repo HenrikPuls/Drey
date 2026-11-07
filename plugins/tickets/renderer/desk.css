@@ -655,13 +655,16 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
 
 .desk-persona-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
-/* Five slots, as board 7f: the fifth (New persona, E13-19) stays empty. */
+/* Five slots, as board 7f: the fifth (New persona, E13-19) stays empty. Below the
+   width a card's top row and Stop confirmation need, the cards wrap (fidelity ruling O7). */
 .desk-persona {
   display: flex;
-  flex: 0 0 calc((100% - 48px) / 5);
+  flex: 0 0 max(190px, calc((100% - 48px) / 5));
+  box-sizing: border-box;
   min-width: 0;
   flex-direction: column;
   gap: 6px;

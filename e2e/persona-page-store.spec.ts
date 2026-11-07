@@ -82,6 +82,7 @@ test('reads and writes prompt.md in the checkout vault', async ({ page, vaultDir
   await page.keyboard.press('Control+2');
   // The board really runs on the store: this ticket exists nowhere else.
   await expect(page.locator('.tickets-panel').filter({ visible: true })).toContainText('A ticket only the store has', { timeout: 30_000 });
+  await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
   await page.locator('button[aria-label="More actions"]:visible').click({ force: true });
   await page.getByRole('menuitem', { name: 'Crew', exact: true }).click();
   await page.locator('.desk-team [data-persona="ben"]').first().click();

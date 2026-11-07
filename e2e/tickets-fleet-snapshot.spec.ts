@@ -60,6 +60,7 @@ test('the Autopilot item and popover follow the runner across fleet events', asy
   const status = page.locator('app-status-bar');
 
   // The runner comes up on this click and its state change is a fleet event.
+  await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
   await page.locator('button[aria-label="Run the chain"]').filter({ visible: true }).first().click({ timeout: 30_000 });
   await expect(status.getByText('Autopilot · On')).toBeVisible({ timeout: 20_000 });
   // Another poll round must not take it away again.

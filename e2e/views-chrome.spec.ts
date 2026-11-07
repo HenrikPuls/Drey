@@ -49,8 +49,8 @@ test.use({
 
 /**
  * Views chrome (E12-18, boards 7h/7i): one segmented control with a dot on
- * the changed view, ONE Layout menu, the tab menu's "Go to the Work view" /
- * "Show this tab in ›", Open windows "N here · M elsewhere" and a dock strip
+ * the changed view, ONE Layout menu, the tab menu's inline "Show this tab in"
+ * list and "Go to the Work view", Open windows "N here · M elsewhere" and a dock strip
  * that keeps ten icons on one line.
  */
 test.describe('Views chrome (E12-18)', () => {
@@ -63,12 +63,13 @@ test.describe('Views chrome (E12-18)', () => {
     await files.getByText('notes', { exact: true }).click();
     await files.getByText('plain.md', { exact: true }).click();
     await page.locator('app-tab-bar .tab').first().click({ button: 'right' });
-    await page.locator('app-tab-bar .ctx-menu').first().getByText('Show this tab in').hover();
-    await page.locator('app-tab-bar .ctx-sub').getByText('Work', { exact: true }).click();
+    await page.locator('app-tab-bar .ctx-menu .ctx-view').getByText('Work', { exact: true }).click();
 
     // A layout change puts the dot on Notes only; there are no loose icons.
     await page.locator('app-dock-strip button[data-widget="outline"]').first().click();
     await expect(tabs.nth(0).locator('.vs-dot')).toBeVisible();
+    // Grey: orange means needs you only (fidelity ruling O5).
+    await expect(tabs.nth(0).locator('.vs-dot')).toHaveClass(/vs-dot-layout/);
     await expect(tabs.nth(1).locator('.vs-dot')).toHaveCount(0);
     await expect(page.locator('app-view-switcher [aria-label="Save view"]')).toHaveCount(0);
 
@@ -84,8 +85,10 @@ test.describe('Views chrome (E12-18)', () => {
     await page.locator('app-tab-bar .tab').first().click({ button: 'right' });
     const tabMenu = page.locator('app-tab-bar .ctx-menu').first();
     await expect(tabMenu).toContainText('Go to the Work view');
-    await tabMenu.getByText('Show this tab in').hover();
-    await expect(page.locator('app-tab-bar .ctx-sub')).toBeVisible();
+    await expect(tabMenu.locator('.ctx-label')).toHaveText('Show this tab in');
+    await expect(tabMenu.locator('.ctx-view')).toHaveText(['✓Notes', '✓Work', 'Crew']);
+    await expect(tabMenu).toContainText('Close tab');
+    await expect(page.locator('app-tab-bar .ctx-sub')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('tab-menu.png') });
     await page.keyboard.press('Escape');
 
@@ -94,13 +97,11 @@ test.describe('Views chrome (E12-18)', () => {
     // The new tab opens asynchronously; `.last()` before that is plain.md.
     await expect(page.locator('app-tab-bar .tab').last()).toContainText('untitled');
     await page.locator('app-tab-bar .tab').last().click({ button: 'right' });
-    await page.locator('app-tab-bar .ctx-menu').first().getByText('Show this tab in').hover();
-    await page.locator('app-tab-bar .ctx-sub').getByText('Work', { exact: true }).click();
+    await page.locator('app-tab-bar .ctx-menu .ctx-view').getByText('Work', { exact: true }).click();
     // The menu must be gone first: a right-click on its backdrop only closes it.
     await expect(page.locator('app-tab-bar .ctx-menu')).toHaveCount(0);
     await page.locator('app-tab-bar .tab').last().click({ button: 'right' });
-    await page.locator('app-tab-bar .ctx-menu').first().getByText('Show this tab in').hover();
-    await page.locator('app-tab-bar .ctx-sub').getByText('Notes', { exact: true }).click();
+    await page.locator('app-tab-bar .ctx-menu .ctx-view').getByText('Notes', { exact: true }).click();
     await expect(page.locator('app-tab-bar .ctx-menu')).toHaveCount(0);
     await page.locator('app-dock-strip button[data-widget="windows"]').first().waitFor();
     await expect(page.locator('app-open-windows .group b')).toHaveText(['In this view', 'In other views']);

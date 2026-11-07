@@ -164,7 +164,8 @@ const plugin: PluginRendererModule = {
     api.ui.registerViewPreset({
       id: sampleView,
       label: 'Sample',
-      layout: { left: ['sample'], right: ['files'] },
+      // bottomH (SDK 1.51): a first height for the bottom dock, when a panel lands there.
+      layout: { left: ['sample'], right: ['files'], bottomH: 160 },
     });
     api.commands.register({
       id: 'sample.view',

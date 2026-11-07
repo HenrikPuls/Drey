@@ -91,17 +91,15 @@ test.use({
   },
 });
 
-/**
- * A row opens the ticket document, or the thread while a run is live
- * (`defaultFaceOf`, E13-20); the card's Thread or the face switch reaches the thread.
- */
+/** A row opens the ticket document in every state (fidelity ruling O1); only the card's Thread reaches the thread. */
 async function openThread(page: Page, id: string): Promise<void> {
   await page.locator(`.work-row[data-id="${id}"]`).filter({ visible: true }).click();
-  await page.locator('.tickets-faces:visible [role="tab"], .tickets-card:visible .tickets-doc-btn', { hasText: 'Thread' }).first().click();
+  await expect(page.locator(`app-tab-bar .tab.active`).first()).toContainText(id);
+  await page.locator('.tickets-card:visible .tickets-doc-btn', { hasText: 'Thread' }).first().click();
 }
 
 test.describe('Work panel (req-75 W1/W1b)', () => {
-  test('groups the tickets, and a row opens the ticket thread alone', async ({ page, electronApp }, testInfo) => {
+  test('groups the tickets, and a row opens the ticket', async ({ page, electronApp }, testInfo) => {
     // The Work panel gets the left dock to itself, as an owner would set it.
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     for (const other of ['Calendar', 'Files', 'Open windows']) {
@@ -110,11 +108,17 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
+    // The state this test reads is pushed: an engine round would overwrite a single
+    // push (the real fleet has no runs), so it is held until the test ends.
     await electronApp.evaluate(
       ({ BrowserWindow }, data) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('plugin:event', data);
-        }
+        const push = (): void => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('plugin:event', data);
+          }
+        };
+        push();
+        setInterval(push, 100);
       },
       {
         pluginId: 'tickets',
@@ -170,9 +174,17 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     expect(box.width).toBeLessThan(420);
     await panel.screenshot({ path: testInfo.outputPath('work-panel-narrow.png') });
 
-    // The thread opens alone (req-84): since W4a the worker
-    // lives there in every state (the run tab is gone) — no file pair,
-    // no second pane; the thread lands where the focus is.
+    // A Needs-you row opens the one ticket document, with no Ticket · Thread · Review strip,
+    // though its run is live (fidelity ruling O1, board 9a), and its tab says id · title (O6).
+    await panel.locator('.work-row[data-id="T-0104"]').click();
+    await expect(page.locator('.tickets-card').filter({ visible: true })).toBeVisible();
+    await expect(page.locator('.tickets-thread').filter({ visible: true })).toHaveCount(0);
+    await expect(page.locator('.tickets-faces')).toHaveCount(0);
+    await expect(page.locator('app-tab-bar .tab.active .name')).toHaveText('T-0104 · Drag headings in the outline');
+
+    // The thread opens from the card's button: since W4a the worker
+    // lives there in every state (the run tab is gone) — no second pane;
+    // the thread lands where the focus is.
     await openThread(page, 'T-0104');
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread).toBeVisible({ timeout: 15_000 });
@@ -195,6 +207,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     );
     // A question carries no decision bar — that is the checkpoints'.
     await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
+    await expect(page.locator('.tickets-faces')).toHaveCount(0);
     await expect(page.locator('app-pane-leaf')).toHaveCount(1);
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });
@@ -234,7 +247,44 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(page.locator('app-pane-leaf')).toHaveCount(1);
   });
 
-  test('rows reuse the one thread tab; Open ticket opens the document', async ({ page }, testInfo) => {
+  test('the panel frame never scrolls sideways, and every header control is reachable (D-48)', async ({ page }) => {
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
+    const panel = page.locator('.tickets-panel').filter({ visible: true });
+    await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
+    const frame = page.locator('app-panel-frame', { has: page.locator('.tickets-panel') });
+    const head = frame.locator('.head');
+
+    // At rest the header is its one row (board 9a).
+    await page.mouse.move(700, 500);
+    await expect.poll(async () => (await head.boundingBox())!.height).toBeLessThanOrEqual(30);
+
+    // Hovered, each control lies inside the frame, whatever the dock's width,
+    // and the header keeps its height: nothing below it moves.
+    // One read over the panel, which stays: a board round rebuilds the rows.
+    const firstRowY = (): Promise<number | undefined> => panel.evaluate((node) => node.querySelector('.work-group-head')?.getBoundingClientRect().y);
+    await expect(panel.locator('.work-group-head').first()).toBeVisible();
+    const before = await firstRowY();
+    await head.hover();
+    expect((await head.boundingBox())!.height).toBeLessThanOrEqual(30);
+    expect(await firstRowY()).toBe(before);
+    const inFrame = (await frame.boundingBox())!;
+    const more = head.locator('button[aria-label="More actions"]');
+    for (const name of ['Emergency stop', 'More actions']) {
+      const box = (await head.locator(`button[aria-label="${name}"]`).boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(inFrame.x + inFrame.width);
+    }
+
+    // Focus or a click on the last control leaves the frame where it is.
+    await more.focus();
+    await more.click();
+    expect(await frame.evaluate((node) => node.scrollLeft)).toBe(0);
+    await frame.evaluate((node) => {
+      node.scrollLeft = 75;
+    });
+    expect(await frame.evaluate((node) => node.scrollLeft)).toBe(0);
+  });
+
+  test('the card\'s Thread reuses the one thread tab; Open ticket opens the document', async ({ page }, testInfo) => {
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
@@ -260,7 +310,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     // thread stays one press away on the card, no split.
     await panel.locator('.work-row[data-id="T-0103"] .work-row-more').click();
     await page.locator('.tickets-menu .tickets-menu-item', { hasText: 'Open ticket' }).click();
-    await expect(page.locator('app-tab-bar .tab', { hasText: 'T-0103.md' })).toHaveCount(1);
+    await expect(page.locator('app-tab-bar .tab.active .name')).toHaveText('T-0103 · Faster vault search');
     await expect(page.locator('app-pane-leaf')).toHaveCount(1);
     await expect(page.locator('.tickets-card:visible .tickets-doc-btn', { hasText: 'Thread' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
@@ -335,6 +385,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     // The filter popover: the Idle chip keeps the idle ideas — the queued
     // one (and only it) goes.
     const head = page.locator('.tickets-panel-head').filter({ visible: true });
+    await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
     await head.locator('.work-filter-btn').click();
     const pop = page.locator('.work-filter-pop');
     await expect(pop).toBeVisible();

@@ -10,6 +10,8 @@ One session read the boards and the built app, screen by screen, and wrote this 
 
 ## Open for the owner
 
+Ruled on 2026-11-07 (roadmap's req-146, then milestone 203). The tables below say what became of each row; the "Per board" counts are the review's own, from before the rulings.
+
 | # | Board | Difference | Recommendation |
 |---|---|---|---|
 | O1 | 7a | A Needs-you row opens the Thread face with the old Ticket · Thread · Review strip, and Ticket opens a second tab. 9a's note says that switch is gone. | The row opens the one ticket document; Thread only from its button. |
@@ -73,11 +75,11 @@ One session read the boards and the built app, screen by screen, and wrote this 
 
 | Device | Element | Boards | Build | Verdict |
 |---|---|---|---|---|
-| Desktop | Persona picture | Illustration on 7a–7c, 7f | Illustration on the Crew cards, an initial on the ticket card and in Parts | open, O8 |
-| Desktop | Dot on a view tab | One dot, needs you | Layout changed and needs you share one class, so `Work` can show two equal dots | open, O5 |
-| Desktop | Ticket tab title | `T-0017 · title` on all boards | `T-0002 · title` from the panel, `T-0017.md` from Files, both for one ticket | open, O6 |
-| Desktop | Status bar | Row 7, 9a and 10t disagree | One order, 10t's without the running item | open, O4 |
-| iPad, phone | Flow row | 5c, 7c tick and current step; 10j plain | Plain on 5c and 10j, ticks on 10e, 10q | open, O10 |
+| Desktop | Persona picture | Illustration on 7a–7c, 7f | Illustration on the Crew cards, an initial on the ticket card and in Parts | fixed by req-146 |
+| Desktop | Dot on a view tab | One dot, needs you | Layout changed and needs you share one class, so `Work` can show two equal dots | fixed by req-146 |
+| Desktop | Ticket tab title | `T-0017 · title` on all boards | `T-0002 · title` from the panel, `T-0017.md` from Files, both for one ticket | fixed by req-146 |
+| Desktop | Status bar | Row 7, 9a and 10t disagree | One order, 10t's without the running item | fixed by req-146: 10t's order, no frames; the running summary is req-150 |
+| iPad, phone | Flow row | 5c, 7c tick and current step; 10j plain | Plain on 5c and 10j, ticks on 10e, 10q | fixed by req-146; the fixture's flow keeps `Test` (data) |
 | iPad, phone | Linked ticket card | 10l `T-0121 · Building · linked ticket`, 10n `· linked ticket · Needs you` | 10l's on both | justified: the boards disagree, data |
 | iPad, phone | Question line of the chat link | 10a `Building · question from Ben`, 10f `Question from Ben` | 10a's on both | justified: the boards disagree, data |
 | All | Radii, mono font | Boards vary (12, 6, 18, Consolas) | 4 / 8 / 16, `--mono` | justified: owner decision, token |
@@ -94,14 +96,15 @@ Rows that hold on every board of a device are listed once under *all*.
 | all desktop | Docks under the strip | 4 px lower | One line at y 77 | justified: owner decision 2026-11-07 (decisions.md, milestone 192) |
 | all desktop | Tickets, Source control glyphs | Ticket, three-node glyph | `layers`, `git-branch` | justified: owner decision 2026-11-07 (decisions.md), the set lacks them |
 | all desktop | Text | Headless Edge | Electron | justified: text rasterization, no CSS difference found |
+| 7a–7d, 9a | Assistant chip | `T-0121.md` | `T-0121 · title` since O6 | justified: owner ruling O6, one name per document, SDK 1.48 (milestone 203) |
 | all row 7 | Tab bar and meta bar | 32 and 40 px, X on every tab, Lines, Save pill | 37 and 37 px, 9a's tabs and meta | justified: base chrome, 9a wins for the frame (milestone 192) |
 | all row 7 | Right strip | Search, Tasks, Assistant | Tasks lives in the left dock | justified: a panel lives in one dock (milestone 192) |
 | all row 7 | Under a tab whose Capacity hides | No band | Empty band | justified: feature not yet built — D-47 |
-| all desktop | Status bar | Row 7 framed items, `2 running`, 9a and 10t other orders | Autopilot, cost, need you, no frames | open, O4 |
-| all desktop | Work tab | One dot | Layout-changed and needs-you dots look alike | open, O5 |
+| all desktop | Status bar | Row 7 framed items, `2 running`, 9a and 10t other orders | Autopilot, cost, need you, no frames | fixed by req-146: 10t's order, no frames; the running summary is req-150 |
+| all desktop | Work tab | One dot | Layout-changed and needs-you dots look alike | fixed by req-146 |
 | all desktop | Needs-you dots | #e8a25a | #e0bb6e | fixed (F5) |
-| all Work panel | Foot | `Crew · Ben, Tessa busy` | Plus store path, orphan chip or git warning | open, O3 |
-| all Work panel | Groups | Shaping group | Shaping-stage tickets under Prioritized | open, O2 |
+| all Work panel | Foot | `Crew · Ben, Tessa busy` | Plus store path, orphan chip or git warning | fixed by req-146: the store path in the tooltip; orphan chip, errors, git warning stay |
+| all Work panel | Groups | Shaping group | Shaping-stage tickets under Prioritized | fixed by req-146; `plan v3` is req-151 |
 | all Work panel | Row height | 52, plain 29 | 56, plain 28 | fixed (F1, F2) |
 | all Work panel | Step word | 13 px, `queued` | 10.5 px, `Queued` | fixed (F3, F4) |
 | all Work panel | Issue badge on a row | None | `1` chip beside the title on seeded store tickets | justified: data instead of sample content |
@@ -113,16 +116,16 @@ Rows that hold on every board of a device are listed once under *all*.
 | all Assistant | Icon row on a target | Attach, edits, vault, web | Attach, vault | justified: feature not yet built — req-141 |
 | all Assistant | Bubble wash | 14 % | `--accent-surface`, 15 % | justified: a token in place of a hex |
 | 9a | Ticket card | Start build, dropdowns | Thread only, plain values | justified: feature not yet built — req-120, req-121 |
-| 9a | Tab | `T-0017 · A8 large modules` | `T-0017.md` | open, O6 |
+| 9a | Tab | `T-0017 · A8 large modules` | `T-0017.md` | fixed by req-146 |
 | 9a | Flow, Repo, tree, Outline counts, chat text | Sample | Seeded vault | justified: data instead of sample content |
 | 9a | Outline, Tasks bodies | 26 px rows | Panel's content | justified: owner decision, 9b is not a target (decisions.md) |
 | 9a | Files head hover | Actions shown | On hover only | justified: the board forces its hover on (shot `DeskClean.files-hover.png`) |
-| 7a | Centre | Ticket document with Parts in one tab | Row opens Thread face with Ticket · Thread · Review; Ticket opens a second tab | open, O1 |
+| 7a | Centre | Ticket document with Parts in one tab | Row opens Thread face with Ticket · Thread · Review; Ticket opens a second tab | fixed by req-146 |
 | 7a | Assistant step rows | `✓ T-0121 · step 1…` | None | justified: feature not yet built — req-139 |
 | 7a | Strip | 7 icons | 8, with Open windows | justified: 7i draws the eighth, the boards disagree |
 | 7b | Formatting strip | Bold … Insert | Base strip | justified: base chrome (milestone 192) |
 | 7b, 7c, 7j | Type row | Ship / Fix | None | justified: feature not yet built — req-119 |
-| 7b, 7c | Persona picture | Illustration | Initial | open, O8 |
+| 7b, 7c | Persona picture | Illustration | Initial | fixed by req-146 |
 | 7b | Bullets, ids, paths, cost | Sample | Store fixture | justified: data instead of sample content |
 | 7c | Part `blocked-by P1` | In the line | `after P1` and reason | justified: feature not yet built — req-123 |
 | 7c | Hint under the title | Line | None | justified: integrator's ruling Q3, milestone 196; not in decisions.md |
@@ -131,28 +134,28 @@ Rows that hold on every board of a device are listed once under *all*.
 | 7d | Video length, thumbnails, line numbers | `0:48`, sample | Fixture | justified: data instead of sample content |
 | 7d | Thread | Ralf, Tessa relays | Mock lines | justified: data instead of sample content |
 | 7e | Header | Filter, Cost by column | New idea | justified: feature not yet built — E13-17, E12-16 |
-| 7e | Capacity height | 103 | 103 in the spec; 280 by default | open, O7 |
+| 7e | Capacity height | 103 | 103 in the spec; 280 by default | fixed by req-146: `bottomH`, Work 103; the cards wrap, the dock stays open |
 | 7e | Capacity width | Inside the page, inset 16 | Edge to edge | justified: base chrome, the bottom dock is the frame's |
 | 7e | Budget bar | Grey | Accent | fixed (F8) |
 | 7e | Slot dots | All a persona's slots | One per live run | justified: feature not yet built — E13-19 (G-14) |
-| 7e, 7f, 7k | Persona order | Paul, Ben, Ralf, Tessa | Ben, Paul, Ralf, Tessa on the desk fixture; order not traced | open, O12 |
+| 7e, 7f, 7k | Persona order | Paul, Ben, Ralf, Tessa | Ben, Paul, Ralf, Tessa on the desk fixture; order not traced | fixed by req-146: the engine sorted by id |
 | 7e | Card persona, costs, left status hint | Sample, `412 words` | `unassigned`, `2 running` | justified: data instead of sample content |
 | 7f | Detail list | 167 wide | 150 | fixed (F7) |
 | 7f | Head, cards | New persona, Edit, Talk 1:1, Friction, Runs after, Notify, slot bars, tiles, Remove | Absent | justified: feature not yet built — E13-19 |
-| 7f | Stop confirmation (hand state) | Fits the card, right dock folded | Same with the dock folded; with the Assistant open Stop overflows the card, `waiting` clips | open, O7 |
-| 7f | Tickets panel (hand state) | In place | Scrolled 75 px sideways after Crew with the Assistant open | open, D-48 |
+| 7f | Stop confirmation (hand state) | Fits the card, right dock folded | Same with the dock folded; with the Assistant open Stop overflows the card, `waiting` clips | fixed by req-146: `bottomH`, Work 103; the cards wrap, the dock stays open |
+| 7f | Tickets panel (hand state) | In place | Scrolled 75 px sideways after Crew with the Assistant open | fixed by req-146 |
 | 7g | Tree | Commonly used | None | justified: feature not yet built — req-133 |
-| 7g | Tree pages, page rows, Devices, search hits | Board's lists | The app's | open, O9 |
+| 7g | Tree pages, page rows, Devices, search hits | Board's lists | The app's | owner ruling O9: accepted, req-147 |
 | 7g | Filter, `Changed · default` | Shown | None | justified: feature not yet built — req-132 |
 | 7g | Budget field, pause | Field | Sum of budgets | justified: feature not yet built — E13-12b |
-| 7g | Resume unit | `every day` | None | open, O9 |
+| 7g | Resume unit | `every day` | None | owner ruling O9: accepted, req-147 |
 | 7g | Field placeholder | `Search settings` | Same | justified: integrator's ruling 2026-11-07, milestone 197 |
 | 7g | Data | Paul, Ben…, `On` | The vault's | justified: data instead of sample content |
 | 7h | Layout menu width | 294 | 280 | fixed (F6) |
 | 7h | Rename, Delete | Enabled | Disabled on Notes | justified: Notes is built in, ADR-0089; the board's view is a user view |
 | 7h | Files head and rows | `Notes vault`, 26 px, icons | 9a's head and 33 px rows | justified: the boards disagree, 9a is the frame's |
 | 7h | Placeholder | `Ask the model…` | `Ask anything…` | justified: the boards disagree, 9a's |
-| 7i | Tab menu (hand state) | Inline list: Notes, Work, Go to the Work view, Close, Move, Split | Flyout, longer menu, no Go to the Work view | open, O13 |
+| 7i | Tab menu (hand state) | Inline list: Notes, Work, Go to the Work view, Close, Move, Split | Flyout, longer menu, no Go to the Work view | fixed by req-146: inline as drawn, a Go to per other view, the longer menu kept |
 | 7i | Panel rows | `2 here · 3 elsewhere` | Fixture's | justified: data instead of sample content |
 | 7j | Verdict | `The verifier recommends accepting.` | None | justified: feature not yet built — req-124 |
 | 7j | Meta `T-0118 · $1.84` | Shown | None | justified: base chrome (milestone 192) |
@@ -160,7 +163,7 @@ Rows that hold on every board of a device are listed once under *all*.
 | 7k | Upload, Allowed to, tokens, Add skill, one line | Shown | Absent | justified: feature not yet built — E13-19, req-142, req-143, req-137, req-144 |
 | 7k | Skills sentence | Shown | Absent | justified: feature not yet built — D-46 |
 | 7k | Paths, save state | `personas/ben.md`, committed | `personas/ben/…`, `Saved` | justified: data; E13-19 |
-| 10t | Desktop bar | `2 running · 1 stuck · 1 queued` | None | open, O4 |
+| 10t | Desktop bar | `2 running · 1 stuck · 1 queued` | None | fixed by req-146: 10t's order, no frames; the running summary is req-150 |
 | 10t | Desktop dot | Grey off, peach paused | None off, orange paused | justified: feature not yet built — req-134 |
 | 10t | Popover radii, resume chip on On | 12 / 6, shown | 16 / 8, Paused only | justified: owner ruling 2026-11-07 (decisions.md); engine, milestone 189 |
 | 10t | iPad, phone frames | Sample frame | Real screen behind | justified: data instead of sample content |
@@ -178,30 +181,30 @@ Rows that hold on every board of a device are listed once under *all*.
 | 10o, 10q, 10d, 5h | Proof strip spacing | Gap 6 | Text space | fixed (F13) |
 | 10g | Away and alerts, Repositories | Rows | Absent | justified: feature not yet built — E12-3b |
 | 10g | Resume | `18:00` | Empty while On | justified: the record holds it only while Paused, milestone 189 |
-| 10i, 5d | `waiting`, queued run, `1 queued` | Shown | `running`, live runs | open, O11 |
+| 10i, 5d | `waiting`, queued run, `1 queued` | Shown | `running`, live runs | owner ruling O11: req-148, req-149 |
 | 10i, 5d | Setup rows | Runs after, Notify, tiles, slot bars, Remove | Absent | justified: feature not yet built — E13-19 |
 | 10i | Pause all label | y 250 | y 251; icon and box in place | justified: text rasterization, no CSS difference found |
 | 10j, 5c | Estimates | Per part | Per persona | justified: data instead of sample content |
 | 10k, 10n, 10r | Counts | `84 notes`, `14` | Absent | justified: feature not yet built — req-115 |
-| 10k, 10n, 10r | Titles | Apart from file names | File name | open, O11 |
-| 10l | Task rows, link card | y 369 | 1 px lower from the first task row; no CSS cause traced | open, O14 |
+| 10k, 10n, 10r | Titles | Apart from file names | File name | owner ruling O11: req-148, req-149 |
+| 10l | Task rows, link card | y 369 | 1 px lower from the first task row; no CSS cause traced | accepted, owner ruling O14 (decisions.md) |
 | 10m | Autopilot icon | None | Icon | justified: integrator's ruling Q6, 10a and 10t win; not in decisions.md |
 | 10m | Second change | `Shape →…` | `Inbox → Shaping` | justified: data instead of sample content |
 | 10p, 10r | Live Preview title, heading, tags, source box | 26/700, 20/700, gap 8, `##` grey | Lighter, gap 13, white | fixed (F15) |
 | 10p | Keyboard | iPhone keyboard | None, bar at the foot | justified: the OS's, the client cannot draw it |
 | 10r | `See T-0121` line | Shown | Not in the fixture's note | justified: data instead of sample content |
 | 10n, 10r | Thread | Conversation | Empty | justified: data instead of sample content |
-| 10n | Pencil x | 826 | 827 | open, O14 |
+| 10n | Pencil x | 826 | 827 | accepted, owner ruling O14 (decisions.md) |
 | 10f | Back | None | `‹ T-0121` | justified: integrator's ruling Q2 (decisions.md) |
 | 10f | `+` | x 1168 | x 1164 | fixed (F14) |
-| 10f | Bubble y | 200 | 201; message below in place; not traced | open, O14 |
+| 10f | Bubble y | 200 | 201; message below in place; not traced | accepted, owner ruling O14 (decisions.md) |
 | 5b | Mark age | `· 2 min ago` | None, so text wraps later | justified: feature not yet built — req-128 |
 | 5b | Thread, bold, list meta | Sample | Fake desk's | justified: data instead of sample content |
 | 5c | Step rows | `✓ Shape…` | None | justified: feature not yet built — req-129 |
-| 5c | Flow | `✓ Shape Plan (waits…)`, `standard ·` | Plain list | open, O10 |
+| 5c | Flow | `✓ Shape Plan (waits…)`, `standard ·` | Plain list | fixed by req-146; the fixture's flow keeps `Test` (data) |
 | 5c | Paul's message | Shown | None; the card sits 20 px lower | justified: data instead of sample content |
-| 5d | Run title overflow | Clipped `to re` | Ellipsis | open, O15 |
-| 5d | Pool model name | Local y 322 | y 320 | open, O14 |
+| 5d | Run title overflow | Clipped `to re` | Ellipsis | kept, owner ruling O15 (decisions.md) |
+| 5d | Pool model name | Local y 322 | y 320 | accepted, owner ruling O14 (decisions.md) |
 | 5d | Crew bar, cards below | Sample | Fake desk's | justified: data instead of sample content |
 | 5f | This vault, filter, Open sidebars, Editor | Shown | Absent | justified: feature not yet built — req-130 |
 | 5f | Categories | Assistant, Editor, Tickets | Chat, Devices, Engine, Autopilot | justified: integrator's ruling Q5; not in decisions.md |

@@ -163,8 +163,13 @@ describe('cardNode', () => {
   });
 
   it('7b: the worker is a picture', () => {
-    const node = cardNode(actions(), facts({ avatar: { initials: 'P', color: '#123', name: 'Paul' } }));
+    const node = cardNode(actions(), facts({ avatar: { color: '#123', name: 'Paul' } }));
     expect(node.querySelector<HTMLElement>('.tickets-doc-avatar')?.title).toBe('Paul');
+    // The Crew cards' drawing, not an initial (fidelity ruling O8).
+    const picture = node.querySelector('.tickets-doc-avatar svg.desk-silhouette');
+    expect(picture?.getAttribute('width')).toBe('24');
+    expect(picture?.querySelector('rect')?.getAttribute('fill')).toBe('#123');
+    expect(node.querySelector('.tickets-doc-avatar')?.textContent).toBe('');
   });
 
   it('adds the issue badge and the gate only when there is something to say', () => {

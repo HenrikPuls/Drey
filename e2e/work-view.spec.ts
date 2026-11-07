@@ -70,6 +70,10 @@ test.describe('The Work view (E13-13)', () => {
     await expect(page.locator('.tickets-panel').filter({ visible: true })).toBeVisible({ timeout: 15_000 });
     // The band's content shows only on the Board and Crew tabs (E12-15).
     await expect(page.locator('.desk-capacity')).toBeHidden({ timeout: 15_000 });
+    // Board 7e: the preset seeds the band's first height (SDK 1.51, fidelity ruling O7).
+    await expect
+      .poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('drey.dock') ?? '{}') as { views?: Record<string, { bottomH?: number }> }).views?.['tickets.work']?.bottomH))
+      .toBe(103);
     await expect(page.locator('app-dock-strip button[aria-label="Show Assistant"], app-dock-strip button[aria-label="Hide Assistant"]').first()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('view-work.png') });
 

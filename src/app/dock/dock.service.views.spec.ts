@@ -25,6 +25,32 @@ describe('DockService views (ADR-0089)', () => {
     expect(dock.dockWidth('left')).toBe(400);
   });
 
+  it('seeds a preset\'s bottom height, clamped like a resize, once (SDK 1.51)', () => {
+    const dock = TestBed.inject(DockService);
+    dock.seedView('plain', { bottom: [] });
+    dock.seedView('band', { bottom: [], bottomH: 103.4 });
+    dock.seedView('low', { bottom: [], bottomH: 20 });
+    dock.seedView('high', { bottom: [], bottomH: 5000 });
+    const plainDefault = dock.dockHeight();
+
+    dock.switchView('plain');
+    expect(dock.dockHeight()).toBe(plainDefault);
+    dock.switchView('band');
+    expect(dock.dockHeight()).toBe(103);
+    dock.switchView('low');
+    expect(dock.dockHeight()).toBe(100);
+    dock.switchView('high');
+    expect(dock.dockHeight()).toBe(680);
+
+    // Afterwards the user's height is the truth: a second seed changes nothing.
+    dock.switchView('band');
+    dock.setBottomHeight(200);
+    dock.switchView('notes');
+    dock.seedView('band', { bottom: [], bottomH: 103 });
+    dock.switchView('band');
+    expect(dock.dockHeight()).toBe(200);
+  });
+
   it('copies the active layout to a new view and drops a deleted one', () => {
     const dock = TestBed.inject(DockService);
     dock.setDockWidth('right', 420);

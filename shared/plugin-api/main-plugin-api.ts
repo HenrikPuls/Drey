@@ -96,8 +96,9 @@ export interface DocumentRoute {
    */
   save(request: { vaultId: string; path: string; body: string; force: boolean }): Promise<DocumentRouteSaveResult>;
   /**
-   * SDK 1.48: what an owned document is called on screen (its tab, the Assistant's chip)
-   * when its file name says nothing; asked on every read. Null keeps the file name.
+   * SDK 1.48: what a document is called on screen (its tab, the Assistant's chip) when
+   * its file name says too little; asked on every read, since 1.51 of every document,
+   * owned or not, so a plugin can name files it does not route. Null keeps the file name.
    */
   title?(vaultId: string, path: string, content: string): string | null;
 }

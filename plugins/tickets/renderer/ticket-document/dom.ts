@@ -8,6 +8,7 @@
 import type { I18n } from '../../../../shared/i18n/types';
 import type { CostTableView, FlowItem, PageShape, PillTone, ProofView } from './model';
 import { assetUrl, offsetWords } from './model';
+import { personaPictureNode } from '../team/persona-picture';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const node = document.createElement(tag);
@@ -250,7 +251,7 @@ export interface CardFacts {
   /** 9a: the grey words after the runner (`· default`). */
   readonly workerNote: string;
   /** 7b: the persona as a picture; null = the name alone. */
-  readonly avatar: { readonly initials: string; readonly color: string; readonly name: string } | null;
+  readonly avatar: { readonly color: string; readonly name: string } | null;
   readonly repo: string;
   readonly branch: string;
   /** `$1.84 in total · est. $1.50–2.40 · from 3 runs`; '' while nothing is known. */
@@ -318,12 +319,12 @@ function flowRow(items: readonly FlowItem[]): HTMLElement {
   return row;
 }
 
-/** The persona as a round picture with its initials (the portrait itself is board 7k's). */
-export function avatarNode(initials: string, color: string, title: string, size: number): HTMLElement {
-  const avatar = el('span', 'tickets-doc-avatar', initials);
+/** The persona's picture, the Crew cards' drawing (fidelity ruling O8). */
+export function avatarNode(color: string, title: string, size: number): HTMLElement {
+  const avatar = el('span', 'tickets-doc-avatar');
   avatar.title = title;
   avatar.style.setProperty('--avatar-size', `${size}px`);
-  avatar.style.setProperty('--persona-color', color);
+  avatar.append(personaPictureNode(color, title, size));
   return avatar;
 }
 
@@ -406,7 +407,7 @@ export function cardNode(actions: CardActions, facts: CardFacts): HTMLElement {
     grid.append(label(i18n.t('ticket.card.worker')));
     const worker = el('span', 'tickets-card-value tickets-card-wide');
     if (facts.avatar !== null) {
-      worker.append(avatarNode(facts.avatar.initials, facts.avatar.color, facts.avatar.name, 24));
+      worker.append(avatarNode(facts.avatar.color, facts.avatar.name, 24));
     } else {
       worker.textContent = facts.worker;
     }

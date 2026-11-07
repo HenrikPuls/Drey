@@ -113,6 +113,10 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.51 adds `layout.bottomH` to view presets (board 7e, milestone 203): the bottom dock's first
+  height in px, clamped like a user's resize and used only when the view's layout is seeded.
+  Also in 1.51, without a new field: `DocumentRoute.title` is asked for every document, owned or
+  not, so a plugin can name files it does not route.
   1.50 adds two things to view presets (boards 7e/7h, milestone 199): `layout.openTabs`
   -- `[{ kind, path }]`, tabs the view opens for itself through the doc kind's `restore`
   every time it is switched to and does not hold them (a view owns its tabs); and

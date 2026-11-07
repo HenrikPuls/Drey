@@ -1,8 +1,12 @@
+/* clip, not hidden: a frame never scrolls sideways, not even to reveal a focused
+   control (D-48). Up and down stay open for a header's overlaying second row; the
+   body clips itself. */
 :host {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 /* Board 9a's panel header. The controls show on hover or focus only; they
@@ -121,6 +125,20 @@
    wide header row wraps inside .head-actions rather than overflowing. */
 .plugin-actions {
   min-width: 0;
+}
+
+/* The header is always its one row (board 9a). A plugin's row that needs a second one
+   shows it over the panel on hover or keyboard focus: every control stays reachable
+   (D-48) and nothing below moves, so no click lands beside its row. */
+.head-actions:has(.plugin-actions) {
+  position: relative;
+  z-index: 2;
+  align-items: flex-start;
+  max-height: var(--panel-head-h);
+}
+
+.head:not(:hover):not(:has(:focus-visible)) .head-actions:has(.plugin-actions) {
+  overflow: clip;
 }
 
 .body-wrap {

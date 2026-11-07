@@ -280,3 +280,13 @@ switch. Two additive SDK surfaces close that:
   `aria-label` naming the view. Another plugin's preset or a user view is
   refused with a logged warning; the badge goes with the preset when it
   unregisters. The host attaches no meaning beyond the dot.
+
+## Later change — a preset's bottom height, and the tab menu (milestone 203, req-146, SDK 1.51)
+
+- `ViewPresetLayout.bottomH`: the bottom dock's first height in px, clamped by
+  `DockService` like a user's resize and applied only when the view's layout is
+  seeded (afterwards the user's height is the truth, an already seeded view keeps
+  its own). The Work preset sets 103, board 7e.
+- The tab menu's "Show this tab in" is an inline list as board 7i draws it, no
+  flyout. "Go to the <view> view" stands for every other view: it switches, and
+  brings the tab forward only where that view shows it.

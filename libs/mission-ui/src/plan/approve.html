@@ -22,9 +22,13 @@
       </div>
       <h1 class="ph-h1">{{ phoneTitle() }}</h1>
       <div class="ph-grid">
-        @if (flowLine(); as line) {
+        @if (padFlow(); as line) {
           <span class="ph-grey">{{ 'ticket.phone.flow' | t }}</span>
-          <span class="ph-grey">{{ line }}</span>
+          <span class="ph-grey pd-flowline">
+            <span>{{ line.past }}</span>
+            <span class="pd-flownow">{{ line.current }}</span>
+            <span>{{ line.note === null ? '' : line.note + ' ' }}{{ line.rest }}</span>
+          </span>
         }
         @if (planner(); as who) {
           <span class="ph-grey">{{ 'ticket.phone.worker' | t }}</span>

@@ -201,6 +201,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await expect(panel.locator('.work-row[data-id="T-0121"] .work-row-cost')).toHaveText('$1.20');
 
     const openFromMenu = async (label: string): Promise<void> => {
+      await page.locator('app-panel-frame', { has: page.locator('.tickets-panel') }).filter({ visible: true }).locator('.head').hover();
       await page.locator('button[aria-label="More actions"]:visible').click();
       await page.getByRole('menuitem', { name: label, exact: true }).click();
     };

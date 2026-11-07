@@ -220,7 +220,7 @@ export function workListLivePaint(
         // Only the pulse line moves; the phase chip keeps its place (T-0084).
         const line = node.querySelector<HTMLElement>('.work-row-line');
         if (line !== null) {
-          line.textContent = shapingDialogLine(row);
+          setShapingLine(line, row);
         }
         continue;
       }
@@ -536,10 +536,19 @@ function rowNode(_deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLE
   return node;
 }
 
-/** A Shaping row's pulse: whether the dialog runs, pauses or never started, and its turns. */
+/** A Shaping row's pulse: whether a reserved dialog runs, pauses or never started, and its turns; empty on a ticket that only sits in the stage. */
 function shapingDialogLine(row: WorkRow): string {
-  const turns = (row.run?.steerCount ?? -1) + 1;
-  return row.run === null ? 'Dialog not started' : `${row.run.turn === 'busy' ? 'Dialog running' : 'Dialog paused'} · ${turns} turns`;
+  if (row.run === null) {
+    return row.card.meta.interactive ? 'Dialog not started' : '';
+  }
+  const turns = (row.run.steerCount ?? -1) + 1;
+  return `${row.run.turn === 'busy' ? 'Dialog running' : 'Dialog paused'} · ${turns} turns`;
+}
+
+/** The pulse's node; hidden while it has nothing to say, so the meta line draws no dot for it. */
+function setShapingLine(node: HTMLElement, row: WorkRow): void {
+  node.textContent = shapingDialogLine(row);
+  node.hidden = node.textContent === '';
 }
 
 /** A Shaping row: the title, then id · phase · the dialog's pulse · age. */
@@ -550,8 +559,10 @@ function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
     node.dataset['running'] = 'true';
   }
   node.append(richTop(card, more));
+  const line = el('span', 'work-row-line');
+  setShapingLine(line, row);
   node.append(
-    richSub(row, [phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row))], ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())),
+    richSub(row, [phaseChipNode(row), line], ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())),
   );
   return node;
 }

@@ -77,6 +77,16 @@ export interface Persona {
 
 export const PERSONAS_DIR = 'tickets/_meta/personas';
 
+/**
+ * Personas in pipeline order (fidelity ruling O12): `PERSONA_ROLES` is the crew's
+ * order, plan to test, then custom ones, and the human last; within a role by id.
+ * The role decides because the stock pipeline names no persona per step of Building.
+ */
+export function inPipelineOrder<P extends Pick<Persona, 'id' | 'role' | 'kind'>>(personas: readonly P[]): P[] {
+  const rank = (persona: P): number => (persona.kind === 'human' ? PERSONA_ROLES.length : PERSONA_ROLES.indexOf(persona.role));
+  return [...personas].sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 export function personaRef(id: string): string {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
     throw new Error(`a persona id is lowercase letters, digits and dashes — got "${id}"`);

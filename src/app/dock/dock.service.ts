@@ -73,6 +73,10 @@ const DEFAULT_LEFT_W = 248;
 const DEFAULT_RIGHT_W = 340;
 const DEFAULT_BOTTOM_H = 280;
 
+function clampBottomHeight(px: number): number {
+  return Math.max(HEIGHT.min, Math.min(HEIGHT.max, Math.round(px)));
+}
+
 /** A dock layout as a plain value: what a view's "Save view" keeps (ADR-0089, D-6). */
 export type DockLayout = DockState;
 
@@ -461,7 +465,7 @@ export class DockService {
   }
 
   setBottomHeight(px: number): void {
-    const clamped = Math.max(HEIGHT.min, Math.min(HEIGHT.max, Math.round(px)));
+    const clamped = clampBottomHeight(px);
     this.patch((s) => ({ ...s, bottomH: clamped }));
   }
 
@@ -542,6 +546,7 @@ export class DockService {
       },
       open,
       foldedSides: [...(layout.folded ?? [])],
+      ...(layout.bottomH !== undefined ? { bottomH: clampBottomHeight(layout.bottomH) } : {}),
     });
     this.slots = { ...this.slots, [id]: seed };
     this.persist();

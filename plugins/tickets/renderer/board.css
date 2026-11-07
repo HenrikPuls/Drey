@@ -19,7 +19,6 @@
   flex-direction: column;
 }
 
-.tickets-store-line,
 .tickets-warn {
   flex: none;
   padding: 4px 8px;
@@ -138,9 +137,14 @@
 .tickets-panel-head {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
+  padding-block: 2px;
+  /* The hovered head's surface, opaque: its second row lies over the panel's list. */
+  background: linear-gradient(var(--active-bg), var(--active-bg)), var(--bg-dock);
+  border-radius: 0 0 var(--radius-chip) var(--radius-chip);
 }
 
 /* New idea · Open Board tab: the two actions that follow the filter (E12-11). */
@@ -3759,18 +3763,6 @@ button.tickets-statusbar-fleet:hover {
 button.tickets-statusbar-fleet:focus-visible {
   outline: 2px solid var(--accent-ring, var(--accent));
   outline-offset: 2px;
-}
-
-/* E13-20: the Ticket | Thread | Review control on top of every face -- the global .seg strip, text buttons. */
-.tickets-faces {
-  align-self: flex-start;
-  margin: 8px 18px 4px;
-}
-
-.tickets-faces .icon-btn {
-  width: auto;
-  padding: 0 10px;
-  font-size: 12px;
 }
 
 .tickets-faces-host {

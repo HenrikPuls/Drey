@@ -67,7 +67,7 @@ import { type ChainConfig, type ChainStoreConfig, FleetCaps, FleetHandoverConfig
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
 import { appendMemory, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
-import { HUMAN_PERSONA_ID, humanPersona, isHumanPersona, personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter } from '../core/persona';
+import { HUMAN_PERSONA_ID, humanPersona, inPipelineOrder, isHumanPersona, personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter } from '../core/persona';
 import { appendThreadOwner, newThreadText, parseThread, threadPathFor } from '../core/persona-thread';
 import { scanRepoFolder } from './repos-scan';
 
@@ -3726,7 +3726,7 @@ export class EngineBoardService {
         personas.push(persona);
       }
     }
-    return personas;
+    return inPipelineOrder(personas);
   }
 
   /** The persona directory's ids (the improvement loop's sweep list). */

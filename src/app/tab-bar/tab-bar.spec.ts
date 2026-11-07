@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 import { TabBar } from './tab-bar';
 import { EditorService } from '../services/editor.service';
 import { PaneService } from '../panes/pane.service';
@@ -12,6 +13,7 @@ describe('TabBar', () => {
   let panes: PaneService;
 
   beforeEach(async () => {
+    localStorage.clear(); // saved views would outlive the test that made them
     const fakeApi: Partial<DreyApi> = {
       readVaultFile: (p: string) => Promise.resolve({ content: `body of ${p}`, modifiedMs: 1 }),
       writeVaultFile: () => Promise.resolve(2),
@@ -133,18 +135,19 @@ describe('TabBar', () => {
 
     const items = compiled.querySelectorAll('.ctx-menu button');
     expect(Array.from(items).map((b) => b.textContent?.trim())).toEqual([
-      'Pin tab',
+      'Close tab',
       'Move to left dock',
       'Move to right dock',
       'Move to bottom dock',
       'Split right Ctrl Alt Enter',
       'Split down Ctrl Alt Shift Enter',
+      'Pin tab',
       'Export as PDF…',
       'Close others',
       'Close all',
     ]);
 
-    (items[7] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
+    (items[8] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
     // closeOthers closes tab by tab through async closeTab calls.
     await vi.waitFor(() => expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']));
     fixture.detectChanges();
@@ -160,15 +163,17 @@ describe('TabBar', () => {
       fixture.detectChanges();
     };
 
+    const pinRow = (): HTMLButtonElement =>
+      [...compiled.querySelectorAll<HTMLButtonElement>('.ctx-menu button')].find((b) => /Pin tab|Unpin tab/.test(b.textContent ?? ''))!;
     openMenu();
-    (compiled.querySelector('.ctx-menu button') as HTMLButtonElement).click(); // "Pin tab"
+    pinRow().click();
     fixture.detectChanges();
     expect(editor.docFor('a.md')?.pinned).toBe(true);
     expect(compiled.querySelectorAll('.tab')[0].querySelector('.pin')).not.toBeNull();
     expect(compiled.querySelectorAll('.tab')[1].querySelector('.pin')).toBeNull();
 
     openMenu();
-    expect(compiled.querySelector('.ctx-menu button')?.textContent?.trim()).toBe('Unpin tab');
+    expect(pinRow().textContent?.trim()).toBe('Unpin tab');
   });
 
   it('"Split right" moves the tab into a brand-new sibling pane', async () => {
@@ -190,7 +195,7 @@ describe('TabBar', () => {
     expect(panes.focusedId()).toBe(newPaneId);
   });
 
-  it('shows "Go to the Work view" and a "Show this tab in ›" flyout when other views exist', () => {
+  it('draws the views inline and "Go to the Work view" when other views exist (board 7i)', () => {
     const views = TestBed.inject(ViewService);
     const second = views.saveCurrentAs('Work'); // a.md and b.md now show in both views
     views.switchTo('notes');
@@ -201,18 +206,53 @@ describe('TabBar', () => {
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
     fixture.detectChanges();
 
-    const first = compiled.querySelector('.ctx-menu > button') as HTMLButtonElement;
-    expect(first.textContent).toContain('Go to the Work view');
+    // No flyout (D-39 goes with it): the head, the views, then Go to and Close tab.
+    expect(compiled.querySelector('.ctx-label')?.textContent).toContain('Show this tab in');
     expect(compiled.querySelector('.ctx-sub')).toBeNull();
-
-    const sub = compiled.querySelector('.ctx-sub-wrap > button') as HTMLButtonElement;
-    expect(sub.textContent).toContain('Show this tab in');
-    sub.click();
-    fixture.detectChanges();
-    const names = [...compiled.querySelectorAll('.ctx-sub button .ctx-grow')].map((b) => b.textContent?.trim());
+    const names = [...compiled.querySelectorAll('.ctx-menu > button.ctx-view .ctx-grow')].map((b) => b.textContent?.trim());
     expect(names).toEqual(['Notes', 'Work']);
+    const rows = [...compiled.querySelectorAll<HTMLButtonElement>('.ctx-menu > button:not(.ctx-view)')];
+    expect(rows[0]?.textContent).toContain('Go to the Work view');
+    expect(rows[1]?.textContent).toContain('Close tab');
 
-    first.click();
+    rows[0]!.click();
     expect(views.activeId()).toBe(second);
+  });
+
+  it('offers Go to for a view that does not show the tab: it switches and adds nothing (board 7i)', () => {
+    const views = TestBed.inject(ViewService);
+    const second = views.saveCurrentAs('Work');
+    const compiled = fixture.nativeElement as HTMLElement;
+    views.switchTo('notes');
+    fixture.detectChanges();
+    compiled
+      .querySelectorAll('.tab')[0]
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+    fixture.detectChanges();
+    const tabPath = panes.pane(panes.focusedId())!.tabs[0]!;
+    views.toggleTabIn(tabPath, second);
+    fixture.detectChanges();
+    expect(views.viewsOfTab(tabPath)).not.toContain(second);
+    const row = [...compiled.querySelectorAll<HTMLButtonElement>('.ctx-menu > button')].find((button) => button.textContent?.includes('Go to the Work view'));
+    expect(row).toBeDefined();
+    row!.click();
+    expect(views.activeId()).toBe(second);
+    expect(views.viewsOfTab(tabPath)).not.toContain(second);
+  });
+
+  it('closes the tab from the menu', () => {
+    const compiled = fixture.nativeElement as HTMLElement;
+    const closeTab = vi.spyOn(TestBed.inject(EditorService), 'closeTab').mockResolvedValue(undefined as never);
+    const views = TestBed.inject(ViewService);
+    views.saveCurrentAs('Work');
+    views.switchTo('notes');
+    fixture.detectChanges();
+    compiled
+      .querySelectorAll('.tab')[0]
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+    fixture.detectChanges();
+    const row = [...compiled.querySelectorAll<HTMLButtonElement>('.ctx-menu > button')].find((button) => button.textContent?.includes('Close tab'));
+    row!.click();
+    expect(closeTab).toHaveBeenCalledTimes(1);
   });
 });

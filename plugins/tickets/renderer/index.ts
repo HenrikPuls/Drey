@@ -30,7 +30,6 @@ import { PRIORITY_LABEL, createGroupFoldStore, workListLivePaint, workListNode, 
 import { createRunComposer } from './run-composer';
 import { createThreadComments } from './thread-comments';
 import { THREAD_KEY } from './ticket-page';
-import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { AUTOPILOT_COMMAND_ID, costSlotOf, createStatusSlots, type StatusSlotController } from './status-slot';
 import { createAutopilotCommand } from './autopilot/command';
@@ -603,11 +602,13 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     root.append(workListNode(workPanelDeps(api), snap, fleetRuns, folds, notifyViews, workFilter.get()));
     const statusBar = statusBarNode(api, snap, fleet.node);
     if (statusBar !== null) {
+      // The foot's tooltip names the store (fidelity ruling O3); errors and the orphan chip stay visible.
+      if (typeof snap.storeLine === 'string' && snap.storeLine !== '') {
+        statusBar.title = snap.storeLine;
+      }
       root.append(statusBar);
     }
-    if (typeof snap.storeLine === 'string' && snap.storeLine !== '') {
-      root.append(el('div', 'tickets-store-line', snap.storeLine));
-    } else if (!snap.isGitRepo && !gitWarningDismissed) {
+    if ((snap.storeLine ?? '') === '' && !snap.isGitRepo && !gitWarningDismissed) {
       // One line, dismissible for this window (A-09).
       const warn = el('div', 'tickets-warn');
       const text = el('span', 'tickets-warn-text', api.i18n.t('work.git_warning'));
@@ -800,10 +801,11 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       boardButton.append(api.ui.icon('table', 13));
       boardButton.addEventListener('click', () => openBoardDoc(api));
 
-      // E12-11 (boards 7a–7c): one 40 px row, never wrapping — filter ·
-      // New idea · Open Board tab, then the chain's run/halt/stop and the
-      // overflow (refresh, Mission Control, Crew, worktrees); the host
-      // adds the grip. The project switch shows only with a second project.
+      // E12-11 (boards 7a–7c): filter · New idea · Open Board tab, then the
+      // chain's run/halt/stop and the overflow (refresh, Mission Control,
+      // Crew, worktrees). A dock too narrow for one row shows the rest over the
+      // panel while the head is hovered or keyboard-focused (D-48). The project switch shows only with a
+      // second project.
       const viewControls = boardViewControlsNode(api);
       const actions = el('span', 'tickets-head-actions');
       actions.append(captureButton, newButton, boardButton);
@@ -1616,7 +1618,7 @@ function announceWaits(api: DreyPluginApi): void {
         // takeover tab it once fell back to is gone (W4a).
         const card = boardCard(notice.run.ticketId);
         if (card !== null) {
-          openTicketThread(api, card);
+          void openTicketPage(api, card);
         }
       },
     });
@@ -1754,20 +1756,18 @@ function threadRun(ticketId: string): RunInfo | null {
 }
 
 /**
- * Selecting a ticket (E13-20, supersedes the file/thread pair of ADR-0087
- * decision 3): ONE face opens -- the run (its thread) while the runner is
- * active or waiting, the ticket document otherwise, also before any run.
- * Thread and Review are one click away in the segmented control that tops
- * every face; nothing here touches a saved view (D-6).
+ * Selecting a ticket (milestone 203, board 9a): the one ticket document, in
+ * every state. Thread and Review are the card's buttons; nothing here
+ * touches a saved view (D-6).
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
-  showTicketFace(api, card, defaultFaceOf(ticketRunActive(snapshot, fleetRuns, card.id)));
+  showTicketDocument(api, card);
 }
 
 /**
  * A done or archived ticket opens like any other (E13-21): the engine reads it from the
  * archive (files: `tickets/archive/`, dricket: the archived record), the document opens
- * and the Thread / Review strip on top works through the remembered card. Never a move:
+ * and its card's buttons work through the remembered card. Never a move:
  * the document is the ticket as it was accepted.
  */
 async function openArchivedTicket(api: DreyPluginApi, id: string): Promise<void> {
@@ -1777,34 +1777,17 @@ async function openArchivedTicket(api: DreyPluginApi, id: string): Promise<void>
     return;
   }
   archivedCards.set(id, reply.card);
-  showTicketFace(api, reply.card, 'ticket');
+  showTicketDocument(api, reply.card);
 }
 
-/** Shows one face of a ticket: its document, its run thread or its Review tab. */
-function showTicketFace(api: DreyPluginApi, card: TicketCard, face: TicketFace): void {
-  if (face === 'thread') {
-    openTicketThread(api, card);
-  } else if (face === 'review') {
-    openReviewTab(api, card);
-  } else {
-    // The thread tab keeps following the ticket opened last, so the Thread button lands on this one.
-    threadTicketId = card.id;
-    for (const listener of threadListeners) {
-      listener();
-    }
-    openTicketCard(api, card);
+/** Shows a ticket's document; the thread tab keeps following the ticket opened last, so the card's Thread lands on this one. */
+function showTicketDocument(api: DreyPluginApi, card: TicketCard): void {
+  threadTicketId = card.id;
+  for (const listener of threadListeners) {
+    listener();
   }
+  openTicketCard(api, card);
   markOpenCard(api);
-}
-
-/** The segmented control for a ticket face, wired to this plugin's openers. */
-function faceSwitchFor(api: DreyPluginApi, ticketId: string, active: TicketFace): HTMLElement {
-  return ticketFaceSwitch(active, (face) => {
-    const card = boardCard(ticketId);
-    if (card !== null) {
-      showTicketFace(api, card, face);
-    }
-  });
 }
 
 /** The Send back… modal (canvas): one note, one move back to the agent. */
@@ -1842,9 +1825,9 @@ function openSendBackModal(api: DreyPluginApi, ticketId: string): void {
 /**
  * The runner alone: the one thread tab follows `card` and is revealed --
  * opened plainly where the focus is (no split, no anchor), so it never
- * competes with the notes for a pane. The Work list's click, a worker
- * card, a notification and the past-runs rows use this; only the ticket
- * menu's "Open ticket" opens the file beside it (`openTicketPage`).
+ * competes with the notes for a pane. The card's Thread button and the
+ * past-runs rows use this; every row and notification opens the document
+ * (`openTicketPage`).
  */
 function openTicketThread(api: DreyPluginApi, card: TicketCard): void {
   threadTicketId = card.id;
@@ -2624,7 +2607,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       pullChanges();
     }
   }, 30_000);
-  wrap.append(faceSwitchFor(api, ticketId, 'thread'), head, actionNotice, readyWrap, pendingHint, stepsBox, endMoves.element, decisionBar, composer.element);
+  wrap.append(head, actionNotice, readyWrap, pendingHint, stepsBox, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;

@@ -304,6 +304,12 @@ export interface ViewPresetLayout {
   /** Side docks folded away at first. */
   readonly folded?: readonly ('left' | 'right')[];
   /**
+   * The bottom dock's first height in px (SDK 1.51), clamped like a user's
+   * resize. Absent: the default height. Like the rest of the layout, only
+   * used the first time the view is shown.
+   */
+  readonly bottomH?: number;
+  /**
    * Tabs the view opens for itself (SDK 1.50): each is a contributed doc
    * kind and the path/key the kind's `restore` opens. Applied every time
    * the view is switched to, for each tab that is not open in the view
