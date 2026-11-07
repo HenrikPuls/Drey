@@ -10,6 +10,17 @@
     font-size: var(--ph-15);
     border-bottom: 1px solid var(--panel-2);
   }
+  .pd-thead-mid {
+    position: relative;
+    justify-content: flex-end;
+    padding: 0 4px;
+    font-size: var(--ph-16);
+  }
+  .pd-thead-mid .pd-tid {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+  }
   .pd-wide-bar {
     position: relative;
     justify-content: flex-end;

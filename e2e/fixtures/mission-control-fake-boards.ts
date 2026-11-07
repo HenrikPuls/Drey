@@ -359,7 +359,8 @@ const PAD_COST_121 = [
   '- {phase: review, persona: ralf, model: Claude sonnet, tokens: 0, dauer: 0m, cost: 0, ausgang: done}',
 ].join('\n');
 
-PAD_TICKET_TEXT['T-0121'] = [
+/** 5h only: T-0121 once it has a report; 10e and 10s draw it still building. */
+export const PAD_REVIEW_TEXT_121 = [
   '---',
   'id: T-0121',
   '---',

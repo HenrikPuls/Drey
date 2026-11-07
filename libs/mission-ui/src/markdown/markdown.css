@@ -298,3 +298,10 @@
     line-height: 24px;
   }
 }
+
+/* The boards h2 line is 28 high on the iPad (10e, 10q); CodeMirror rounds it to 29. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .mdx-view .cm-line.mdx-h2 {
+    height: 28px;
+  }
+}

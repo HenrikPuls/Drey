@@ -43,7 +43,7 @@
     max-width: 680px;
   }
   .msg.owner .bubble {
-    max-width: 80%;
+    max-width: calc(80% + 28px);
   }
   .composer {
     width: 100%;
@@ -53,6 +53,10 @@
   }
   .ph-linkcard {
     min-height: 74px;
+  }
+  /* The boards' placeholder is the dim grey, the phone's stays as it is. */
+  .composer-input::placeholder {
+    color: var(--control-border);
   }
   /* The shape session's answers (5b, 5c): the planner's picture above them. */
   .pd-via {
@@ -67,7 +71,7 @@
     padding: 12px 14px;
   }
   :host-context(.pad-right) .msg.owner .bubble {
-    max-width: 85%;
+    max-width: calc(85% + 28px);
     font-size: var(--ph-16);
     line-height: 23px;
   }
@@ -83,6 +87,9 @@
   }
   :host-context(.pad-right) .composer-input {
     font-size: var(--ph-16);
+  }
+  :host-context(.pad-right) .composer-input::placeholder {
+    font-size: var(--ph-15);
   }
   :host-context(.pad-right) .mic svg {
     width: 20px;

@@ -9,6 +9,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { startFakeDesk } from './fixtures/mission-control-fake-desk';
+import { PAD_REVIEW_TEXT_121 } from './fixtures/mission-control-fake-boards';
 import { PAD_FLOW_130_DRAFT, PAD_SHAPE_QUESTION } from './fixtures/mission-control-fake-boards';
 
 let desk: Awaited<ReturnType<typeof startFakeDesk>>;
@@ -142,6 +143,10 @@ test.describe('landscape', () => {
   });
 
   test('5h review', async ({ page }) => {
+    await page.route('**/api/tickets/T-0121', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...((await response.json()) as object), text: PAD_REVIEW_TEXT_121 } });
+    });
     await needsOf(page, (needs) =>
       needs.map((need) => (need['ticketId'] === 'T-0121' ? { kind: 'checkpoint', phase: 'review', ticketId: 'T-0121', title: 'Outline: drag headings to reorder', summary: 'Ready for your review.' } : need)),
     );

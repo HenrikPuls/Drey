@@ -16,7 +16,7 @@
       @case ('ticket') {
         @if (phone()) {
         @if (pad()) {
-          <div class="pd-thead" [class.pd-wide-bar]="shapeFace()">
+          <div class="pd-thead" [class.pd-wide-bar]="shapeFace()" [class.pd-thead-mid]="headCentred()">
             <b class="pd-tid">{{ id() }}</b>
             <button type="button" class="ph-iconbtn" [attr.aria-label]="'ticket.phone.more' | t" [attr.title]="'ticket.phone.more' | t" aria-haspopup="dialog" (click)="moreOpen.set(true)">
               <mc-ph-icon name="more" />

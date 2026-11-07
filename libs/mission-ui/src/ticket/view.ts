@@ -198,6 +198,11 @@ export class TicketView {
   /** The Shaping face on the iPad (5b): the ticket's bar over the right pane, one pill. */
   protected readonly shapeFace = computed(() => this.pad() && this.phaseTitle().trim().toLowerCase() === 'shaping');
 
+  /** The ticket head: left beside an open Assistant while it builds (10e), centred on a ready ticket (10q) and without the pane (10s). */
+  protected readonly headCentred = computed(() =>
+    !this.shapeFace() && ((this.decisionNeed() !== null && this.proofStrip() !== null) || !this.panes.right() || this.panes.orientation() === 'portrait'),
+  );
+
   /** The link to the card in the Assistant (10e, 10q, 10s); null = nothing waits. */
   protected readonly decisionLink = computed<string | null>(() => {
     if (!this.pad() || !this.needsYou()) {
