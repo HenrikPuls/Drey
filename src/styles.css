@@ -260,6 +260,8 @@
   /* File status: lightened so every state clears 4.5:1 on dock, editor and
      field surfaces (the shared mid-tones above fail AA on dark). */
   --status-modified: #e0bb6e;
+  /* The one orange: needs you (boards 7a, 7e, 7h, 10t), not a file's git status. */
+  --needs-you: #e8a25a;
   --status-added: #93c47f;
   --status-untracked: #82c4ab;
   --status-deleted: #ee8f89;

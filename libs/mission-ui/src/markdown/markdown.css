@@ -163,12 +163,22 @@
   .mdx .cm-line.mdx-h1 {
     line-height: 32px;
   }
+  .mdx:not(.mdx-view) .cm-line.mdx-h1 span {
+    font-size: calc(26px * var(--mc-scale, 1));
+    font-weight: 700;
+    letter-spacing: normal;
+    line-height: 32px;
+  }
   .mdx .cm-line.mdx-h2 {
     margin-top: 8px;
     line-height: 28px;
   }
   .mdx:not(.mdx-view) .cm-line.mdx-h2 {
     margin-top: 4px;
+  }
+  .mdx:not(.mdx-view) .cm-line.mdx-h2:not(.cm-activeLine) span {
+    font-size: calc(20px * var(--mc-scale, 1));
+    font-weight: 700;
   }
   .mdx .cm-line {
     padding: 0;
@@ -251,8 +261,10 @@
     display: inline-flex;
     align-items: center;
     height: 24px;
-    margin-right: 8px;
+    /* the space in the text brings the gap to the boards' 8 px */
+    margin-right: 3px;
     padding: 0 8px;
+    vertical-align: top;
     font-size: var(--ph-15);
     line-height: 20px;
     color: var(--accent);
@@ -277,6 +289,9 @@
     color: var(--text);
     font-weight: 400;
   }
+  .mdx:not(.mdx-view) .cm-focused .cm-activeLine[class*='mdx-h'] > span:first-child {
+    color: var(--text-2);
+  }
   .mdx .cm-cursor {
     border-left-width: 2px;
     border-left-color: var(--accent);
@@ -296,6 +311,10 @@
     font-size: var(--ph-15);
     font-weight: 400;
     line-height: 24px;
+  }
+  .mdx:not(.mdx-view) .cm-focused .cm-activeLine:not(.lp-frontmatter) {
+    margin: 3px 0 4px;
+    padding: 8px 10px;
   }
 }
 

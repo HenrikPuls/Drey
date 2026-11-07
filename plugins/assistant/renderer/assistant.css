@@ -1867,6 +1867,10 @@
   padding: 3px 0;
 }
 
+.assistant-composer .composer-input .cm-line {
+  padding-left: 0;
+}
+
 .assistant-composer .composer-input .cm-placeholder {
   color: var(--placeholder);
 }

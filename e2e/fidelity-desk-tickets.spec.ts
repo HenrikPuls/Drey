@@ -406,7 +406,15 @@ async function markPlan(app: ElectronApplication): Promise<void> {
 }
 
 async function openTicket(page: Page, id: string): Promise<void> {
-  const row = page.locator('.tickets-panel').filter({ visible: true }).locator(`.work-row[data-id="${id}"]`);
+  const panel = page.locator('.tickets-panel').filter({ visible: true });
+  await expect(panel.locator('.work-row').first()).toBeVisible({ timeout: 30_000 });
+  const row = panel.locator(`.work-row[data-id="${id}"]`);
+  // A plain group shows two rows and "<n> more" (milestone 194); the fold is remembered, so only when needed.
+  if ((await row.count()) === 0) {
+    for (const more of await panel.locator('.work-ideas-more', { hasText: 'more' }).all()) {
+      await more.click();
+    }
+  }
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click({ button: 'right' });
   await page.getByText('Open ticket', { exact: true }).first().click();

@@ -251,7 +251,7 @@ const WORK_DOCKS = {
   bottom: ['Capacity'],
   folded: ['Search'],
   rightW: 380,
-  bottomH: 140,
+  bottomH: 103,
 };
 
 async function reloadSized(page: Page, app: ElectronApplication): Promise<void> {

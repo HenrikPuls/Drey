@@ -334,6 +334,7 @@
     bottom: 6px;
     left: 8px;
     font-size: var(--ph-13);
+    line-height: normal;
     color: var(--text-2);
   }
   .pd-player {
@@ -354,7 +355,6 @@
     gap: 4px 16px;
   }
   .pd-rstrip .pd-stripamount {
-    font-size: var(--ph-14);
     color: var(--accent-peach);
   }
   .pd-rchips {
@@ -687,9 +687,7 @@
     color: var(--text-2);
   }
   .pd-rfbtn,
-  /* The board's link inherits the page's 17 px, unlike Send back beside it. */
   .pd-raccept {
-    font-size: var(--ph-17);
     display: flex;
     flex: none;
     align-items: center;
@@ -704,7 +702,9 @@
     border: 1px solid var(--control-border);
     border-radius: var(--radius-control);
   }
+  /* The board's link inherits the page's 17 px, unlike Send back beside it. */
   .pd-raccept {
+    font-size: var(--ph-17);
     font-weight: 600;
     color: var(--on-accent);
     background: var(--accent-mint);
