@@ -18,7 +18,7 @@ section "Desktop · status bar". Built on milestone 188 (D-35), without which th
 - **Differs from the board, on purpose.** (1) The board's On state shows "Resume at 18:00"; the engine accepts a resume time on
   Paused only (`parseAutopilotSet`), so the chip appears on Paused alone. (2) The board draws the popover at radius 12 and the
   segments and Stop at 6; the design-scale guard (`shared/design-scale.spec.ts`, canvas decision 2026-11-04) allows only 4 / 8 / 16 in
-  the tickets plugin, so the build uses dialog 16 and control 8. **The owner decides:** the guard or the board moves. (3) The chord
+  the tickets plugin, so the build uses dialog 16 and control 8; owner ruling 2026-11-07: the guard stays (`decisions.md`). (3) The chord
   reads `Mod+Alt+P` as on the board, and does not follow a rebinding (`AUTOPILOT_CHORD`, like the item's tooltip).
 - **Seen in the built app on a scratch store** (isolated home, a seeded persona budget and ledger line for the cost chip; screenshots of
   On, Paused, editing, armed and Off compared with the board): placement, segments, sentences, chips, the lit item. **A real resume

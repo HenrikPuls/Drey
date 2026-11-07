@@ -8,6 +8,11 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **The Autopilot board's radii 12 and 6 in the build** (owner, 2026-11-07; milestone 189, D-36).
+  `Autopilot.png` draws the popover at 12 and the segments and Stop at 6. The design-scale guard
+  (`shared/design-scale.spec.ts`, 4 / 8 / 16) stays: the tickets plugin uses dialog 16 and control 8, and
+  the guard is not widened for this board. Mission Control's Autopilot (D-38) follows the same scale.
+
 - **Board 9b "Drey today — Calendar, Source control, Outline, Search and Tasks redesigned" as a
   target** (owner, 2026-11-06 evening; was req-105). The owner: "9b ist kein Zieldesign" — the board
   stays in the canvas and in `docs/design/work-panel/boards/` as a sketch of how the panels could
