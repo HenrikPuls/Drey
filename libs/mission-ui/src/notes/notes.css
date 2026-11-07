@@ -196,3 +196,86 @@
   gap: 8px;
   align-items: flex-start;
 }
+
+/* The phone's Notes list (board 10k). */
+.ph-notes {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--ph-17);
+  line-height: 24px;
+}
+.ph-notes > * {
+  flex: none;
+}
+.ph-searchwrap {
+  padding: 10px 16px 6px;
+}
+.ph-vault {
+  padding: 0 16px 4px;
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+}
+.ph-create {
+  padding: 8px 16px;
+}
+.ph-label {
+  padding: 14px 16px 4px;
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+}
+.ph-hint {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: var(--ph-15);
+  color: var(--text-2);
+}
+.ph-note-row,
+.ph-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--panel-2);
+  border-radius: 0;
+}
+.ph-note-row {
+  min-height: 77px;
+  padding: 8px 12px 8px 16px;
+}
+.ph-folder-row {
+  min-height: 53px;
+  padding: 0 12px 0 16px;
+  font-size: var(--ph-17);
+}
+.ph-note-body {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ph-note-name {
+  font-size: var(--ph-17);
+  line-height: 22px;
+}
+.ph-note-sub {
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--text-2);
+}
+.ph-grey {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.ph-grow {
+  flex-grow: 1;
+}

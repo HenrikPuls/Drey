@@ -121,3 +121,48 @@
     display: none;
   }
 }
+
+/* The phone's rows (boards 10d, 10o); the wide table is the wide layouts'. */
+.ph-ct {
+  display: none;
+}
+@media (max-width: 767.98px) {
+  .ct {
+    display: none;
+  }
+  .ph-ct {
+    display: block;
+  }
+}
+.ph-ctrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 53px;
+  border-bottom: 1px solid var(--panel-2);
+}
+.ph-ctbody {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.ph-cttitle {
+  font-size: var(--ph-16);
+}
+.ph-b {
+  font-weight: 600;
+}
+.ph-ctsub {
+  overflow: hidden;
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-ctcost {
+  font-size: var(--ph-15);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}

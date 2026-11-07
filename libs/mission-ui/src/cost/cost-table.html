@@ -1,3 +1,23 @@
+<section class="ph-ct" [attr.aria-label]="'cost.table.label' | t">
+  @for (row of phoneRows(); track $index) {
+    <div class="ph-ctrow" [class.ct-bad]="row.bad">
+      <span class="ph-ctbody">
+        <span class="ph-cttitle">{{ phoneTitle(row) }}</span>
+        <span class="ph-ctsub">{{ row.pending ? ('cost.table.waiting' | t) : phoneSub(row) }}</span>
+      </span>
+      @if (!row.pending) {
+        <span class="ph-ctcost">{{ row.cost }}</span>
+      }
+    </div>
+  }
+  <div class="ph-ctrow">
+    <span class="ph-ctbody">
+      <span class="ph-cttitle ph-b">{{ (settled() ? 'cost.table.total' : 'cost.table.total_so_far') | t }}</span>
+      <span class="ph-ctsub">{{ phoneTotal() }}</span>
+    </span>
+    <span class="ph-ctcost ph-b">{{ view().total.cost }}</span>
+  </div>
+</section>
 <section class="ct" [attr.aria-label]="'cost.table.label' | t">
   <h3 class="ct-title">{{ 'cost.table.title' | t }}</h3>
   <div class="ct-grid" role="table" [attr.aria-label]="'cost.table.label' | t">

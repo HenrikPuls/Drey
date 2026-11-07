@@ -1,3 +1,98 @@
+@if (phone()) {
+  <mc-app-bar [title]="'notes.title' | t">
+    @if (!store.readOnly()) {
+      <button bar-end type="button" class="ph-iconbtn" [attr.aria-label]="'notes.new' | t" [attr.title]="'notes.new' | t" [attr.aria-expanded]="creating()" (click)="toggleCreate()">
+        <mc-ph-icon name="plus" />
+      </button>
+    }
+  </mc-app-bar>
+  <div class="ph-scroll ph-notes">
+    <div class="ph-searchwrap">
+      <label class="ph-search">
+        <mc-ph-icon name="search" [size]="18" />
+        <input type="search" [attr.aria-label]="'notes.search' | t" [attr.placeholder]="'notes.search' | t" [value]="store.query()" (input)="onQuery($event)" />
+      </label>
+    </div>
+    @if (store.vault() !== '') {
+      <div class="ph-vault">{{ 'notes.phone.vault' | t: { name: store.vault() } }}</div>
+    }
+    @if (creating()) {
+      <form class="create ph-create" (submit)="onCreate($event, name)">
+        <input #name type="text" [attr.aria-label]="'notes.new_name' | t" [attr.placeholder]="'notes.new_name' | t" autocapitalize="sentences" />
+        <button type="submit" class="ph-primary">{{ 'notes.new_create' | t }}</button>
+        <button type="button" class="ph-outline" (click)="toggleCreate()">{{ 'notes.new_cancel' | t }}</button>
+      </form>
+      @if (createError(); as error) {
+        <p class="err" role="alert">{{ error }}</p>
+      }
+    }
+    @if (store.query().trim() !== '') {
+      @if (store.searchError(); as error) {
+        <p class="err" role="alert">{{ error }}</p>
+      } @else if (store.searching() && store.hits().length === 0) {
+        <p class="ph-hint">{{ 'notes.loading' | t }}</p>
+      } @else if (store.searched() !== '' && store.hits().length === 0) {
+        <p class="ph-hint">{{ 'notes.no_results' | t }}</p>
+      }
+      @for (hit of store.hits(); track hit.path) {
+        <button type="button" class="ph-note-row" (click)="openNote(hit.path)">
+          <span class="ph-note-body">
+            <span class="ph-note-name ph-ellipsis">{{ hit.name }}</span>
+            <span class="ph-note-sub ph-ellipsis">{{ snippet(hit) || hit.path }}</span>
+          </span>
+          <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+        </button>
+      }
+      @if (store.truncated()) {
+        <p class="ph-hint">{{ 'notes.truncated' | t }}</p>
+      }
+    } @else {
+      @if (store.listError(); as error) {
+        <div class="errbox">
+          <p class="err" role="alert">{{ error }}</p>
+          <button type="button" class="ph-outline" (click)="store.loadHome()">{{ 'notes.reload' | t }}</button>
+        </div>
+      }
+      @if (store.recent().length > 0) {
+        <span class="ph-label">{{ 'notes.recent' | t }}</span>
+        @for (entry of store.recent(); track entry.path) {
+          <button type="button" class="ph-note-row" (click)="openNote(entry.path)">
+            <span class="ph-note-body">
+              <span class="ph-note-name ph-ellipsis">{{ entry.name }}</span>
+              <span class="ph-note-sub ph-ellipsis">{{ entry.path }} · {{ when(entry) }}</span>
+            </span>
+            <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+          </button>
+        }
+      }
+      <span class="ph-label">{{ store.folder() === '' ? ('notes.phone.folders' | t) : folderLabel() }}</span>
+      @if (store.folder() !== '') {
+        <button type="button" class="ph-folder-row" (click)="store.openFolder(parentPath())">
+          <span class="ph-grow">{{ 'notes.parent_folder' | t }}</span>
+        </button>
+      }
+      @for (folder of store.folders(); track folder.path) {
+        <button type="button" class="ph-folder-row" (click)="store.openFolder(folder.path)">
+          <span class="ph-grey"><mc-ph-icon name="folder" /></span>
+          <span class="ph-grow">{{ folder.name }}</span>
+          <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+        </button>
+      }
+      @for (entry of store.notes(); track entry.path) {
+        <button type="button" class="ph-note-row" (click)="openNote(entry.path)">
+          <span class="ph-note-body">
+            <span class="ph-note-name ph-ellipsis">{{ entry.name }}</span>
+            <span class="ph-note-sub ph-ellipsis">{{ when(entry) }}</span>
+          </span>
+          <span class="ph-grey"><mc-ph-icon name="chev" [size]="18" /></span>
+        </button>
+      }
+      @if (store.folders().length === 0 && store.notes().length === 0 && !store.listLoading() && store.listError() === null) {
+        <p class="ph-hint">{{ 'notes.empty' | t }}</p>
+      }
+    }
+  </div>
+} @else {
 <mc-app-bar [title]="'notes.title' | t" [sub]="store.vault() === '' ? null : store.vault()">
   @if (!store.readOnly()) {
     <button
@@ -118,3 +213,5 @@
     </section>
   }
 </div>
+
+}

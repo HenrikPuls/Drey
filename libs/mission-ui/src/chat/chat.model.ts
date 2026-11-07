@@ -32,6 +32,10 @@ export type McChatUploadReply =
 
 /** Exactly what the chat tab consumes of the app state. */
 export interface McChatState {
+  /** The linked-ticket card's words (board 10a); absent = the card does not show. */
+  ticketSummary?(id: string): { readonly title: string; readonly phase: string } | null;
+  /** Opens a ticket from the linked-ticket card. */
+  openTicket?(id: string): void;
   /** The report card's one-shot draft prefill; the tab consumes and clears it. */
   readonly chatPrefill: WritableSignal<string | null>;
   /**

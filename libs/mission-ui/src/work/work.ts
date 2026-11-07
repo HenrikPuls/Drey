@@ -1,5 +1,10 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { AppBar } from '../app-bar/app-bar';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { PhoneIcon } from '../phone/icon';
+import { phoneSignal } from '../phone/phone';
+import { phoneGroupsFiltered, phoneGroupsOf, todayCostTextOf, type PhoneWorkGroup, type PhoneWorkRow } from './phone-rows';
 import { McI18n } from '../i18n/i18n.service';
 import {
   MC_WORK_STATE,
@@ -52,8 +57,8 @@ import {
 @Component({
   selector: 'mc-work',
   templateUrl: './work.html',
-  styleUrl: './work.css',
-  imports: [AppBar],
+  styleUrls: ['../phone/kit.css', './work.css'],
+  imports: [AppBar, McI18nPipe, NgTemplateOutlet, PhoneIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Work {
@@ -73,6 +78,58 @@ export class Work {
     const state = this.state;
     return state === null ? [] : withoutNeedCopies(groupsOf(state.needs, state.board, state.personas));
   });
+
+  // --- the phone's list (board 10c): rows only; a decision is taken in the ticket ---
+
+  protected readonly phone = phoneSignal();
+  protected readonly searchOpen = signal(false);
+  protected readonly query = signal('');
+  /** The folded state the owner set; a group not named here starts as its kind says. */
+  private readonly groupOpen = signal<Readonly<Record<string, boolean>>>({});
+
+  protected readonly todayText = computed(() =>
+    todayCostTextOf(this.state?.today ?? null, (key, params) => this.i18n.t(key, params)),
+  );
+
+  protected readonly phoneGroups = computed<readonly PhoneWorkGroup[]>(() => {
+    const state = this.state;
+    if (state === null) {
+      return [];
+    }
+    const all = groupsOf(state.needs, state.board, state.personas);
+    return phoneGroupsFiltered(
+      phoneGroupsOf(all, withoutNeedCopies(all), this.doneThisWeek(), state.liveRuns ?? [], this.now(), (key, params) => this.i18n.t(key, params)),
+      this.query(),
+    );
+  });
+
+  protected isGroupOpen(group: PhoneWorkGroup): boolean {
+    return this.groupOpen()[group.key] ?? group.startsOpen;
+  }
+
+  protected toggleGroup(group: PhoneWorkGroup): void {
+    this.groupOpen.update((open) => ({ ...open, [group.key]: !this.isGroupOpen(group) }));
+  }
+
+  protected toggleSearch(): void {
+    this.searchOpen.update((open) => !open);
+    this.query.set('');
+  }
+
+  protected onQuery(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  /** A row without a board card: its ticket, else the need's persona. */
+  protected openPhoneRow(row: PhoneWorkRow): void {
+    if (row.plan && row.ticketId !== null && this.state?.openPlan !== undefined) {
+      this.state.openPlan(row.ticketId);
+    } else if (row.ticketId !== null) {
+      this.state?.openTicket?.(row.ticketId);
+    } else if (row.need !== null) {
+      this.openNeedPersona(row.need);
+    }
+  }
 
   /** The row's age (`5 min`, `3 h`, `2 d`); '' hides it. */
   protected ageOf(vm: TicketVm): string {
@@ -239,9 +296,13 @@ export class Work {
   }
 
   /** The card's click: a tap after a real gesture does nothing, else the ticket opens. */
-  protected onCardTap(vm: TicketVm): void {
+  protected onCardTap(vm: TicketVm, row?: PhoneWorkRow): void {
     if (this.swallowTap) {
       this.swallowTap = false;
+      return;
+    }
+    if (row !== undefined) {
+      this.openPhoneRow(row);
       return;
     }
     this.openTicketCard(vm);

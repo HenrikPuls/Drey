@@ -93,7 +93,7 @@ describe('parsers', () => {
 
   it('keeps the default accent as no override', () => {
     expect(accentValueOf('default')).toBeNull();
-    expect(accentValueOf('pink')).toBe('#f2a0d0');
+    expect(accentValueOf('pink')).toBe('#f2d3e2');
   });
 });
 
@@ -257,7 +257,7 @@ describe('Theme', () => {
     expect(e.storage?.getItem(COMPACT_STORAGE_KEY)).toBe('true');
     expect(e.storage?.getItem(MOTION_STORAGE_KEY)).toBe('true');
     expect(rootOf(e).dataset).toMatchObject({ theme: 'drey', compact: 'true', reduceMotion: 'true' });
-    expect(rootOf(e).style.props.get('--accent')).toBe('#f2a0d0');
+    expect(rootOf(e).style.props.get('--accent')).toBe('#f2d3e2');
     expect(rootOf(e).style.props.get('--mc-text')).toBe(String(16 / 15));
     theme.setAccent('default');
     expect(rootOf(e).style.props.has('--accent')).toBe(false);

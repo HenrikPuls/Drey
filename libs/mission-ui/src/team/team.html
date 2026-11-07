@@ -1,3 +1,153 @@
+@if (phone()) {
+  <section class="ph-team" [attr.aria-label]="'shell.crew' | t">
+    <mc-app-bar [title]="'shell.crew' | t" [autopilot]="true" />
+    <div class="ph-scroll ph-crew">
+      <span class="ph-summary">{{ summaryLine() }}</span>
+      @if (capacity().length > 0 || todayLine() !== null) {
+        <div class="ph-caps">
+          @for (cap of capacity(); track cap.provider) {
+            <span class="ph-cap">{{ capLabel(cap) }} <b>{{ cap.running }}/{{ cap.size }}</b></span>
+          }
+          @if (todayLine(); as today) {
+            <span class="ph-capnote">{{ today }}</span>
+          }
+        </div>
+      }
+      @if (canPauseAll()) {
+        <div class="ph-tiles">
+          <button type="button" class="ph-tile" [attr.aria-label]="halted() ? ('crew.phone.resume_all' | t) : ('crew.phone.pause_all_long' | t)" [attr.title]="halted() ? ('crew.phone.resume_all' | t) : ('crew.phone.pause_all_long' | t)" (click)="pauseAll()">
+            <mc-ph-icon [name]="halted() ? 'play' : 'pause'" [size]="20" />
+            <span>{{ (halted() ? 'crew.phone.resume_all' : 'crew.phone.pause_all') | t }}</span>
+          </button>
+          <button type="button" class="ph-tile ph-danger" [class.armed]="stopAllArmed()" [attr.aria-label]="'crew.phone.stop_all' | t" [attr.title]="'crew.phone.stop_all' | t" (click)="stopAll()">
+            <mc-ph-icon name="stop" [size]="20" />
+            <span>{{ (stopAllArmed() ? 'crew.phone.confirm' : 'crew.phone.stop_all') | t }}</span>
+          </button>
+        </div>
+      }
+      @if (personas(); as list) {
+        @for (persona of list; track persona.id) {
+          <article class="ph-card">
+            <button type="button" class="ph-head" [attr.aria-expanded]="setupOf()?.id === persona.id" (click)="selectSetup(persona)">
+              <svg class="ph-ava" role="img" [attr.aria-label]="persona.title" width="36" height="36" viewBox="0 0 24 24">
+                <rect width="24" height="24" [attr.fill]="persona.color" />
+                <circle cx="12" cy="9.5" r="4.2" fill="var(--on-pastel)" fill-opacity="0.78" />
+                <path d="M3.5 24c0-5 3.8-8 8.5-8s8.5 3 8.5 8z" fill="var(--on-pastel)" fill-opacity="0.78" />
+              </svg>
+              <span class="ph-who">
+                <b class="ph-ellipsis">{{ persona.title }}</b>
+                <span class="ph-role ph-ellipsis">{{ roleLineOf(persona) }}</span>
+              </span>
+              <span class="ph-state">
+                <span class="ph-sdot" [attr.data-tone]="stateToneOf(persona)"></span>{{ phoneStateOf(persona) }}
+              </span>
+            </button>
+            @if (dayCostFootOf(persona); as foot) {
+              <div class="ph-budget">
+                <div class="ph-budget-line">
+                  <span class="ph-grey">{{ 'crew.phone.today' | t }}</span>
+                  <span class="ph-mono" [class.ph-over]="foot.over">{{ foot.text.replace(' today', '') }}</span>
+                </div>
+                <div class="ph-bar">
+                  @if (budgetPctOf(persona); as pct) {
+                    <div class="ph-fill" [style.width.%]="pct" [style.background-color]="persona.color"></div>
+                  }
+                </div>
+              </div>
+            }
+            @for (row of rowsOf(persona); track row.runId) {
+              <div class="ph-run" [class.ph-stuck]="row.stuck">
+                <div class="ph-run-top">
+                  <button type="button" class="ph-run-title ph-ellipsis" (click)="openRow(row)">{{ row.title }}</button>
+                  <span class="ph-age">{{ row.age }}</span>
+                </div>
+                <span class="ph-run-line ph-ellipsis">{{ row.activity }}</span>
+                @if (row.stuck) {
+                  <span class="ph-stuck-text">{{ stuckWords(row) }}</span>
+                  <div class="ph-tiles ph-tiles-run">
+                    @if (canNudge()) {
+                      <button type="button" class="ph-tile" [disabled]="busyRun() !== null" [attr.aria-label]="'crew.phone.nudge_long' | t" [attr.title]="'crew.phone.nudge_long' | t" (click)="act(row.runId, 'nudgeRun')">
+                        <mc-ph-icon name="bell" [size]="20" /><span>{{ 'crew.phone.nudge' | t }}</span>
+                      </button>
+                    }
+                    @if (canHand()) {
+                      <button type="button" class="ph-tile" [disabled]="busyRun() !== null" [attr.aria-label]="'crew.phone.hand_long' | t" [attr.title]="'crew.phone.hand_long' | t" (click)="act(row.runId, 'handToClaude')">
+                        <mc-ph-icon name="terminal" [size]="20" /><span>{{ 'crew.phone.hand' | t }}</span>
+                      </button>
+                    }
+                    @if (canStopRun()) {
+                      <button type="button" class="ph-tile ph-danger" [disabled]="busyRun() !== null" [attr.aria-label]="'crew.phone.stop' | t" [attr.title]="'crew.phone.stop' | t" (click)="stopAsk.set(row.runId)">
+                        <mc-ph-icon name="stop" [size]="20" /><span>{{ 'crew.phone.stop' | t }}</span>
+                      </button>
+                    }
+                  </div>
+                  @if (stopAsk() === row.runId) {
+                    <div class="ph-confirm" role="alertdialog" [attr.aria-label]="'crew.phone.stop_ask' | t: { name: persona.title }">
+                      <span>{{ 'crew.phone.stop_ask' | t: { name: persona.title } }}</span>
+                      <div class="ph-confirm-row">
+                        <button type="button" class="ph-cbtn" (click)="stopAsk.set(null)">{{ 'crew.phone.cancel' | t }}</button>
+                        <button type="button" class="ph-cbtn ph-cbtn-danger" (click)="stopAsk.set(null); act(row.runId, 'stopRun')">{{ 'crew.phone.stop' | t }}</button>
+                      </div>
+                    </div>
+                  }
+                }
+              </div>
+            }
+          </article>
+        }
+      }
+      @if (poolEmpty()) {
+        <p class="ph-capnote">{{ 'crew.phone.empty' | t }}</p>
+      }
+      @if (setupOf(); as setup) {
+        <div class="ph-setup">
+          <div class="ph-divider"></div>
+          <button type="button" class="ph-setup-head" (click)="open(setup)">
+            <b>{{ 'crew.phone.setup' | t }}</b>
+            <span class="ph-capnote">{{ setup.title }}</span>
+          </button>
+          @if (poolOf(setup); as pool) {
+            <span class="ph-scap">{{ 'crew.phone.pool' | t }}</span>
+            @for (entry of pool; track entry.key; let first = $first; let i = $index) {
+              @if (!first) {
+                <div class="ph-when"><span class="ph-when-bar"></span>{{ 'crew.phone.when_full' | t: { name: pool[i - 1]!.label } }}</div>
+              }
+              <div class="ph-pool">
+                <span class="ph-n" [class.first]="first">{{ i + 1 }}</span>
+                <span class="ph-pool-body">
+                  <span class="ph-pool-name">
+                    <b>{{ entry.label }}</b>
+                    @if (entry.model !== '') {
+                      <span class="ph-chip ph-ellipsis">{{ entry.model }}</span>
+                    }
+                  </span>
+                  <span class="ph-capnote">{{ (first ? 'crew.phone.first_choice' : 'crew.phone.overflow') | t }}</span>
+                </span>
+              </div>
+            }
+          }
+          @if (dayCostFootOf(setup); as foot) {
+            <span class="ph-scap">{{ 'crew.phone.cost' | t }}</span>
+            <div class="ph-costs">
+              <div class="ph-cost">
+                <span class="ph-capnote">{{ 'crew.phone.today_cap' | t }}</span>
+                <b class="ph-cost-n">{{ foot.text.split(' ')[0] }}</b>
+                <span class="ph-capnote ph-ellipsis">{{ phoneStateOf(setup) }}</span>
+              </div>
+            </div>
+          }
+          @if (canPause() && setup.kind !== 'human') {
+            <div class="ph-setup-acts">
+              <button type="button" class="ph-cbtn" (click)="togglePause(setup)">
+                {{ (isPaused(setup) ? 'crew.phone.resume_x' : 'crew.phone.pause_x') | t: { name: setup.title } }}
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </section>
+} @else {
 <section class="team" aria-label="Crew">
   <mc-app-bar title="Crew" [sub]="headerSub()" [autopilot]="true" />
 
@@ -121,3 +271,5 @@
     <p class="empty">No personas yet — add one in Drey's tickets settings.</p>
   }
 </section>
+
+}

@@ -73,7 +73,7 @@ test.describe('phone: the app-bar button and its sheet', () => {
     try {
       await openApp(page, desk);
       // The phone's root is the menu; Work is the first place.
-      await expect(page.locator('mc-menu .row.autopilot')).toContainText('Autopilot · On');
+      await expect(page.locator('mc-menu .row.autopilot')).toHaveAccessibleName('Autopilot, On');
       await page.locator('mc-menu').getByRole('button', { name: /^Work/ }).click();
       const button = page.locator('mc-work mc-app-bar mc-autopilot-button .btn');
       const box = (await button.boundingBox())!;

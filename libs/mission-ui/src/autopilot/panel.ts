@@ -9,6 +9,7 @@ import {
   type AutopilotKind,
   type AutopilotView,
 } from '../../../../shared/autopilot';
+import { PhoneIcon, type PhoneIconName } from '../phone/icon';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 import { MC_AUTOPILOT, type McAutopilotReply } from './autopilot-state';
@@ -22,7 +23,7 @@ import { MC_AUTOPILOT, type McAutopilotReply } from './autopilot-state';
  */
 @Component({
   selector: 'mc-autopilot-panel',
-  imports: [McI18nPipe],
+  imports: [McI18nPipe, PhoneIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './panel.html',
   styleUrl: './panel.css',
@@ -33,6 +34,8 @@ export class AutopilotPanel {
 
   /** The clock, injectable for the specs. */
   readonly now = input<() => Date>(() => new Date());
+  /** The phone's sheet (board 10t): grabber, head, rows with a sentence, a bordered Stop. */
+  readonly sheet = input(false);
   /** A state was taken (On or Off): the host closes its popover or sheet. */
   readonly done = output<void>();
 
@@ -48,6 +51,10 @@ export class AutopilotPanel {
       ? null
       : this.i18n.t('autopilot.resume_at', { time: this.i18n.formatTime(new Date(at)) });
   });
+
+  protected glyph(kind: AutopilotKind): PhoneIconName {
+    return kind === 'on' ? 'play' : kind === 'paused' ? 'pause' : 'stop';
+  }
 
   protected tone(kind: AutopilotKind): string {
     return autopilotToneOf(kind);

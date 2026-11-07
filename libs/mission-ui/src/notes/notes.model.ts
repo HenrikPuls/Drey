@@ -7,7 +7,8 @@
  * is never shown.
  */
 import { InjectionToken, signal, type Signal } from '@angular/core';
-import type { MessageKey } from '../../../../shared/i18n';
+import type { I18n, MessageKey } from '../../../../shared/i18n';
+import { shortDayOf } from '../phone/phone';
 
 export type NotesErrorCode =
   | 'read_only'
@@ -117,6 +118,8 @@ export interface McNotesHost {
   /** "Ask about this note": the Mission Control chat with the note named in the composer. */
   askAbout(path: string): void;
   openTicket(id: string): void;
+  /** The linked ticket card's words (board 10l); absent or null = the id alone. */
+  ticketSummary?(id: string): { readonly title: string; readonly phase: string } | null;
   toast(message: string, kind?: 'ok' | 'error'): void;
 }
 
@@ -210,4 +213,18 @@ export function hitSnippetOf(hit: NoteSearchHit): string {
     return '';
   }
   return first.heading === '' ? first.text.trim() : `${first.heading} · ${first.text.trim()}`;
+}
+
+/** A note's time on the phone (boards 10k, 10l): `today 09:12`, `yesterday`, `Mon`, else the short date. */
+export function noteWhenOf(mtime: number, nowMs: number, i18n: Pick<I18n, 't' | 'formatTime' | 'locale'>): string {
+  const date = new Date(mtime);
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0);
+  const days = Math.round((day(nowMs) - day(mtime)) / 86_400_000);
+  if (days <= 0) {
+    return i18n.t('notes.phone.today_at', { time: i18n.formatTime(date) });
+  }
+  if (days === 1) {
+    return i18n.t('notes.phone.yesterday');
+  }
+  return shortDayOf(date, days, i18n);
 }

@@ -673,3 +673,98 @@ button:focus-visible {
   font-family: var(--sans);
   color: var(--text-3);
 }
+
+/* The phone's Work list (board 10c): rows, not cards; only phone markup carries ph-. */
+.ph-today {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 33px;
+  padding: 0 16px;
+  font-size: var(--ph-15);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--panel-2);
+}
+.ph-searchwrap {
+  flex: none;
+  padding: 8px 16px;
+}
+.ph-ghead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding: 8px 16px 0;
+  font: inherit;
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+.ph-gtitle {
+  font-weight: 600;
+  color: var(--text);
+}
+.ph-hot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  background: var(--warn);
+  border-radius: 50%;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 70%, transparent);
+}
+.ph-gcount {
+  margin-left: auto;
+}
+.ph-trow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 81px;
+  padding: 8px 12px 8px 16px;
+  overflow: hidden;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  touch-action: pan-y;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--panel-2);
+  border-radius: 0;
+}
+.ph-tbody {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ph-ttitle {
+  font-size: var(--ph-17);
+  line-height: 22px;
+}
+.ph-tmeta {
+  display: flex;
+  gap: 8px;
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--text-2);
+}
+.ph-tline {
+  flex-grow: 1;
+}
+.ph-tcost {
+  font-variant-numeric: tabular-nums;
+}
+.ph-grey {
+  display: flex;
+  flex-shrink: 0;
+}

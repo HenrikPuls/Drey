@@ -1,3 +1,68 @@
+### Milestone 195 — wave row 4.5: Mission Control on the phone matches its boards
+
+**Not yet manually verified by the owner.** The phone's screens were structurally close and 13 % too large; they are now
+drawn from boards 10a–10d, 10g–10m, 10o, 10p and the phone part of 10t, measured against the PNGs. Wide layouts keep
+their templates and rules (row 4.6 follows); the rulings on the measure sheet are in `specs/decisions.md` and below.
+
+- **The type scale.** `--mc-text` is 1.1333 at L and multiplied the boards' px (17 became 19.3). `.shell.phone` sets
+  `--ph-13`…`--ph-26`: the board's number at L, scaled for the other four steps, 13 px the floor (decision 4).
+- **The frame** (`app.css`, `app-bar`). Bar 53 px below the inset (the board's 52 is content-box, its border on top),
+  three columns, centred 17 bold title, back in the text colour. Each screen owns one scroll area that ends above the
+  home indicator, as the board's does; `libs/mission-ui/src/phone/` holds the line icons, `kit.css` and the answer card.
+- **Menu** (10b): bar with New chat, Autopilot first (the row leads to Settings, Q7), icons, needs dot and count,
+  `1 stuck`, chats by day with `14:02` / `Mon`.
+- **Work** (10c): rows instead of cards, cost strip, search, groups Needs you · Running · Ready to try · Shaping, then
+  Prioritized · Inbox · Done this week folded. A plan waiting opens the plan to accept. Swipe stays.
+- **Ticket** (10d, 10o): head row, Flow / Worker / Cost, the question on the face, the body, Parts, Cost by phase,
+  Checks, the proof strip, and the decision card pinned below (Q9). Everything else is under ⋯ (Q8). The phone opens on
+  this face also while a run is active; Thread and Review are one tap away.
+- **Plan to accept** (10j): title and state line, question card, Goal, Parts (tap to edit: persona, move, flow, delete),
+  the owner's edit marked, Reply; Accept shows once no question is open.
+- **Chat, proposal** (10a, 10m): no rail, meta line, one proposal card with a Confirm and Dismiss per change, the worker's
+  question and its ticket in the thread (the same answer call as the ticket), one composer pill, no Attach (Q3).
+- **Settings, Appearance** (10g, 10h): groups by where a setting applies, search over the rows, the Autopilot switch and
+  Resume, five highlight dots (`mint` and `peach` added; `pink` is now `--accent-pink` everywhere), the text-size slider.
+- **Crew** (10i): summary, capacity chips, tiles, persona cards with silhouette, stuck worker with Nudge / Hand over /
+  Stop and its question, Setup inline below the cards (Q4; tapping its head opens the full persona page).
+- **Notes** (10k, 10l, 10p): list, note read-only with path line, tags, task rows, linked ticket card, Ask; edit with X,
+  View · Live · Source, the source box under the caret and the seven-icon bar. `#tag` is a pill, the frontmatter hides.
+- **Autopilot** (10t): the icon names the state; a sheet with sentences, a check and a bordered Stop.
+- **Specs:** `work/phone-rows.spec.ts`, `ticket/phone-face.spec.ts`; `menu`, `autopilot`, `team`, `theme` updated;
+  e2e `mission-control-shell`, `-autopilot`, `-notes`, `-work-settings` follow the phone, iPad assertions untouched;
+  `libs/mission-ui/src/phone` joined the literal guard. New `e2e/mission-control-phone-fidelity.spec.ts` writes the
+  screenshots; `startFakeDesk({ boards: true })` (`mission-control-fake-boards.ts`) serves the boards' sample.
+- **Roadmap:** req-114 to req-118 added (ids proposed; the integrator may renumber).
+
+**Fidelity:** boards `MPhoneChat`, `MPhoneMenu`, `MPhoneWork`, `MPhoneTicket`, `MPhoneSettings`, `MPhoneAppearance`,
+`MPhoneTeam`, `MPhonePlan`, `MPhoneNotes`, `MPhoneNote`, `MPhoneProposal`, `MPhoneReady`, `MPhoneNoteEdit`, `Autopilot`
+(phone part). Screenshots `test-results/fidelity/<Board>.png` (`Autopilot-phone.png`, and `-end` for the long screens),
+390×844, device scale factor 1, safe areas 47 / 34 over CDP, built client on the fake desk. Fixed rows: type scale, bar,
+content-box heights, icons and strokes, greys, order, strings, every layout named on the measure sheet. Open rows: none.
+
+| Board | Region | Board shows | Build shows | Justification |
+|---|---|---|---|---|
+| all | mono text | Consolas stack | `--mono` | token in place of a hex |
+| all | radii | 12 (search, cards), 6 (segments, chips), 18 (bubble), 24 (composer) | 8, 8 or 4, 16, pill | owner decision: the 4 / 8 / 16 scale stays (decision 4, `decisions.md` on the Autopilot board) |
+| all | text | headless Edge | Chromium | text rasterization, no CSS difference found |
+| 10c | cost strip | 33 px (its HTML says 36, it shrinks in the frame's flex column) | 33 px | built to the PNG |
+| 10c | rows | `plan v3 · yesterday`, `$0.00` on a queued row | age, no cost before the first run | data instead of sample content |
+| 10a | question | why line in Paul's chat questions | worker questions carry theirs | feature not yet built — req-118 |
+| 10b | chat times | `Mon` under Yesterday | the sample's real weekday | data instead of sample content |
+| 10d, 10o | Flow | Plan · Build · Review · Test · Accept | the six states; the phases in Building arrive with req-99c | data instead of sample content |
+| 10d | Parts | spent `$0.58` | empty cell | feature not yet built — req-116 |
+| 10d | Cost by phase | `est.` on phases to come | `waiting` alone | feature not yet built — req-116 |
+| 10g | rows | Away and alerts, Repositories | absent | feature not yet built — E12-3b |
+| 10g | Resume | `18:00` while On | empty: the record holds a time only while Paused | data instead of sample content |
+| 10i | persona | `waiting`, a queued run row, `1 queued` | `running`; the fleet reports live runs only | data instead of sample content |
+| 10i | Setup | Runs after, Notify, Week, Typical, slot bars, Remove from crew | absent | feature not yet built — E13-19 |
+| 10j | Cost, parts | per-part estimates | one estimate per persona | data instead of sample content |
+| 10k | counts | `14`, `84 notes` | absent | feature not yet built — req-115 |
+| 10k | names | titles apart from file names | the file's name | data instead of sample content |
+| 10m | bar | no Autopilot icon | icon | owner decision: Q6, 10a and 10t win |
+| 10m | second change | `Shape → start the dialog now` | `Inbox → Shaping` | data instead of sample content |
+| 10o | Checks | `tessa · 0:12` | the tester | feature not yet built — req-117 |
+| 10p | keyboard | drawn iPhone keyboard | none in the browser, the bar sits at the foot | base chrome the client cannot draw (the OS's keyboard) |
+| 10t | frame | a 640 px sample frame with `Work list` | the real Work screen behind the sheet | data instead of sample content |
 ### Milestone 194 — wave 4.2: the Work panel, Board, Crew, Layout menu and Open windows match their boards
 
 **Not yet manually verified by the owner.** Wave row 4.2 `desk-work-board-crew`, boards 7a, 7e, 7f, 7h, 7i. Fidelity is not feature work (owner, via

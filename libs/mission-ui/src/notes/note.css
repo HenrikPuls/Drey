@@ -209,3 +209,146 @@
 .btn.danger {
   color: var(--danger);
 }
+
+/* The phone's note (boards 10l, 10p). */
+@media (max-width: 767.98px) {
+  :host {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+.ph-noteview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-bottom: 0;
+  font-size: var(--ph-17);
+  line-height: 24px;
+}
+.ph-noteview > * {
+  flex: none;
+}
+.ph-path {
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+}
+.ph-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ph-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 999px;
+}
+.ph-grey {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.ph-hint {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: var(--ph-15);
+  color: var(--text-2);
+}
+.ph-askbar {
+  flex: none;
+  margin-bottom: var(--ph-safe-bottom);
+  padding: 10px 16px 8px;
+  border-top: 1px solid var(--line);
+}
+.ph-ask {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 50px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--text);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+}
+.ph-editbar {
+  display: grid;
+  flex: none;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  align-items: center;
+  min-height: calc(53px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 4px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.ph-editbar-title {
+  font-size: var(--ph-17);
+  line-height: 22px;
+  text-align: center;
+}
+.ph-save {
+  justify-self: end;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+.ph-tabs-wrap {
+  flex: none;
+  padding: 8px 16px;
+}
+.ph-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-tab {
+  flex: 1 1 0;
+  height: 40px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+}
+.ph-tab.on {
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-2);
+}
+.ph-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px 16px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ph-format {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--ph-safe-bottom);
+  padding: 4px 8px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}

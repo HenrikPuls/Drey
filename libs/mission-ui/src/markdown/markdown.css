@@ -134,3 +134,151 @@
 .mdx-host .cm-editor.cm-focused {
   outline: none;
 }
+
+/* The phone's bar above the keyboard replaces the strip (board 10p). */
+@media (max-width: 767.98px) {
+  .mdx-strip {
+    display: none;
+  }
+  .mdx-bar:not(:has(.mdx-seg)) {
+    margin-bottom: 0;
+  }
+}
+
+/* The surface on the phone (boards 10d, 10l, 10p): 17/26, 14 px between blocks, no gutter, boards' task rows. */
+@media (max-width: 767.98px) {
+  .mdx {
+    --drey-editor-scale: calc(var(--mc-scale, 1) * 1.1724);
+  }
+  .mdx .cm-content {
+    padding: 0;
+  }
+  /* a line's trailing space hangs: it must not wrap the word before it as break-spaces does */
+  .mdx .cm-lineWrapping {
+    white-space: pre-wrap;
+  }
+  .mdx .cm-gutters {
+    display: none;
+  }
+  .mdx .cm-line.mdx-h1 {
+    line-height: 32px;
+  }
+  .mdx .cm-line.mdx-h2 {
+    margin-top: 8px;
+    line-height: 28px;
+  }
+  .mdx:not(.mdx-view) .cm-line.mdx-h2 {
+    margin-top: 4px;
+  }
+  .mdx .cm-line {
+    padding: 0;
+    line-height: 26px;
+  }
+  .mdx .cm-line:has(> br:only-child) {
+    height: 14px;
+    font-size: 0;
+    line-height: 14px;
+  }
+  .mdx:not(.mdx-view) .cm-line:has(> br:only-child) {
+    height: 12px;
+    line-height: 12px;
+  }
+  .mdx-view .cm-activeLine {
+    background: transparent;
+  }
+  .mdx .lp-frontmatter {
+    display: none;
+  }
+  .mdx .cm-line:has(.lp-task) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 45px;
+    line-height: 24px;
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .mdx:not(.mdx-view) .cm-line:has(.lp-task) {
+    min-height: 40px;
+    margin-bottom: 12px;
+    border-bottom: 0;
+  }
+  .mdx .cm-line:has(.lp-task) > img.cm-widgetBuffer,
+  .mdx .cm-line:has(.lp-task) > span:not(.lp-task):not(.lp-task ~ span) {
+    display: none;
+  }
+  .mdx .lp-task {
+    display: flex;
+    flex-shrink: 0;
+    width: 18px;
+    margin: 0;
+  }
+  .mdx .lp-task input {
+    width: 18px;
+    height: 24px;
+    margin: 0;
+    font: inherit;
+    line-height: 24px;
+    color: var(--text-2);
+    text-align: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    appearance: none;
+  }
+  .mdx .lp-task input::before {
+    content: '○';
+  }
+  .mdx .lp-task input:checked {
+    color: var(--ok);
+    background: transparent;
+  }
+  .mdx .lp-task input:checked::before {
+    content: '✓';
+  }
+  .mdx .lp-task input::after {
+    display: none;
+  }
+  .mdx .cm-line:has(.lp-task) > .lp-task ~ span,
+  .mdx .cm-line:has(.lp-task) > .lp-task ~ span span {
+    color: var(--text);
+    text-decoration: none;
+    opacity: 1;
+  }
+  .mdx .cm-line:has(.mdx-tag) {
+    line-height: 24px;
+  }
+  .mdx .mdx-tag {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    margin-right: 8px;
+    padding: 0 8px;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-radius: 999px;
+  }
+  /* the line under the caret shows its source in a box (board 10p) */
+  .mdx:not(.mdx-view) .cm-focused .cm-activeLine:not(.lp-frontmatter) {
+    display: block;
+    min-height: 0;
+    margin: 0 0 12px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: var(--ph-15);
+    line-height: 22px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .mdx:not(.mdx-view) .cm-focused .cm-activeLine span {
+    color: var(--text);
+    font-weight: 400;
+  }
+  .mdx .cm-cursor {
+    border-left-width: 2px;
+    border-left-color: var(--accent);
+  }
+}

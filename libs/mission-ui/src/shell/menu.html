@@ -1,66 +1,63 @@
-<div class="menu">
-  <header class="head">
-    <h1 class="ttl">{{ 'menu.title' | t }}</h1>
-  </header>
+<mc-app-bar [title]="'menu.app_name' | t" [root]="true">
+  <button bar-end type="button" class="ph-iconbtn" [attr.aria-label]="'menu.new_chat' | t" [attr.title]="'menu.new_chat' | t" (click)="newChat.emit()">
+    <mc-ph-icon name="plus" />
+  </button>
+</mc-app-bar>
 
-  <label class="search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-4-4" />
-    </svg>
+<div class="menu ph-scroll">
+  <label class="ph-search search">
+    <mc-ph-icon name="search" [size]="18" />
     <input type="search" [attr.aria-label]="'menu.search' | t" [attr.placeholder]="'menu.search' | t" [value]="query()" (input)="onQuery($event)" />
   </label>
 
   <nav class="places" [attr.aria-label]="'menu.places' | t">
+    @if (autopilot(); as pilot) {
+      <button type="button" class="row autopilot" [attr.aria-label]="pilot.label" (click)="place.emit('settings')">
+        <span class="ic"><mc-ph-icon name="play" /></span>
+        <span class="grow">{{ 'autopilot.title' | t }}</span>
+        <span class="ap-dot" [attr.data-tone]="pilot.tone" aria-hidden="true"></span>
+        <span class="val">{{ pilot.state }}</span>
+      </button>
+    }
     @if (notesEnabled()) {
       <button type="button" class="row" (click)="place.emit('notes')">
+        <span class="ic"><mc-ph-icon name="doc" /></span>
         <span class="grow">{{ 'shell.notes' | t }}</span>
-        <span class="chev" aria-hidden="true">›</span>
       </button>
     }
     <button type="button" class="row" (click)="place.emit('work')">
+      <span class="ic"><mc-ph-icon name="ticket" /></span>
       <span class="grow">{{ 'shell.work' | t }}</span>
       @if (needsCount() > 0) {
-        <span class="bdg">{{ needsCount() }}</span>
+        <span class="needs-dot" role="img" [attr.aria-label]="'menu.needs_you' | t"></span>
+        <span class="val bdg">{{ needsCount() }}</span>
       }
-      <span class="chev" aria-hidden="true">›</span>
     </button>
     <button type="button" class="row" (click)="place.emit('crew')">
+      <span class="ic"><mc-ph-icon name="crew" /></span>
       <span class="grow">{{ 'shell.crew' | t }}</span>
-      <span class="chev" aria-hidden="true">›</span>
-    </button>
-    @if (autopilot(); as pilot) {
-      <button type="button" class="row autopilot" [attr.aria-expanded]="autopilotOpen()" (click)="autopilotOpen.set(!autopilotOpen())">
-        <span class="ap-dot" [attr.data-tone]="pilot.tone" aria-hidden="true"></span>
-        <span class="grow">{{ pilot.text }}</span>
-        <span class="chev" aria-hidden="true">›</span>
-      </button>
-      @if (autopilotOpen()) {
-        <mc-autopilot-panel class="ap-panel" (done)="autopilotOpen.set(false)" />
+      @if (stuckCount() > 0) {
+        <span class="val">{{ 'menu.stuck' | t: { n: stuckCount() } }}</span>
       }
-    }
+    </button>
     <button type="button" class="row" (click)="place.emit('settings')">
+      <span class="ic"><mc-ph-icon name="sliders" /></span>
       <span class="grow">{{ 'shell.settings' | t }}</span>
-      <span class="chev" aria-hidden="true">›</span>
     </button>
   </nav>
 
   <section class="chats" [attr.aria-label]="'menu.chats' | t">
-    <h2 class="cap">{{ 'menu.mission_control' | t }}</h2>
-    <button type="button" class="row new" (click)="newChat.emit()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-      <span class="grow">{{ 'menu.new_chat' | t }}</span>
-    </button>
+    <div class="chats-head">
+      <h2 class="cap">{{ 'menu.chats' | t }}</h2>
+      <button type="button" class="new" [attr.aria-label]="'menu.new_chat' | t" (click)="newChat.emit()">
+        <mc-ph-icon name="plus" [size]="20" />
+      </button>
+    </div>
     @for (group of groups(); track group.label) {
-      <h3 class="group">{{ group.label }}</h3>
+      <h3 class="group">{{ groupLabel(group.label) }}</h3>
       @for (entry of group.entries; track entry.file) {
         <button type="button" class="row sess" [class.cur]="entry.file === activeFile()" (click)="openChat.emit(entry)">
-          <span class="grow st">{{ entry.title }}</span>
-          @if (entry.pending > 0) {
-            <span class="bdg" [attr.aria-label]="'menu.cards_waiting' | t: { n: entry.pending }">{{ entry.pending }}</span>
-          }
+          <span class="grow st ph-ellipsis">{{ entry.title }}</span>
           <small class="when">{{ age(entry) }}</small>
         </button>
       }

@@ -981,8 +981,8 @@ Under it the **action bar**: *Thread* (the agent's thread of the ticket) and
 *Open Review*, and, while the ticket waits at one of your checkpoints, the
 quiet link **Decision waiting · go to the card**. There is no Accept or Send
 back here: you decide in one place, the decision card (the Ready card in the
-ticket's thread; on the phone and iPad the card in Mission Control's Work
-list). The link takes you to that card.
+ticket's thread; on the iPad the card in Mission Control's Work list; on the phone
+the card pinned under the ticket). The link takes you to that card.
 
 **The Review tab.** *Open Review* opens a tab **Review · T-0121** with the
 ticket's proof on top (the same block as in the document) and the changes
@@ -1110,9 +1110,9 @@ tickets on their own; **Paused** — the running step finishes, nothing new
 starts, optionally until a time you set (*Resume at*); **Off** — you start
 every step. It reads the same everywhere: a status-bar item *● Autopilot · On*
 left of today's cost (click it or press `Mod+Alt+P`), the chip in the iPad
-header, the play icon in the phone's app bar (Work, Crew and the chat) and the
-*Autopilot* row of the phone menu. A green dot means On, orange Paused, grey
-Off. On the desktop the item opens a popover above it: the three states, a
+header, the icon in the phone's app bar (Work, Crew and the chat; it draws the
+state: play, two bars, a square) and the *Autopilot* row of the phone menu, which
+leads to Settings. A green dot means On, orange Paused, grey Off. On the desktop the item opens a popover above it: the three states, a
 sentence on what the current one means, and chips for the resume time and
 today's cost. While Paused, click *Resume time* (or *Resume at 18:00*) to type
 a time, Enter takes it; a time already past today means tomorrow, an emptied

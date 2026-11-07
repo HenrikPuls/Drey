@@ -19,7 +19,8 @@ import {
   type TicketVm,
 } from '@mission-ui/ticket/ticket.model';
 import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from '@mission-ui/team/team';
-import { MC_WORK_STATE, type McPersona, type McWorkState } from '@mission-ui/work/work.model';
+import { MC_WORK_STATE, type McLiveRunSlice, type McPersona, type McWorkState } from '@mission-ui/work/work.model';
+import { todayOfPersonas } from '@mission-ui/work/phone-rows';
 import { MC_SETTINGS_STATE } from '@mission-ui/settings/settings.model';
 import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 import { MC_PLAN_STATE, type McPlanState } from '@mission-ui/plan/plan.model';
@@ -93,6 +94,23 @@ export const appConfig: ApplicationConfig = {
           error: () => state.approvalError(),
           readOnly: () => state.readOnly(),
           estimate: (gate, persona) => state.estimateFor(gate, persona),
+          ticketText: (id) => state.readTicketText(id),
+          planStatus: (id) => {
+            if (state.planOf(id) === null) {
+              void state.refreshPlan(id);
+            }
+            return state.planOf(id);
+          },
+          spent: (id) => state.ticketSummary(id)?.cost ?? null,
+          phaseTitle: (id) => state.ticketSummary(id)?.phase ?? '',
+          replyInShape: (text) => {
+            const ticket = state.approvalTicket();
+            state.closeApproval();
+            if (ticket !== null) {
+              state.beginShape(ticket);
+              state.chatPrefill.set(text);
+            }
+          },
           edit: (edit) => state.editParts(edit),
           release: (scope) => state.releaseParts(scope),
           changeFlow: (part) => {
@@ -141,6 +159,7 @@ export const appConfig: ApplicationConfig = {
           changed: state.notesChanged,
           askAbout: (path) => state.askAboutNote(path),
           openTicket: (id) => state.openTicket(id),
+          ticketSummary: (id) => state.ticketSummary(id),
           toast: (message, kind) => state.toast(message, kind),
         };
       },
@@ -165,11 +184,18 @@ export const appConfig: ApplicationConfig = {
           get runs() {
             return state.team().runs;
           },
+          get today() {
+            return todayOfPersonas(state.team().personas as unknown as readonly { dailyCost?: number; budget?: number | null }[] | null);
+          },
+          get liveRuns() {
+            return (state.team().personas as unknown as readonly { liveRuns?: readonly McLiveRunSlice[] }[] | null ?? []).flatMap((p) => p.liveRuns ?? []);
+          },
           toast: (message, kind) => state.toast(message, kind),
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
           loadArchive: () => state.loadArchive(),
           openTicket: (ticketId) => state.openTicket(ticketId),
           openTicketSendBack: (ticketId) => state.openTicketSendBack(ticketId),
+          openPlan: (ticketId) => void state.openApproval(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
           answer: (runId, text) => state.answerRun(runId, text),
           finishManual: (ticketId) => state.finishManualStep(ticketId),
@@ -388,6 +414,7 @@ export const appConfig: ApplicationConfig = {
             state.closeTicket();
             void state.openApproval(ticketId);
           },
+          partsOf: (ticketId) => state.readParts(ticketId),
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),
           openChat: () => state.openChat(),

@@ -368,3 +368,42 @@
   z-index: 24;
   background: rgb(0 0 0 / 30%);
 }
+
+/*
+ * The phone (boards 10a–10t). The boards' px are at text size L, where
+ * --mc-text is 1.1333 (17 over the 15 px base), so the phone's scale divides
+ * it back out: L draws the board's numbers, the other four steps scale them.
+ * 13 px stays the floor (canvas decision 4). Each screen owns one .ph-scroll;
+ * it ends above the home indicator, as the board's content area does.
+ */
+.shell.phone {
+  --mc-scale: calc(var(--mc-text, 1.13333) / 1.13333);
+  --ph-13: max(13px, calc(13px * var(--mc-scale)));
+  --ph-15: calc(15px * var(--mc-scale));
+  --ph-16: calc(16px * var(--mc-scale));
+  --ph-17: calc(17px * var(--mc-scale));
+  --ph-19: calc(19px * var(--mc-scale));
+  --ph-20: calc(20px * var(--mc-scale));
+  --ph-24: calc(24px * var(--mc-scale));
+  --ph-26: calc(26px * var(--mc-scale));
+  --ph-safe-bottom: env(safe-area-inset-bottom);
+  font-size: var(--ph-17);
+  line-height: 24px;
+}
+
+.shell.phone .pane {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.shell.phone .ticket-layer,
+.shell.phone .approve-layer {
+  overflow: hidden;
+}
+
+/* The raw editor shares the layer: it takes the height only while it is showing. */
+.shell.phone .ticket-layer > mc-ticket-edit {
+  display: contents;
+}

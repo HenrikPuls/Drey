@@ -1,0 +1,130 @@
+/*
+ * The pieces the phone boards (10a–10t) repeat, on `ph-` classes that only the
+ * phone templates use, so nothing here reaches a wide layout. Text sizes come
+ * from the shell's `--ph-*` scale (app.css): the board's px at text size L.
+ */
+.ph-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: var(--ph-safe-bottom);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ph-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  color: var(--text-2);
+  background: var(--panel-2);
+  border-radius: var(--radius-control);
+}
+.ph-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  font-size: var(--ph-17);
+  line-height: 24px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  appearance: none;
+}
+.ph-search input::placeholder {
+  color: var(--text-2);
+  opacity: 1;
+}
+.ph-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.ph-grey {
+  color: var(--text-2);
+}
+.ph-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-iconbtn {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+}
+.ph-h1 {
+  margin: 0;
+  font-size: var(--ph-26);
+  font-weight: 700;
+  line-height: 32px;
+}
+.ph-h2 {
+  margin: 8px 0 0;
+  font-size: var(--ph-20);
+  font-weight: 700;
+  line-height: 28px;
+}
+.ph-primary,
+.ph-outline {
+  height: 48px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+}
+.ph-primary {
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+}
+.ph-primary:disabled,
+.ph-outline:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.ph-linkcard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 74px;
+  padding: 8px 14px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-linkcard-body {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--ph-16);
+  line-height: 24px;
+}
+.ph-linkcard-sub {
+  font-size: var(--ph-15);
+  color: var(--text-2);
+}

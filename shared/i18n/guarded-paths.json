@@ -9,6 +9,7 @@
     "libs/mission-ui/src/i18n",
     "libs/mission-ui/src/shell",
     "libs/mission-ui/src/app-bar",
+    "libs/mission-ui/src/phone",
     "apps/mission-control/src/app/notes",
     "src/app/i18n",
     "plugins/tickets/renderer/autopilot",

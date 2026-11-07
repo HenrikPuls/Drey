@@ -1,0 +1,41 @@
+<div class="card" role="radiogroup" [attr.aria-label]="question()">
+  <ng-content select="[answer-head]" />
+  <span class="q"><b>{{ question() }}</b></span>
+  @if (why(); as text) {
+    <span class="why">{{ text }}</span>
+  }
+  @for (option of options(); track $index) {
+    <button
+      type="button"
+      class="opt"
+      role="radio"
+      [class.sel]="selected() === $index"
+      [attr.aria-checked]="selected() === $index"
+      [disabled]="busy()"
+      (click)="pick.emit($index)"
+    >
+      <span class="radio" aria-hidden="true">
+        @if (selected() === $index) {
+          <span class="in"></span>
+        }
+      </span>
+      <span class="body">
+        <span>{{ option.label }}</span>
+        @if (option.consequence) {
+          <span class="cons">{{ option.consequence }}</span>
+        }
+      </span>
+      @if (option.recommended) {
+        <span class="rec">{{ 'answer.recommended' | t }}</span>
+      }
+    </button>
+  }
+  @if (error(); as message) {
+    <p class="err" role="alert">{{ message }}</p>
+  }
+  @if (marked(); as label) {
+    <button type="button" class="send" [disabled]="busy()" (click)="send.emit()">
+      {{ 'answer.send' | t: { label: label } }}
+    </button>
+  }
+</div>

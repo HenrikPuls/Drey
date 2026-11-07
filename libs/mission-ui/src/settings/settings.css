@@ -484,3 +484,347 @@
   word-break: break-all;
   user-select: all;
 }
+
+/* The phone's list and Appearance (boards 10g, 10h); only phone markup carries ph-. */
+@media (max-width: 767.98px) {
+  :host,
+  .ph-settings {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .page-body {
+    padding: 12px 16px;
+  }
+}
+.ph-list {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 16px;
+}
+.ph-list > * {
+  flex: none;
+}
+.ph-s-search {
+  margin: 0 16px 6px;
+}
+.ph-glabel {
+  padding: 14px 28px 6px;
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+}
+.ph-group {
+  display: flex;
+  flex-direction: column;
+  margin: 0 16px;
+  overflow: hidden;
+  background: var(--panel);
+  border-radius: var(--radius-control);
+}
+.ph-group-flush {
+  margin: 0;
+}
+.ph-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 12px 0 16px;
+  font: inherit;
+  font-size: var(--ph-17);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+.ph-ic {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.ph-grow {
+  flex-grow: 1;
+  min-width: 0;
+}
+.ph-val {
+  max-width: 140px;
+  font-size: var(--ph-15);
+  color: var(--text-2);
+}
+.ph-rule {
+  height: 1px;
+  background: var(--line);
+}
+.ph-rule-icon {
+  margin-left: 50px;
+}
+.ph-rule-16 {
+  margin-left: 16px;
+}
+.ph-pilot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px 12px;
+}
+.ph-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+}
+.ph-seg-btn.on {
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-2);
+}
+.ph-time {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.ph-foot {
+  padding: 12px 28px 0;
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+}
+.ph-app {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 16px 16px;
+}
+.ph-app > * {
+  flex: none;
+}
+.ph-note {
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--text-2);
+}
+.ph-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ph-cap {
+  font-size: var(--ph-13);
+  line-height: 18px;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  text-transform: uppercase;
+}
+.ph-themes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.ph-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  font: inherit;
+  font-size: var(--ph-15);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-tile b {
+  font-weight: 600;
+}
+.ph-tile.on {
+  border-color: var(--text);
+}
+.ph-chip {
+  display: flex;
+  height: 38px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-chip .s3 {
+  flex: 3 1 0;
+}
+.ph-chip .s2 {
+  flex: 2 1 0;
+}
+.ph-chip .s1 {
+  flex: 1 1 0;
+}
+.ph-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ph-dot {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  cursor: pointer;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--bg);
+}
+.ph-dot.on {
+  border-color: var(--text);
+}
+.ph-slider-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ph-a {
+  height: 44px;
+  line-height: 44px;
+  color: var(--text-2);
+  text-align: center;
+}
+.ph-a-s {
+  width: 18px;
+  font-size: var(--ph-15);
+}
+.ph-a-l {
+  width: 24px;
+  font-size: var(--ph-24);
+}
+.ph-slider {
+  position: relative;
+  flex-grow: 1;
+  min-width: 0;
+  height: 62px;
+  margin: 0 14px;
+  cursor: pointer;
+  touch-action: none;
+}
+.ph-track,
+.ph-fill {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+}
+.ph-track {
+  right: 0;
+  background: var(--line);
+}
+.ph-fill {
+  background: var(--text);
+}
+.ph-tick {
+  position: absolute;
+  top: 22px;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  background: var(--line);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--bg);
+}
+.ph-tick.lte {
+  background: var(--text);
+}
+.ph-tick-label {
+  position: absolute;
+  top: 40px;
+  font-size: var(--ph-13);
+  line-height: 18px;
+  color: var(--text-2);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.ph-tick-label.on {
+  font-weight: 600;
+  color: var(--text);
+}
+.ph-thumb {
+  position: absolute;
+  top: 22px;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  background: var(--text);
+  border: 4px solid var(--bg);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--text);
+}
+.ph-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-pv-b {
+  font-size: var(--ph-19);
+  font-weight: 600;
+  line-height: 26px;
+}
+.ph-pv-s {
+  font-size: var(--ph-17);
+  line-height: 24px;
+  color: var(--text-2);
+}
+.ph-swrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 16px;
+}
+.ph-sw {
+  position: relative;
+  flex-shrink: 0;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  background: var(--line);
+  border: 0;
+  border-radius: var(--radius-dialog);
+  appearance: none;
+  transition: background 0.2s;
+}
+.ph-sw::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  content: '';
+  background: var(--text);
+  border-radius: 50%;
+  transition: left 0.2s;
+}
+.ph-sw:checked {
+  background: var(--accent);
+}
+.ph-sw:checked::after {
+  left: 22px;
+}

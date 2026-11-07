@@ -12,6 +12,12 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { AppBar } from '../app-bar/app-bar';
+import { MC_WORK_STATE, questionCardOf, ticketPersonaOf, type McBoard, type QuestionCardVm } from '../work/work.model';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { McI18n } from '../i18n/i18n.service';
+import { AnswerCard, type AnswerOption } from '../phone/answer-card';
+import { PhoneIcon } from '../phone/icon';
+import { phoneSignal } from '../phone/phone';
 import { COMPOSER_PLACEHOLDER } from '../../../../shared/composer-placeholder';
 import { Dictation, browserDictationEnv, clockOf } from './dictation';
 import { PlanPane } from '../plan/plan-pane';
@@ -501,9 +507,9 @@ interface SheetEntry {
 @Component({
   selector: 'mc-chat',
   templateUrl: './chat.html',
-  styleUrl: './chat.css',
+  styleUrls: ['../phone/kit.css', './chat.css', './phone.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, PlanPane, AppBar],
+  imports: [NgTemplateOutlet, PlanPane, AppBar, AnswerCard, McI18nPipe, PhoneIcon],
 })
 export class Chat {
   protected readonly state: McChatState =
@@ -744,6 +750,8 @@ export class Chat {
   private readonly pinToNewest = effect(() => {
     this.timeline();
     this.streaming();
+    this.linkedPick();
+    this.picked();
     const file = this.active()?.file ?? null;
     if (file !== this.lastPinnedFile) {
       // A session switch (or the thread's first mount) always shows the
@@ -754,6 +762,12 @@ export class Chat {
     const el = this.thread()?.nativeElement;
     if (el !== undefined && this.follow()) {
       el.scrollTop = el.scrollHeight;
+      // The phone's answer card grows after this pass: its Send button appears on a mark.
+      if (this.phone()) {
+        requestAnimationFrame(() => {
+          el.scrollTop = el.scrollHeight;
+        });
+      }
     }
   });
   private lastPinnedFile: string | null = null;
@@ -1065,6 +1079,111 @@ export class Chat {
   });
 
   /** Paul's unanswered question: the last thing in the thread is his answer card. */
+  protected readonly phone = phoneSignal();
+  private readonly i18n = inject(McI18n);
+
+  /** A message's clock time for the phone's meta line. */
+  protected timeOf(at: string): string {
+    const ms = Date.parse(at);
+    return Number.isFinite(ms) ? this.i18n.formatTime(new Date(ms)) : '';
+  }
+
+  /** The phone draws every waiting change on one card (board 10m), at the first one's place. */
+  protected readonly pendingProposals = computed<readonly TimelineProposal[]>(() =>
+    this.timeline().flatMap((item) => (item.kind === 'proposal' ? [item.proposal] : [])),
+  );
+
+  /** A change's two lines: the ticket and what happens to it. */
+  protected changeOf(proposal: TimelineProposal): { readonly id: string | null; readonly text: string } {
+    const detail = proposalDetailOf(proposal.summary);
+    switch (detail?.kind) {
+      case 'transition':
+        return { id: detail.id, text: `${this.phaseTitle(detail.from)} → ${this.phaseTitle(detail.to)}` };
+      case 'promote':
+        return { id: detail.id, text: this.i18n.t('chat.phone.promote') };
+      case 'priority':
+        return { id: detail.id, text: this.i18n.t('chat.phone.priority', { to: detail.to }) };
+      case 'blocked':
+        return { id: detail.id, text: proposal.summary };
+      default:
+        return { id: null, text: proposal.summary };
+    }
+  }
+
+  protected readonly phoneOptions = computed<readonly AnswerOption[]>(() =>
+    (this.openQuestion()?.options ?? []).map((option) => ({ label: option.label, consequence: null, recommended: option.recommended })),
+  );
+
+  protected readonly pickedIndex = computed<number | null>(() => {
+    const label = this.pickedLabel();
+    const at = label === null ? -1 : this.phoneOptions().findIndex((option) => option.label === label);
+    return at === -1 ? null : at;
+  });
+
+  private readonly work = inject(MC_WORK_STATE, { optional: true });
+
+  /** A worker's open question on the ticket the last answer names (board 10a). */
+  private readonly linkedNeed = computed(() => {
+    const said = this.latestMission()?.text ?? '';
+    return (this.work?.needs ?? []).find((need) => need.kind === 'question' && (need.ticketId ?? '') !== '' && said.includes(need.ticketId!)) ?? null;
+  });
+
+  /** The ticket card in the thread: the session's ticket, else the one the answer asks about. */
+  protected readonly linkedTicket = computed<{ readonly id: string; readonly title: string; readonly line: string } | null>(() => {
+    const id = this.active()?.ticket ?? this.linkedNeed()?.ticketId ?? null;
+    if (id === null) {
+      return null;
+    }
+    const entry = this.state.ticketSummary?.(id) ?? null;
+    if (entry === null) {
+      return null;
+    }
+    const persona = this.work === null ? null : ticketPersonaOf(this.work.board as McBoard | null, id, this.work.personas);
+    return {
+      id,
+      title: entry.title,
+      line:
+        this.linkedNeed() !== null && persona !== null
+          ? this.i18n.t('chat.phone.linked_question', { id, phase: entry.phase, name: persona.title })
+          : [id, entry.phase].join(' · '),
+    };
+  });
+
+  protected readonly linkedCard = computed<QuestionCardVm | null>(() => {
+    const need = this.linkedNeed();
+    return need === null ? null : questionCardOf(need);
+  });
+  protected readonly linkedPick = signal<number | null>(null);
+  protected readonly linkedBusy = signal(false);
+  protected readonly linkedDone = signal(false);
+  protected readonly linkedError = signal<string | null>(null);
+
+  /** The one acting tap: the same answer the ticket's card sends. */
+  protected async sendLinked(card: QuestionCardVm): Promise<void> {
+    const at = this.linkedPick();
+    const option = at === null ? undefined : card.options[at];
+    const answer = this.work?.answer;
+    if (option === undefined || card.runId === null || answer === undefined) {
+      return;
+    }
+    this.linkedBusy.set(true);
+    this.linkedError.set(null);
+    try {
+      const reply = await answer.call(this.work, card.runId, option.answerText);
+      if (reply.ok) {
+        this.linkedDone.set(true);
+      } else {
+        this.linkedError.set(reply.error);
+      }
+    } finally {
+      this.linkedBusy.set(false);
+    }
+  }
+
+  protected openLinked(id: string): void {
+    this.state.openTicket?.(id);
+  }
+
   protected readonly openQuestion = computed(() => {
     const last = this.messages()[this.messages().length - 1];
     return last !== undefined && last.kind === 'question' && (last.options?.length ?? 0) >= 2 && !this.readOnly() ? last : null;

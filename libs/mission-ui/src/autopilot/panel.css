@@ -82,3 +82,98 @@
 .note.err {
   color: var(--danger);
 }
+
+/* The phone's sheet (board 10t). */
+.ph-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--ph-17);
+  line-height: 24px;
+}
+.ph-grab {
+  align-self: center;
+  width: 36px;
+  height: 5px;
+  background: var(--line);
+  border-radius: 999px;
+}
+.ph-head {
+  display: flex;
+  align-items: center;
+}
+.ph-title {
+  flex-grow: 1;
+  font-size: var(--ph-17);
+}
+.ph-resume {
+  position: relative;
+  font-size: var(--ph-13);
+  color: var(--text-2);
+}
+.ph-resume input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.ph-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ph-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-row.on {
+  background: var(--panel-2);
+  border-color: var(--text);
+}
+.ph-ic {
+  display: flex;
+  color: var(--text-2);
+}
+.ph-ic[data-tone='positive'] {
+  color: var(--ok);
+}
+.ph-ic[data-tone='attention'] {
+  color: var(--accent-peach);
+}
+.ph-body {
+  display: flex;
+  flex-grow: 1;
+  flex-direction: column;
+}
+.ph-sentence {
+  font-size: var(--ph-15);
+  line-height: 20px;
+  color: var(--text-2);
+}
+.ph-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  font: inherit;
+  font-size: var(--ph-16);
+  color: var(--danger);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ph-stop.armed {
+  border-color: var(--danger);
+}

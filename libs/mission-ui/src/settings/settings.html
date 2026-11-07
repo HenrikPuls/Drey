@@ -1,3 +1,125 @@
+@if (phone()) {
+  <div class="settings ph-settings">
+    @if (shown() === null) {
+      <mc-app-bar [title]="'shell.settings' | t" />
+      <div class="ph-scroll ph-list">
+        <label class="ph-search ph-s-search">
+          <mc-ph-icon name="search" [size]="18" />
+          <input type="search" [attr.aria-label]="'settings.phone.search' | t" [attr.placeholder]="'settings.phone.search' | t" [value]="query()" (input)="onQuery($event)" />
+        </label>
+        @for (group of phoneGroups(); track group.key) {
+          <span class="ph-glabel">{{ group.label }}</span>
+          <div class="ph-group">
+            @for (row of group.rows; track row.id; let last = $last) {
+              <button type="button" class="ph-row" (click)="open(row.id)">
+                <span class="ph-ic"><mc-ph-icon [name]="row.icon" /></span>
+                <span class="ph-grow ph-ellipsis">{{ row.label }}</span>
+                @if (row.value !== '') {
+                  <span class="ph-val ph-ellipsis">{{ row.value }}</span>
+                }
+                <span class="ph-ic"><mc-ph-icon name="chev" [size]="18" /></span>
+              </button>
+              @if (!last) {
+                <div class="ph-rule ph-rule-icon"></div>
+              }
+            }
+          </div>
+        }
+        @if (autopilot(); as pilot) {
+          <span class="ph-glabel">{{ 'settings.phone.autopilot_group' | t }}</span>
+          <div class="ph-group">
+            <div class="ph-pilot">
+              <span>{{ 'autopilot.title' | t }}</span>
+              <div class="ph-seg" role="radiogroup" [attr.aria-label]="'autopilot.title' | t">
+                @for (kind of autopilotKinds; track kind) {
+                  <button type="button" role="radio" class="ph-seg-btn" [class.on]="pilot.state === kind" [attr.aria-checked]="pilot.state === kind" [disabled]="autopilotReadOnly()" (click)="pickAutopilot(kind)">{{ 'autopilot.state.' + kind | t }}</button>
+                }
+              </div>
+              @if (autopilotError(); as words) {
+                <p class="inline-error" role="alert">{{ words }}</p>
+              }
+            </div>
+            <div class="ph-rule ph-rule-16"></div>
+            <label class="ph-row">
+              <span class="ph-grow ph-ellipsis">{{ 'settings.phone.resume_at' | t }}</span>
+              <span class="ph-val">{{ resumeTime() }}</span>
+              <span class="ph-ic"><mc-ph-icon name="chev" [size]="18" /></span>
+              <input class="ph-time" type="time" [value]="resumeTime()" [disabled]="autopilotReadOnly()" [attr.aria-label]="'settings.phone.resume_at' | t" (change)="onResumeTime($event)" />
+            </label>
+          </div>
+        }
+        <span class="ph-foot">{{ 'settings.phone.foot' | t }}</span>
+      </div>
+    } @else if (shown() === 'appearance') {
+      <mc-app-bar [title]="labelOf('appearance')" [back]="'shell.settings' | t" (backed)="back()" />
+      <div class="ph-scroll ph-app">
+        <span class="ph-note">{{ 'settings.phone.appearance_note' | t }}</span>
+        <div class="ph-sec">
+          <span class="ph-cap">{{ 'settings.phone.theme' | t }}</span>
+          <div class="ph-themes">
+            @for (t of themes; track t) {
+              <button type="button" class="ph-tile" [class.on]="theme.name() === t" [attr.aria-pressed]="theme.name() === t" (click)="pickTheme(t)">
+                <span class="ph-chip">
+                  <span class="s3" [style.background]="swatch(t).bg"></span>
+                  <span class="s2" [style.background]="swatch(t).panel"></span>
+                  <span class="s1" [style.background]="swatch(t).accent"></span>
+                </span>
+                <b>{{ themeLabel(t) }}</b>
+              </button>
+            }
+          </div>
+        </div>
+        <div class="ph-sec">
+          <span class="ph-cap">{{ 'settings.phone.highlight' | t }}</span>
+          <div class="ph-dots" role="group" [attr.aria-label]="'settings.phone.highlight' | t">
+            @for (a of phoneAccents; track a) {
+              <button type="button" class="ph-dot" [class.on]="theme.accent() === a" [attr.aria-pressed]="theme.accent() === a" [attr.aria-label]="accentLabel(a)" [style.background]="accentColor(a)" (click)="pickAccent(a)"></button>
+            }
+          </div>
+          <span class="ph-note">{{ 'settings.phone.highlight_note' | t: { name: accentLabel(theme.accent()) } }}</span>
+        </div>
+        <div class="ph-sec">
+          <span class="ph-cap">{{ 'settings.phone.text_size' | t }}</span>
+          <div class="ph-slider-row">
+            <span class="ph-a ph-a-s" aria-hidden="true">{{ 'settings.phone.a' | t }}</span>
+            <div #slider class="ph-slider" role="slider" tabindex="0" [attr.aria-label]="'settings.phone.text_size_label' | t" aria-valuemin="1" aria-valuemax="5" [attr.aria-valuenow]="sizeIndex() + 1" [attr.aria-valuetext]="sizeValueText()" (pointerdown)="onSlider($event, slider)" (keydown)="onSliderKey($event)">
+              <span class="ph-track" aria-hidden="true"></span>
+              <span class="ph-fill" [style.width.%]="sizeIndex() * 25" aria-hidden="true"></span>
+              @for (s of sizes; track s; let i = $index) {
+                <span class="ph-tick" [class.lte]="i <= sizeIndex()" [style.left.%]="i * 25" aria-hidden="true"></span>
+                <span class="ph-tick-label" [class.on]="i === sizeIndex()" [style.left.%]="i * 25" aria-hidden="true">{{ s }}</span>
+              }
+              <span class="ph-thumb" [style.left.%]="sizeIndex() * 25" aria-hidden="true"></span>
+            </div>
+            <span class="ph-a ph-a-l" aria-hidden="true">{{ 'settings.phone.a' | t }}</span>
+          </div>
+          <span class="ph-note">{{ 'settings.phone.sizes_note' | t }}</span>
+          <div class="ph-preview" [style.background]="previewSwatch().panel">
+            <b class="ph-pv-b">{{ 'settings.phone.preview_title' | t }}</b>
+            <span class="ph-pv-s">{{ 'settings.phone.preview_line' | t }}</span>
+          </div>
+        </div>
+        <div class="ph-group ph-group-flush">
+          <label class="ph-swrow">
+            <span class="ph-grow">{{ 'settings.phone.compact' | t }}</span>
+            <input type="checkbox" role="switch" class="ph-sw" [checked]="theme.compact()" (change)="onCompact($event)" />
+          </label>
+          <div class="ph-rule ph-rule-16"></div>
+          <label class="ph-swrow">
+            <span class="ph-grow">{{ 'settings.phone.motion' | t }}</span>
+            <input type="checkbox" role="switch" class="ph-sw" [checked]="theme.reduceMotion()" (change)="onMotion($event)" />
+          </label>
+        </div>
+      </div>
+    } @else {
+      <mc-app-bar [title]="labelOf(shown()!)" [back]="'shell.settings' | t" (backed)="back()" />
+      <div class="ph-scroll">
+        <ng-container [ngTemplateOutlet]="pageBody" [ngTemplateOutletContext]="{ $implicit: shown() }" />
+      </div>
+    }
+    <ng-container [ngTemplateOutlet]="videosDialog" />
+  </div>
+} @else {
 <div class="settings" [class.on-page]="shown() !== null">
   <section class="cats" aria-label="Settings categories">
     <mc-app-bar title="Settings" />
@@ -89,6 +211,22 @@
               </label>
             </div>
           }
+          @default {
+            <ng-container [ngTemplateOutlet]="pageBody" [ngTemplateOutletContext]="{ $implicit: current }" />
+          }
+        }
+      </div>
+    </section>
+  }
+
+  <ng-container [ngTemplateOutlet]="videosDialog" />
+</div>
+
+}
+
+<ng-template #pageBody let-current>
+  <div class="page-body">
+  @switch (current) {
           @case ('chat') {
             <p class="note">Taken from Drey's assistant settings; change it there.</p>
             @if (error(); as message) {
@@ -238,11 +376,11 @@
               </div>
             }
           }
-        }
-      </div>
-    </section>
   }
+  </div>
+</ng-template>
 
+<ng-template #videosDialog>
   @if (confirming()) {
     <div class="scrim">
       <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Keep videos in git?">
@@ -263,4 +401,4 @@
       </div>
     </div>
   }
-</div>
+</ng-template>

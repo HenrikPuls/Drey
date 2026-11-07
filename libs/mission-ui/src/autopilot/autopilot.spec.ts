@@ -164,7 +164,7 @@ describe('the panel', () => {
 });
 
 describe('the phone button and its sheet', () => {
-  it('is a play icon with the state dot; a tap opens a sheet of three rows with Stop-now below', () => {
+  it('names the state with its icon and dot; a tap opens a sheet of three rows with Stop-now below', () => {
     provide({ state: 'paused' });
     const fixture = TestBed.createComponent(AutopilotButton);
     fixture.detectChanges();
@@ -177,7 +177,8 @@ describe('the phone button and its sheet', () => {
     fixture.detectChanges();
     expect(root.querySelector('.sheet')!.getAttribute('role')).toBe('dialog');
     expect(radios(root)).toHaveLength(3);
-    expect(root.querySelector('.stop')).not.toBeNull();
+    expect(root.querySelector('.ph-stop')).not.toBeNull();
+    expect(root.querySelectorAll('.ph-sentence')).toHaveLength(3);
   });
 
   it('closes from the scrim and the close control, and renders nothing without a chain', () => {
@@ -196,16 +197,19 @@ describe('the phone button and its sheet', () => {
 });
 
 describe('the menu row', () => {
-  it('reads "Autopilot · On" with its dot and unfolds the panel', () => {
+  it('reads Autopilot with its dot and state, and leads to Settings where the switch is', () => {
     provide({ state: 'on' });
     const fixture = TestBed.createComponent(Menu);
+    const places: string[] = [];
+    fixture.componentInstance.place.subscribe((place) => places.push(place));
     fixture.detectChanges();
     const row = el(fixture).querySelector<HTMLButtonElement>('.row.autopilot')!;
-    expect(row.textContent).toContain('Autopilot · On');
+    expect(row.querySelector('.grow')!.textContent).toBe('Autopilot');
+    expect(row.querySelector('.val')!.textContent).toBe('On');
+    expect(row.getAttribute('aria-label')).toBe('Autopilot, On');
     expect(row.querySelector('.ap-dot')!.getAttribute('data-tone')).toBe('positive');
     row.click();
-    fixture.detectChanges();
-    expect(radios(el(fixture))).toHaveLength(3);
+    expect(places).toEqual(['settings']);
   });
 
   it('has no row without a chain', () => {
