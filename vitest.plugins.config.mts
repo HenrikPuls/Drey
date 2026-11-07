@@ -20,7 +20,10 @@ import { defineConfig } from 'vitest/config';
  * temp-dir cleanups raced slow children (docs/testing-flakes.md); with
  * the cap the whole suite is both green under overlap and faster.
  */
-const maxWorkers = Math.max(2, Math.min(8, Math.floor(availableParallelism() / 4)));
+// Cap 4, not 8 (req-145, owner 2026-11-07): the suite runs beside other sessions'
+// gates and builds on one machine, and each worker holds a few hundred MB (JSDOM,
+// the engine specs' processes); eight of them per session is what exhausted the RAM.
+const maxWorkers = Math.max(2, Math.min(4, Math.floor(availableParallelism() / 4)));
 
 /**
  * Specs that spawn real git / dk / node processes (a single test is 1-5 s

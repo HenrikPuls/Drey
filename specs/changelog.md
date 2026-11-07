@@ -1,3 +1,11 @@
+### req-145 — the out-of-Angular suite runs with at most 4 workers
+
+Owner request, outside the list (2026-11-07): the machine ran out of RAM during the day. Cause found: several
+sessions ran `npm run test:all` at once, each vitest run with up to 8 workers of a few hundred MB (JSDOM, the engine
+specs' real processes), beside builds and the sessions' own resident processes. `vitest.plugins.config.mts` caps
+the workers at 4 (was 8; still `availableParallelism() / 4`, at least 2). Costs about a minute per gate on a 32-core
+box, saves several GB per concurrent run. Entered and left the roadmap with this change.
+
 ### Milestone 201 — wave row 4.9: the Persona page, board 7k
 
 **Not yet manually verified by the owner.** Wave row 4.9 `desk-persona`. The app had no such page; a persona's setup could not be edited on the desktop at all (the Crew tab's Setup is a read-out). Rulings on the measure sheet (integrator, 2026-11-07): the three port methods reach the desktop, the instructions are read over the vault, what the engine cannot serve stays absent.
