@@ -497,3 +497,13 @@ export const PAD_FLOW_130_DRAFT = {
   ],
   reason: 'Part 3 touches the command parser, so I added a security pass by Ralf after the review. You would be told when it is done.',
 };
+
+/** 5d: the iPad's crew list: Paul runs a two-entry pool (the local model first, Claude Code as overflow). */
+export const PAD_PERSONAS = PERSONAS.map((p) => (p.id === 'paul' ? { ...p, model: 'qwen3-coder', pool: ['opencode', 'claude-code'] } : p));
+
+/** 5d: what the persona page asks besides the list: no proposals, an empty thread, twelve memory entries. */
+export const PAD_PERSONA_IMPROVEMENTS = { persona: null, proposals: [], openCount: 0, frictionCount: 0 };
+export const PAD_PERSONA_THREAD = { messages: [] };
+export const PAD_PERSONA_MEMORY = {
+  entries: Array.from({ length: 12 }, (_, i) => ({ text: `Memory entry ${i + 1}`, pinned: i === 0 })),
+};

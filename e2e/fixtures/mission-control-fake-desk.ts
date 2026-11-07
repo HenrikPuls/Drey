@@ -163,6 +163,10 @@ function boardsRoute(pathname: string, pad: boolean): unknown {
   if (pad && diff !== null) {
     return decodeURIComponent(diff[1]!) === 'T-0121' ? BOARDS.PAD_DIFF_121 : { files: [], truncated: false };
   }
+  const personaPage = /^\/api\/personas\/[^/]+\/(improvements|thread|memory)$/.exec(pathname);
+  if (pad && personaPage !== null) {
+    return { improvements: BOARDS.PAD_PERSONA_IMPROVEMENTS, thread: BOARDS.PAD_PERSONA_THREAD, memory: BOARDS.PAD_PERSONA_MEMORY }[personaPage[1] as 'improvements' | 'thread' | 'memory'];
+  }
   const session = /^\/api\/chat\/sessions\/(.+)$/.exec(pathname);
   if (session !== null) {
     const file = decodeURIComponent(session[1]!);
@@ -174,7 +178,7 @@ function boardsRoute(pathname: string, pad: boolean): unknown {
     case '/api/needs':
       return BOARDS.NEEDS;
     case '/api/personas':
-      return BOARDS.PERSONAS;
+      return pad ? BOARDS.PAD_PERSONAS : BOARDS.PERSONAS;
     case '/api/fleet':
       return BOARDS.FLEET;
     case '/api/chat/sessions':

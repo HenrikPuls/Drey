@@ -1,0 +1,259 @@
+/* The iPad's persona (board 5d): head, tabs and the Setup cards in the slot beside the crew list. Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  :host {
+    /* The existing pages size their text as 13/14/15 px times --mc-text; on the iPad that factor is the shell's own scale, so they keep the board's px. */
+    --mc-text: var(--mc-scale, 1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    font-size: var(--ph-17);
+    line-height: 24px;
+  }
+  .detail {
+    flex: 1 1 0;
+    gap: 0;
+    min-height: 0;
+  }
+  .pd-head {
+    display: flex;
+    flex: none;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 12px;
+    height: 65px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pd-who {
+    display: flex;
+    flex-grow: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pd-who b {
+    font-size: var(--ph-17);
+    line-height: 22px;
+  }
+  .pd-role {
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-role::first-letter {
+    text-transform: uppercase;
+  }
+  .pd-pause {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-tabs {
+    display: flex;
+    flex: none;
+    box-sizing: border-box;
+    gap: 4px;
+    height: 60px;
+    padding: 8px 20px;
+  }
+  .pd-tabs button {
+    height: 44px;
+    padding: 0 16px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+    white-space: nowrap;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+  .pd-tabs button.on {
+    font-weight: 600;
+    color: var(--text);
+    background: var(--panel-2);
+  }
+  .pane {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .pane-body {
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 8px 20px 20px;
+    overflow-y: auto;
+  }
+  .composer {
+    flex: none;
+    margin: 0 20px 20px;
+  }
+  .pd-setup {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    padding: 8px 20px 20px;
+    overflow-y: auto;
+  }
+  .pd-setup > * {
+    flex: none;
+  }
+  .pd-sec {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pd-cap {
+    font-size: var(--ph-13);
+    line-height: 18px;
+    letter-spacing: 0.02em;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+  .pd-pool {
+    display: flex;
+    box-sizing: content-box;
+    align-items: center;
+    gap: 12px;
+    min-height: 64px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-n {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-size: var(--ph-13);
+    font-weight: 600;
+    color: var(--text);
+    background: var(--line);
+    border-radius: 50%;
+  }
+  .pd-n.first {
+    color: var(--on-accent);
+    background: var(--text);
+  }
+  .pd-pool-body {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .pd-pool-name {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+  }
+  .pd-pool-name b {
+    font-weight: 600;
+  }
+  .pd-chip {
+    min-width: 0;
+    padding: 1px 6px;
+    font-family: var(--mono);
+    font-size: var(--ph-13);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-chip);
+  }
+  .pd-pool-note {
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-when {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 13px;
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-when-bar {
+    width: 2px;
+    height: 14px;
+    background: var(--line);
+    border-radius: 1px;
+  }
+  .pd-costs {
+    display: flex;
+    gap: 12px;
+  }
+  .pd-cost {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 2px;
+    box-sizing: border-box;
+    width: calc((100% - 24px) / 3);
+    min-width: 0;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-cost b {
+    font-size: var(--ph-20);
+    font-weight: 600;
+    line-height: 26px;
+  }
+  .pd-cost-cap {
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 4px;
+  }
+  .pd-edit {
+    height: 48px;
+    padding: 0 18px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--on-accent);
+    cursor: pointer;
+    background: var(--accent);
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+  .pd-back {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    height: 44px;
+    margin: 0 20px;
+    padding: 0 8px 0 0;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text-2);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-back mc-ph-icon {
+    transform: rotate(180deg);
+  }
+}

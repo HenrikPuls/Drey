@@ -112,7 +112,10 @@ test.describe('landscape', () => {
     await open(page);
     await area(page, 'Crew');
     await settle(page);
-    await page.locator('mc-team').getByText('Paul').first().click();
+    await page.locator('mc-team .pd-card', { hasText: 'Tessa' }).getByRole('button', { name: 'Stop', exact: true }).click();
+    await page.locator('mc-team .pd-card', { hasText: 'Paul' }).locator('.pd-head').click();
+    await page.locator('mc-persona-detail').getByRole('tab', { name: 'Setup' }).click();
+    await expect(page.locator('mc-persona-detail .pd-pool')).toHaveCount(2);
     await shot(page, 'PadTeam');
   });
 

@@ -221,6 +221,7 @@ export const appConfig: ApplicationConfig = {
           chainMaster: computed(() => state.team().chainMaster ?? null),
           pausedPersonas: computed(() => state.team().pausedPersonas ?? []),
           openPersona: (id) => state.openPersona(id),
+          openPersonaId: computed(() => state.personaDetail()?.id ?? null),
           openTicket: (ticketId) => state.openTicket(ticketId),
           toggleChainMaster: (paused) => state.chainMaster(paused),
           personaPause: (id, paused) => state.personaPause(id, paused),

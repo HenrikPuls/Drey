@@ -1,0 +1,313 @@
+/* The iPad's Crew (board 5d): the bar over the whole width, the persona list in a 320 column, the persona itself in the slot beside it. Phone and desktop web never match this query. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  :host {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0;
+    font-size: var(--ph-17);
+    line-height: 24px;
+  }
+  .pd-crew {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .pd-bar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 12px;
+    height: 53px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pd-bar b {
+    font-size: var(--ph-17);
+    line-height: 22px;
+  }
+  .pd-sum {
+    flex-grow: 1;
+    min-width: 0;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-bbtn {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-danger {
+    color: var(--danger);
+  }
+  .pd-bbtn.armed {
+    border-color: var(--danger);
+  }
+  .pd-body {
+    display: flex;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .pd-col {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    box-sizing: content-box;
+    width: 320px;
+    min-width: 0;
+    border-right: 1px solid var(--line);
+  }
+  .pd-caps {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 12px 8px;
+  }
+  .pd-cap {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    font-size: var(--ph-13);
+    line-height: 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-list {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    padding: 4px 12px 12px;
+    overflow-y: auto;
+  }
+  .pd-list > * {
+    flex: none;
+  }
+  .pd-empty {
+    margin: 0;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-card.pd-sel {
+    background: var(--panel-2);
+  }
+  .pd-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0;
+    font: inherit;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-who {
+    display: flex;
+    flex-grow: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pd-role {
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--text-2);
+  }
+  .pd-role::first-letter {
+    text-transform: uppercase;
+  }
+  .pd-state {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--ph-13);
+    line-height: 24px;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .pd-sdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    background: var(--text-2);
+    border-radius: 50%;
+  }
+  .pd-sdot[data-tone='running'] {
+    background: var(--accent);
+  }
+  .pd-sdot[data-tone='attention'] {
+    background: var(--accent-peach);
+  }
+  .pd-budget {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pd-budget-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--ph-13);
+    line-height: 18px;
+  }
+  .pd-budget-line > :last-child {
+    font-variant-numeric: tabular-nums;
+  }
+  .pd-grey {
+    color: var(--text-2);
+  }
+  .pd-over {
+    color: var(--danger);
+  }
+  .pd-bar4 {
+    height: 4px;
+    background: var(--line);
+    border-radius: var(--radius-chip);
+  }
+  .pd-fill {
+    height: 4px;
+    border-radius: var(--radius-chip);
+  }
+  .pd-run {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-run.pd-stuck {
+    border-color: var(--accent-peach);
+  }
+  .pd-run-top {
+    display: flex;
+    gap: 8px;
+  }
+  .pd-run-title {
+    flex-grow: 1;
+    min-width: 0;
+    height: 44px;
+    padding: 0;
+    overflow: hidden;
+    font: inherit;
+    line-height: 44px;
+    color: var(--text);
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .pd-age {
+    align-self: center;
+    font-size: var(--ph-13);
+    line-height: 24px;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .pd-run-line {
+    font-size: var(--ph-13);
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .pd-stuck .pd-run-line {
+    color: var(--accent-peach);
+  }
+  .pd-stuck-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 6px;
+  }
+  .pd-stuck-text {
+    font-size: var(--ph-15);
+    line-height: 20px;
+    color: var(--accent-peach);
+  }
+  .pd-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pd-tile {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-tile.pd-danger {
+    color: var(--danger);
+  }
+  .pd-confirm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    font-size: var(--ph-15);
+    line-height: 20px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .pd-confirm > span {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .pd-cbtn {
+    flex: none;
+    height: 44px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: var(--ph-15);
+    color: var(--text);
+    white-space: nowrap;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+  }
+  .pd-cbtn-danger {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+}

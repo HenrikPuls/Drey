@@ -585,5 +585,19 @@
   "flow.pad.no_changes": "No changes yet",
   "flow.pad.reset": "Reset to standard flow",
   "flow.pad.discard": "Discard",
-  "flow.pad.save": "Save flow"
+  "flow.pad.save": "Save flow",
+  "crew.pad.today_of": "{cost} of {budget} today",
+  "crew.pad.today_only": "{cost} today",
+  "crew.pad.stuck_context": "No output for {n, plural, one {# minute} other {# minutes}}, context {pct} % full.",
+  "crew.pad.tabs": "Persona",
+  "crew.pad.tab_chat": "Chat",
+  "crew.pad.tab_memory": "Memory",
+  "crew.pad.tab_memory_n": "Memory · {n}",
+  "crew.pad.tab_setup": "Setup",
+  "crew.pad.pause_x": "Pause {name}",
+  "crew.pad.resume_x": "Resume {name}",
+  "crew.pad.of_budget": "of {budget}",
+  "crew.pad.edit_setup": "Edit setup",
+  "crew.pad.back_to_setup": "Back to the setup",
+  "crew.pad.list": "Personas"
 }

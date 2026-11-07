@@ -423,6 +423,11 @@
   grid-row: 3;
 }
 
+.shell.ipad.crew .pane-team {
+  grid-column: 1 / -1;
+  grid-row: 2 / -1;
+}
+
 .shell.ipad.crew.no-left {
   grid-template-columns: 0 minmax(0, 1fr) 0;
 }
