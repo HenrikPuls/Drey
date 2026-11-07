@@ -172,6 +172,12 @@ export interface InstructionInput {
    */
   readonly interactive?: InteractiveMode;
   /**
+   * The resolved persona's skills as one section (D-46): stable like the
+   * persona's prompt, so it rides right behind it and a changed skill changes
+   * the digest. Null/absent = no section, byte-identical briefs.
+   */
+  readonly skillsSection?: string | null;
+  /**
    * The resolved persona's curated memory, already sliced by
    * `context-pack`'s `personaMemorySection` (E3, ADR-0088): carried as the
    * first of the instruction's variable parts — the stable prefix
@@ -301,6 +307,10 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   const prompt = input.prompt?.trim();
   if (prompt != null && prompt !== '') {
     parts.push(prompt);
+  }
+  const skills = input.skillsSection?.trim();
+  if (skills != null && skills !== '') {
+    parts.push(skills);
   }
   const plan = input.plan?.trim();
   if (plan != null && plan !== '') {
@@ -433,6 +443,7 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
     input.interactive ?? null,
     input.worktreePath,
     input.branch,
+    ...(skills != null && skills !== '' ? [skills] : []),
   ]);
   return { text: parts.join('\n\n'), truncations, continuation, stable };
 }
@@ -498,6 +509,8 @@ export interface ScoutInstructionInput {
   readonly repoInstructions: string | null;
   /** The ticket's further repos: read-only grounds, never write there. */
   readonly extraRepos?: readonly { readonly name: string; readonly path: string }[];
+  /** The resolved persona's `## Skills` section (D-46); absent = no section. */
+  readonly skillsSection?: string | null;
   /** The resolved persona's `## Memory` slice (E3); absent = no section. */
   readonly memorySection?: string | null;
   /** The resolved persona's `## Coaching` slice (U4); absent = no section. */
@@ -530,6 +543,10 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
   const prompt = input.prompt?.trim();
   if (prompt != null && prompt !== '') {
     parts.push(prompt);
+  }
+  const skills = input.skillsSection?.trim();
+  if (skills != null && skills !== '') {
+    parts.push(skills);
   }
   const plan = input.plan?.trim();
   if (plan != null && plan !== '') {
@@ -590,6 +607,7 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
     description,
     'scout',
     input.readGround,
+    ...(skills != null && skills !== '' ? [skills] : []),
   ]);
   return { text: parts.join('\n\n'), truncations, continuation, stable };
 }

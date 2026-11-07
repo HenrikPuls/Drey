@@ -337,6 +337,8 @@ export function parseFlowDraft(payload: unknown): Parsed<FlowDraftCommand> {
 }
 
 export interface StartRunCommand {
+  /** Who asks (D-41); the board refuses a start without one. A device's is set by the router, not by its body. */
+  readonly origin: string;
   readonly ticketId: string;
   readonly workerChoice: string | null;
   readonly permissionMode: PermissionMode;
@@ -354,7 +356,9 @@ export function parseStartRun(payload: unknown): Parsed<StartRunCommand> {
   const handover = h === 'fresh' || h === 'resume' || h === 'resume-compact' || h === 'auto' ? h : null;
   const worker = p['worker'];
   const i = p['interactive'];
+  const origin = p['origin'];
   return ok({
+    origin: typeof origin === 'string' ? origin.trim() : '',
     ticketId: p['id'],
     workerChoice: typeof worker === 'string' && worker.trim() !== '' ? worker.trim() : null,
     permissionMode: p['permissionMode'] === 'bypass' ? 'bypass' : 'accept-edits',

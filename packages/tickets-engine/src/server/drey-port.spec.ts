@@ -245,7 +245,7 @@ describe('DreyTicketsPort', () => {
   });
 
   it('refuses a bypass run unless the setting allows it', async () => {
-    const cmd = { ticketId: 'T-0001', workerChoice: null, permissionMode: 'bypass', handover: null, interactive: null } as const;
+    const cmd = { origin: 'spec', ticketId: 'T-0001', workerChoice: null, permissionMode: 'bypass', handover: null, interactive: null } as const;
     const refused = fakes();
     const strict = new DreyTicketsPort(refused.board, refused.fleet, new ChangeHub(), { allowBypass: () => false });
     expect(await strict.startRun(cmd)).toEqual({ ok: false, error: BYPASS_REFUSAL });
@@ -708,6 +708,7 @@ describe('handoffRun (E12-4)', () => {
     await expect(port.handoffRun({ runId: 'r1' })).resolves.toEqual({ ok: true, runId: 'r1' });
     expect(fleet.stop).toHaveBeenCalledWith('r1', 'handed to Claude Code');
     expect(board.startRun).toHaveBeenCalledWith({
+      origin: expect.stringContaining('handoff of '),
       ticketId: 'T-0007',
       workerChoice: 'claude-code',
       permissionMode: 'accept-edits',

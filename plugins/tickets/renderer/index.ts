@@ -1488,6 +1488,7 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
       close();
       void runMutation('Starting the run', () =>
         invokeBoard('fleetStart', {
+          origin: 'drey:run-dialog',
           id: card.id,
           worker: workerValue,
           permissionMode: permission.value,
@@ -1570,7 +1571,7 @@ async function startInteractive(
 ): Promise<string | null> {
   const label = 'Starting the plan dialog';
   const result = await runMutation(label, () =>
-    invokeBoard('fleetStart', { id: card.id, worker: card.worker, permissionMode: 'accept-edits', interactive: mode }),
+    invokeBoard('fleetStart', { origin: 'drey:plan-dialog', id: card.id, worker: card.worker, permissionMode: 'accept-edits', interactive: mode }),
   );
   if (!result.ok) {
     return null;

@@ -173,6 +173,7 @@ describe('composeRunRequest carries the home rule', () => {
 
   const compose = (over: Partial<RepoRef> = {}) =>
     composeRunRequest({
+      origin: 'spec',
       card,
       ticketText,
       vaultPath: 'V:/tickets',

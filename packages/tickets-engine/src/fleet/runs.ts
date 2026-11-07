@@ -917,6 +917,7 @@ export class RunSupervisor {
     }
 
     const id = `R-${this.stamp().replaceAll(/[-:.]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 6)}`;
+    this.deps.log(`run ${id} (${request.ticketId}): asked by ${request.origin ?? 'a reopened session'}`);
     const dir = path.join(this.deps.root, 'runs', id);
     // The home rule's path (ADR-0080), computed in `composeRunRequest` and
     // carried on the request — the runner never derives paths. For a
@@ -1000,6 +1001,7 @@ export class RunSupervisor {
       // E3: the persona the dispatcher's ladder resolved for this ticket
       // (null on ring dispatches and on every pre-personas caller).
       persona: options.persona ?? null,
+      ...(request.origin !== undefined ? { origin: request.origin } : {}),
       provider: request.provider,
       state: 'starting',
       pid: null,
@@ -1470,6 +1472,7 @@ export class RunSupervisor {
     return this.start(
       {
         ...restored,
+        origin: `resume of ${runId}`,
         instruction:
           'The runner restarted and this session was resumed. Continue the step where you left off; ' +
           'your original brief is earlier in this conversation. Do not search the disk for files already named in it.',
@@ -1699,6 +1702,10 @@ export class RunSupervisor {
     if (request.instruction.trim() === '') {
       failures.push('the instruction is empty');
     }
+    // D-41: a start nobody can be named for was the one thing that could not be traced afterwards.
+    if ((request.origin ?? '').trim() === '') {
+      failures.push('the start names no origin - every start says who asks for it');
+    }
     if (request.branch !== `t/${request.ticketId}`) {
       failures.push(`the branch is not the deterministic t/${request.ticketId}`);
     }
@@ -1710,7 +1717,7 @@ export class RunSupervisor {
     // plan phase; 'none' — a scout run, concept §5.6 — never gates, and
     // an interactive dialog's deliverable is the conversation, req-65.)
     if (request.acceptance.length === 0 && request.gate === 'commands') {
-      failures.push('the ticket has no acceptance criteria — the machine gate would have nothing to run');
+      failures.push('the request carries no gate commands: the machine gate runs only the "- [ ] `command`" lines of the ticket, and there are none');
     }
     return failures;
   }

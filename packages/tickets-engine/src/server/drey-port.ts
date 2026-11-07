@@ -403,6 +403,7 @@ export class DreyTicketsPort implements TicketsRemotePort {
       await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
     }
     return this.boardService.startRun({
+      origin: `handoff of ${cmd.runId}`,
       ticketId: run.ticketId,
       workerChoice: 'claude-code',
       permissionMode: 'accept-edits',

@@ -122,6 +122,7 @@ async function writeTicket(): Promise<string> {
 
 function request(overrides: Partial<RunRequest> = {}): RunRequest {
   return {
+    origin: 'spec',
     ticketId: 'T-0001',
     ticketsVaultPath: vaultDir,
     ticketRelPath: 'tickets/plan/T-0001.md',
@@ -1143,6 +1144,27 @@ describe('RunSupervisor', () => {
     });
   });
 
+  describe('every start says who asks (D-41)', () => {
+    it('a start with no origin is refused, and nothing spawns', async () => {
+      const rel = await writeTicket();
+      const { sup, adapter } = supervisor();
+      const { origin: _none, ...nameless } = request({ ticketRelPath: rel });
+      const outcome = await sup.start(nameless);
+      expect(outcome).toMatchObject({ ok: false, error: expect.stringContaining('names no origin') });
+      expect(adapter.starts).toHaveLength(0);
+    });
+
+    it('the origin lands in the runner log and on the record', async () => {
+      const rel = await writeTicket();
+      const logs: string[] = [];
+      const { sup } = supervisor({ log: (line) => logs.push(line) });
+      const started = await sup.start(request({ ticketRelPath: rel, origin: 'drey:run-dialog' }));
+      const id = (started as { run: { id: string } }).run.id;
+      expect(logs).toContain(`run ${id} (T-0001): asked by drey:run-dialog`);
+      expect(sup.get(id)?.origin).toBe('drey:run-dialog');
+    });
+  });
+
   it('validates the deterministic branch and the machine gate before spawning', async () => {
     const { sup } = supervisor();
     await writeTicket();
@@ -1150,7 +1172,7 @@ describe('RunSupervisor', () => {
     expect(wrongBranch.ok).toBe(false);
     const noGate = await sup.start(request({ acceptance: [] }));
     expect(noGate.ok).toBe(false);
-    expect((noGate as { error: string }).error).toContain('no acceptance criteria');
+    expect((noGate as { error: string }).error).toContain('carries no gate commands');
     const wrongPath = await sup.start(request({ ticketRelPath: 'tickets/build/T-0001.md' }));
     expect(wrongPath.ok).toBe(false);
     expect((wrongPath as { error: string }).error).toContain('does not match id and phase');

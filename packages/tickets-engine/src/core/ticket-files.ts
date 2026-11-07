@@ -401,6 +401,36 @@ export function acceptanceCommands(text: string): string[] {
   return commands;
 }
 
+/**
+ * What `acceptanceCommands` found, in words a refusal can use (D-31): the gate
+ * runs only the backticked lines, so a section of prose is not "no criteria".
+ */
+export function acceptanceFinding(text: string): string {
+  let inCriteria = false;
+  let sectionFound = false;
+  let prose = 0;
+  for (const line of maskFences(text).split('\n')) {
+    if (/^##\s/.test(line)) {
+      inCriteria = false;
+    } else if (/^###\s+Acceptance criteria\s*$/.test(line)) {
+      inCriteria = true;
+      sectionFound = true;
+    } else if (/^###\s/.test(line)) {
+      inCriteria = false;
+    } else if (inCriteria && /^-\s+\[.]\s+/.test(line) && !/^-\s+\[.]\s+`[^`]+`/.test(line)) {
+      prose += 1;
+    }
+  }
+  const counted = 'the machine gate runs only "- [ ] `command`" lines under "### Acceptance criteria" and found none';
+  if (!sectionFound) {
+    return `${counted}; the ticket has no such section.`;
+  }
+  if (prose === 0) {
+    return `${counted}; the section is empty.`;
+  }
+  return `${counted}; the ${prose} ${prose === 1 ? 'criterion there is' : 'criteria there are'} prose.`;
+}
+
 // ---------------------------------------------------------------------------
 // Patching (transitions, claims) — targeted node mutation, house style.
 

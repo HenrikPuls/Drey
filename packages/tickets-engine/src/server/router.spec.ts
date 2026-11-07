@@ -178,6 +178,16 @@ describe('route', () => {
     expect(remote.answer).toHaveBeenCalledWith({ runId: 'r-1', answers: { q0: 'Yes' } });
   });
 
+  it("a device's run start names the device the token proved, whatever its body says (D-41)", async () => {
+    const { deps, devices, remote } = setup();
+    const { token, device } = await devices.add('iPad', false, new Date());
+    await route(
+      req({ method: 'POST', path: '/api/runs', authorization: `Bearer ${token}`, body: { id: 'T-0052', origin: 'chain' } }),
+      deps,
+    );
+    expect(remote.startRun).toHaveBeenCalledWith(expect.objectContaining({ ticketId: 'T-0052', origin: `device iPad (${device.id})` }));
+  });
+
   it('routes the E12-4 hand-off to the port with the run id from the path', async () => {
     const { deps, devices, remote } = setup();
     const { token } = await devices.add('iPad', false, new Date());

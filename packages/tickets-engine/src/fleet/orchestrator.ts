@@ -23,7 +23,7 @@ import { assembleBoard, type BoardFile } from '../core/ticket-board';
 import { promptVersion, stripPromptVersion } from '../core/default-prompts';
 import { patchTicketFile } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
-import { HUMAN_PERSONA_ID, PERSONAS_DIR, isHumanPersona, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution } from '../core/persona';
+import { HUMAN_PERSONA_ID, PERSONAS_DIR, isHumanPersona, loadPersonaSkills, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution, type PersonaSkill } from '../core/persona';
 import { chainPersonaAt, manualStepAfter } from '../core/manual-gate';
 import { renderStatusComment } from '../core/status-comment';
 import { dkTargetFor } from './dk-target';
@@ -98,6 +98,8 @@ interface TicketPersona {
   readonly memory: string;
   /** The persona's thread.md text ('' when absent) — the coaching slice's source. */
   readonly coaching: string;
+  /** The texts of the skills its record names (D-46). */
+  readonly skills: readonly PersonaSkill[];
 }
 
 /**
@@ -1621,6 +1623,7 @@ export class Orchestrator {
         let prompt: string | null = null;
         let memory = '';
         let coaching = '';
+        let skills: readonly PersonaSkill[] = [];
         if (resolution.persona !== null) {
           const text = await fileOf(`${PERSONAS_DIR}/${resolution.persona}/persona.md`);
           if (text !== null) {
@@ -1634,9 +1637,14 @@ export class Orchestrator {
             prompt = await fileOf(`${PERSONAS_DIR}/${persona.id}/prompt.md`);
             memory = (await fileOf(`${PERSONAS_DIR}/${persona.id}/memory.md`)) ?? '';
             coaching = (await fileOf(`${PERSONAS_DIR}/${persona.id}/thread.md`)) ?? '';
+            const loaded = await loadPersonaSkills(fileOf, persona.id, persona.skills);
+            skills = loaded.skills;
+            if (loaded.missing.length > 0) {
+              this.noteSkip(`${card.id}:skills`, `persona ${persona.id}: no text for skill ${loaded.missing.join(', ')} - ${card.id} runs without it`);
+            }
           }
         }
-        personas.set(card.id, { resolution, persona, prompt, memory, coaching });
+        personas.set(card.id, { resolution, persona, prompt, memory, coaching, skills });
       }
     }
     return personas;
@@ -1899,6 +1907,7 @@ export class Orchestrator {
       repoInstructions,
       diffStat,
       gateFailure,
+      origin: 'chain',
       caps: config.caps ?? DEFAULT_FLEET_CAPS,
       structuralGateAllowed: firstWorker?.id === workingPhaseId,
       dispatchedBy: workingPhaseId,
@@ -1919,6 +1928,7 @@ export class Orchestrator {
               prompt: personaPrompt,
               memory: entry?.memory ?? '',
               coaching: entry?.coaching ?? '',
+              skills: entry?.skills ?? [],
             },
           }
         : {}),

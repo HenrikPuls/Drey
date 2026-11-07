@@ -66,7 +66,7 @@ export interface Persona {
   readonly models: PersonaModels;
   /** UI color (`#rrggbb`), chips and avatars. */
   readonly color: string;
-  /** Reusable skill files under `_meta/skills/` this persona carries. */
+  /** Skill files this persona carries, by name; {@link loadPersonaSkills} says where a name is looked for. */
   readonly skills: readonly string[];
   /**
    * The persona's daily budget in USD (`budget:`, concept §4.3 — the
@@ -270,4 +270,41 @@ export function personaMigrationFor(input: {
     model: input.model ?? null,
     promptRef: input.prompt,
   };
+}
+
+/** One skill as a run's brief carries it (D-46). */
+export interface PersonaSkill {
+  readonly name: string;
+  readonly text: string;
+}
+
+/**
+ * The texts of the skills a persona's record names (D-46): the persona's own
+ * `skills/` folder first, then the crew's shared `_meta/skills/`; a name is a
+ * file `<name>.md` or a folder with `SKILL.md`. A name with no readable text,
+ * or one that would leave those folders, is reported, never guessed.
+ */
+export async function loadPersonaSkills(
+  read: (rel: string) => Promise<string | null>,
+  personaId: string,
+  names: readonly string[],
+): Promise<{ readonly skills: readonly PersonaSkill[]; readonly missing: readonly string[] }> {
+  const skills: PersonaSkill[] = [];
+  const missing: string[] = [];
+  for (const name of names) {
+    let text: string | null = null;
+    if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {
+      for (const base of [`${PERSONAS_DIR}/${personaId}/skills`, 'tickets/_meta/skills']) {
+        for (const rel of [`${base}/${name}.md`, `${base}/${name}/SKILL.md`]) {
+          text ??= await read(rel).catch(() => null);
+        }
+      }
+    }
+    if (text === null || text.trim() === '') {
+      missing.push(name);
+    } else {
+      skills.push({ name, text: text.trim() });
+    }
+  }
+  return { skills, missing };
 }

@@ -550,6 +550,7 @@ describe('RunSupervisor worktree wiring', () => {
 
   function request(overrides: Partial<RunRequest> = {}): RunRequest {
     return {
+      origin: 'spec',
       ticketId: 'T-0001',
       ticketsVaultPath: vaultDir,
       ticketRelPath: 'tickets/plan/T-0001.md',
