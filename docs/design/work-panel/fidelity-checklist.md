@@ -61,7 +61,10 @@ discuss it first, but it has to really look like that.*
    app renders in Electron: same font, size, weight and line height may
    still differ by stroke weight and up to 1 px of line width (owner
    decision 2026-11-07, milestone 192). That row must say that no CSS
-   difference was found. "Looks close", "minor" and "later" are not
+   difference was found — and **a feature the app does not have yet**:
+   the row names the roadmap id ("feature not yet built — E12-16") and
+   the session builds nothing of it; the look of every surface that
+   exists is still exact (build-plan §4 point 10). "Looks close", "minor" and "later" are not
    justifications.
 10. Fix every row that is not justified, re-shoot, repeat until the list has
     no open row.

@@ -135,6 +135,7 @@ The goal the owner set at the start — **the whole UI is rendered as the boards
 7. **The working form is [fidelity-checklist.md](fidelity-checklist.md)** (2026-11-07): twelve steps every UI session's brief carries verbatim — read the board HTML and PNG first and hand in a *measure sheet* before the first edit, shoot the built app at the board's size, compare in [boards/compare.html](boards/compare.html) (side by side, overlay, swipe, pixel diff), write the deviation list into the changelog's `Fidelity:` block. The integrator checks the sheet, the screenshots and the list before a merge.
 8. **Cheapest sensible model** (owner, 2026-11-07): the scoped board-to-screen sessions run on Sonnet, the frame and the review on Opus; Fable only orchestrates.
 9. **The frame is given** (4.0 shipped as milestone 192): every panel inherits the 28 px header, the fold chevron, hover-only controls and the dock strips from `PanelFrame` / `DockService`; what a panel may draw inside and what it must not redraw is **the frame rule in ADR-0019** ("The frame rule for every panel"). A 4.2–4.8 session that needs more frame than that stops and asks (point 6 of the checklist), it does not draw its own header.
+10. **Fidelity is not feature work.** A board element that is a feature the app does not have yet (7e's Filter popover and Cost by column, 7f's New persona / Remove from crew / editable Setup / Friction / Talk 1:1 — E12-16, E13-19) is **not built in wave 4**: the session builds the look of every surface that exists exactly, and lists the missing element as "feature not yet built — <roadmap id>" in its deviation table (a permitted justification since 2026-11-07, see the checklist). The features stay on the roadmap as wave 5; 7k gets row 4.9 because a whole page is missing, not an element.
 
 ### Wave 4 — the fidelity wave (replaces the feature list under "Wave 4" above, which moves to wave 5)
 
@@ -151,6 +152,7 @@ Order: 4.0 first, alone; then 4.1–4.6 in parallel within the pool; 4.7 last.
 | 4.6 | `mc-ipad` | Sonnet | 5b–5i, 10e, 10f, 10n, 10q, 10r, 10s, 10t iPad part | `libs/mission-ui/src/**` wide templates/CSS, `shell/` | each board at 1194×834 / 834×1194 = screenshot |
 | 4.7 | `fidelity-review` | **Opus** | all | — (reads; small fixes only) | one deviation table over all 40 boards, every row fixed or owner-accepted |
 | 4.8 | `desk-assistant` | Sonnet | 9a right side: the Assistant panel body without the rail (composer, chips, answer cards) — split out of 4.0 on 2026-11-07 (owner decision 4 of the 9a measure sheet); the ticket card in the editor belongs to 4.3 | `plugins/assistant/renderer/**` panel body + CSS | 9a right side = screenshot |
+| 4.9 | `desk-persona` | **Opus** | 7k — the Persona page does not exist yet (E13-19 setup, the engine's `personaPatch` is there); a page of its own, after 4.2 lands (same `team/` files) | `plugins/tickets/renderer/team/persona*.ts` new | 7k = screenshot |
 
 Engine-side items still open (req-99c phases in Building, E12-3b, E14-9b, the persisted ids) run as before in Opus sessions when the pool allows; they change no appearance.
 
