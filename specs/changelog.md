@@ -1,3 +1,21 @@
+### Milestone 190 — D-37: `npm run e2e` is green again, the two flakes were stale handles in the specs
+
+**Not yet manually verified by the owner.** Owner request, outside the list; found while fixing D-35. Specs only, no app code
+changed. The cause and the rule for new specs are in `docs/testing-flakes.md`.
+
+- **`tickets-dricket-live.spec`** looked for `terminal add t-1`, and milestone 185 folds the `## Log` holding that line. It now
+  waits for the header and the fold, sees the line hidden, and proves more than before: the save adds exactly one `put t-1`
+  commit, and the folded Log is written back whole.
+- **`board-issues.spec`** (chip box null) and **`desk-board-team.spec`** (`scrollLeft` 0) failed about every second run under
+  `--repeat-each=4`. In the first second after a start, the engine's first events drive refresh rounds that rebuild the
+  chip and the columns; the specs' `boundingBox()` and `evaluate` then acted on a node already replaced, which does not fail
+  (failed desk runs logged `isConnected: false`, passing ones `true`). Not an app bug: the scroll position survives every
+  repaint. Both now go through a node that stays, in one `evaluate`; the desk spec's fixed 800 ms wait became a mark the
+  repaint removes, and it asserts the scroll is the same value, not only above 0.
+- **Checked:** the two specs at `--repeat-each=4`, 0 of 40 runs failed (7 of 16 before), 0 of 24 under 8 CPU burners; without
+  the app's scroll restore the desk spec goes red. `npm run e2e`: 235 passed, 16 skipped, 0 failed.
+- **Roadmap:** the entry D-37 left with this merge. Milestone 189 is left to D-36, in progress in parallel.
+
 ### Milestone 188 — D-35: the fleet event carries the fleet again
 
 **Not yet manually verified by the owner.** Owner request, outside the list; found by checking the Autopilot item in the

@@ -72,6 +72,32 @@ is one invocation, failed when at least one test failed.
    opened (a real hang, only visible on a slow machine). The gate promise now
    exists before the run does.
 
+## e2e: a handle on a node a repaint replaced (D-37)
+
+`board-issues.spec` (the chip's box is null) and `desk-board-team.spec`
+(`scrollLeft` stays 0) failed about every second run under `--repeat-each=4`.
+With logging in the renderer: in the first second after a start, the engine's
+first `board-changed` and `vault changed` events drive refresh rounds, each of
+which rebuilds the Work header's chip and the Board's columns, and these specs
+are already that far by then. The burst ends by itself; 10-15 s of an idle app
+showed no further round.
+
+A locator call resolves a node first and uses it in a second step. A rebuild in
+between leaves a detached node, and that does not fail: `boundingBox()` answers
+null, `evaluate(scrollIntoView)` does nothing. The failed desk runs logged
+`isConnected: false`, the passing ones `true`; a chip node replaced by hand gives
+null too. The app was right all along: the scroll position survives every repaint.
+
+Fix: read and act through a node that stays (`.head`, `.desk-board`), inside one
+`evaluate`, which is one synchronous state of the DOM. The fixed 800 ms wait for
+"a repaint happened" became a mark on the scrolled columns that the repaint
+removes. Removing the app's scroll restore turns the spec red.
+
+| Two specs, `--repeat-each=4` | Before | After |
+|---|---|---|
+| plain | 7 of 16 runs failed | 0 of 40 |
+| 8 CPU burners | not measured | 0 of 24 |
+
 ## Rules for new tests
 
 - A component that starts background work exposes how to wait for it
@@ -84,3 +110,7 @@ is one invocation, failed when at least one test failed.
 - Specs that spawn real processes live under `packages/` or `plugins/git/`
   (the `processes` project) or are added to `PROCESS_SPECS` in
   `vitest.plugins.config.mts`.
+- In e2e, a node from a surface that rebuilds its DOM can be gone by the next
+  step. Web-first assertions and `click` re-resolve; `boundingBox()` and
+  `evaluate` on such a node do not. Measure or act through an ancestor that stays,
+  in one `evaluate`.

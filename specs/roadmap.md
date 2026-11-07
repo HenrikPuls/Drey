@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–188, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169, 171–188 and 190, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -101,13 +101,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   chord, a segmented On | Paused | Off, the state's one sentence and chips for the resume time and today's cost. The build opens
   a plain list of rows at the bottom left, without title, sentence or chips. Done when a screenshot matches the board.
 
-- **D-37 — `npm run e2e` is not green on `desktop-integration`** (M; found 2026-11-06 while fixing D-35, all three fail the same
-  way without that fix). `tickets-dricket-live.spec.ts` fails every run: it looks for `terminal add t-1` in the document, and
-  milestone 185 folds the `## Log` holding that line on a store. `board-issues.spec.ts` (the chip's box is null) and
-  `desk-board-team.spec.ts` (`scrollLeft` stays 0) fail about every second time under `--repeat-each=4`: 7 of 16 runs on
-  `c8b13b6a`, 13 of 24 with the fix; cause not diagnosed. Both passed alone on the first try.
-
-(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188.)
+(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-37 as 190.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.

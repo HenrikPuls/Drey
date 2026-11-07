@@ -35,8 +35,18 @@ test('the board issues are a header chip that unfolds readable messages', async 
   // Contained in the header (T-0086: the head wraps its controls to
   // their own line when narrow — containment is the claim, not one row).
   const head = page.locator('.head', { has: page.locator('.tickets-panel-head') }).filter({ visible: true });
-  const headBox = (await head.boundingBox())!;
-  const chipBox = (await chip.boundingBox())!;
+  // While the engine's first board rounds arrive every refresh rebuilds the
+  // chip, and `chip.boundingBox()` on a node already replaced answers null:
+  // one synchronous read over the header, which stays, measures one state.
+  const boxes = await head.evaluate((el) => {
+    const measured = el.querySelector('.tickets-issues-chip')?.getBoundingClientRect();
+    const own = el.getBoundingClientRect();
+    return { head: { y: own.y, height: own.height }, chip: measured === undefined ? null : { y: measured.y, height: measured.height } };
+  });
+  expect(boxes.chip).not.toBeNull();
+  const chipBox = boxes.chip!;
+  const headBox = boxes.head;
+  expect(chipBox.height).toBeGreaterThan(0);
   expect(chipBox.y).toBeGreaterThanOrEqual(headBox.y);
   expect(chipBox.y + chipBox.height).toBeLessThanOrEqual(headBox.y + headBox.height);
   await page.screenshot({ path: test.info().outputPath('board-issues-folded.png') });
