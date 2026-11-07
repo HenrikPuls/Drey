@@ -29,12 +29,12 @@ Specs: `parts.spec.ts` (new), `dom.spec.ts` (rewritten), `model.spec.ts`, `shape
 | 7b bullets | two on one line | two lines, the page 24 px longer below them | data |
 | 7d diff's first line | short sample lines | the seeded lines run under the pane; a scrollbar shows under the pointer only | data |
 | 7c hint "Goal, Decisions and Constraints are above…" | a line under the title; the block 26 px lower | no line | owner decision 6 precedent: sketch text dropped (ruling Q3) |
-| 7b, 7c, 7j Type row | "Type: Ship / Fix", Worker in the right column | no row, Worker in the left column | feature not yet built, id named in the report (ruling on the addendum) |
-| 9a "Start build" | primary button | none; Thread at the right end | feature not yet built, id named in the report |
-| 9a Priority, Worker | dropdowns with chevrons | plain values, set from the board | feature not yet built, id named in the report |
-| 7d "Ralf: no blockers" | third fact in the verdict band | none | feature not yet built, id named in the report |
-| 7c "blocked-by P1" | in the part's line | `after P1` and the reason | feature not yet built, id named in the report |
-| 7j "The verifier recommends accepting." | end of the verdict | none: the report carries no recommendation | feature not yet built, id named in the report |
+| 7b, 7c, 7j Type row | "Type: Ship / Fix", Worker in the right column | no row, Worker in the left column | feature not yet built — req-119 |
+| 9a "Start build" | primary button | none; Thread at the right end | feature not yet built — req-120 |
+| 9a Priority, Worker | dropdowns with chevrons | plain values, set from the board | feature not yet built — req-121 |
+| 7d "Ralf: no blockers" | third fact in the verdict band | none | feature not yet built — req-122 |
+| 7c "blocked-by P1" | in the part's line | `after P1` and the reason | feature not yet built — req-123 |
+| 7j "The verifier recommends accepting." | end of the verdict | none: the report carries no recommendation | feature not yet built — req-124 |
 | 7b, 7c persona picture | illustrated portrait | initial on the persona's colour | feature not yet built, row 4.9 (`desk-persona`, 7k) |
 | 7d Files head | nothing | "Send back with N comments" under the pointer, not in the board's state | interim until 4.8 (Send back option on the decision card, build plan row 4.8) |
 | Row 7 flow "Change", card `<>` | nothing | under the pointer only, not in the board's state | not visible in the board's state; keep the flow editor and the raw YAML reachable |

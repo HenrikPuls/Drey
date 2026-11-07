@@ -128,7 +128,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   12 of 12 runs pass; the fix is either the client restoring scroll synchronously on the redraw or the spec waiting for the
   restore signal, decided by what the client actually does (docs/testing-flakes.md gets the row).
 
-(D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.)
+(D-45, the Review tab empty on store tickets, shipped as 196; D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-36 as 189, D-37 as 190, D-43 as 193.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
@@ -859,6 +859,13 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-119 — A ticket's Type: Ship / Fix (boards 7b, 7c, 7j; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). `TicketMeta` has no `type`, only `track`; neither the concept nor `specs/ticket-schema.md` defines Ship/Fix. Needs the schema field, the engine reading it, the card row (Type left, Worker right as the boards place them) and the fixtures.
+- **req-120 — Start build from the ticket card (board 9a; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). the card's primary button starts the build phase for a Prioritized ticket: one engine call (the transition the chain would make), the button only in the states the board shows it, confirmation per the `tools` write policy.
+- **req-121 — Priority and Worker as dropdowns on the ticket card (board 9a; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). today plain values set from the board; needs the card writing `priority:` and the worker/persona assignment through the engine (`personaPatch` / ticket put), with the chevron dropdowns the board draws.
+- **req-122 — The reviewer persona's verdict in the Review band (board 7d, "Ralf: no blockers"; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). the review report carries no per-persona verdict; needs the review phase writing it (prompt + report field) and the band drawing the third fact.
+- **req-123 — blocked-by between parts (board 7c; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). a part line can name the part it waits on ("blocked-by P1"); today only `after P1` + reason. Needs the Parts schema field, the dispatcher honouring it, the row drawing it.
+- **req-124 — The verifier's recommendation at the end of the verdict (board 7j, "The verifier recommends accepting."; milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). the test report carries no recommendation; needs the test phase prompt asking for one, the report field, the sentence in the proof block.
+- **req-125 — SDK: `EditorSurfaceContext.mode()` (milestone 196)** (owner request, outside the list, 2026-11-07; found by wave 4.3 as a "feature not yet built" row; built later, not in wave 4). a plugin editor surface does not know whether its pane is in Live Preview or Source mode; 4.3 reads the pane's toggle from the DOM, which works and is e2e-covered but depends on base markup. The SDK exposes the mode (and its change) on the surface context; the ticket document then stops reading the DOM. Minor SDK bump, sample plugin updated.
 - **req-114 — Attach on the phone (follow-up of milestone 195, Q3 of its measure sheet).** Board 10a's composer has no
   Attach and its bar no free control; the upload itself exists. The owner places it.
 - **req-115 — Notes: folder counts and the vault's note count (milestone 195, board 10k).** `/api/notes` serves folders
