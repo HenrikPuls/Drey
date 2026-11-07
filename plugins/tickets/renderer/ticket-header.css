@@ -1,142 +1,308 @@
-/* The ticket header in the editor (req-62): the block widget that replaces
-   the folded frontmatter pill of a ticket file. Vertical spacing is padding,
-   never margin -- CodeMirror measures a block widget without its margin, so
-   a margin would drift the gutter and click positions below it (see
-   `.cm-fm-pill` in src/app/editor/frontmatter-fold.ts). */
+/* The ticket card on top of a ticket document (boards 9a, 7b, 7c, 7j): the block
+   widget that replaces the folded frontmatter pill. Vertical spacing is padding,
+   never margin -- CodeMirror measures a block widget without its margin, so a
+   margin would drift the gutter and click positions below it (see `.cm-fm-pill`
+   in src/app/editor/frontmatter-fold.ts). Boards draw content-box: a named height
+   excludes its border. */
 
 .tickets-head {
   display: block;
-  /* The sides match CodeMirror's `.cm-line` padding, so the header lines
-     up with the body text. */
-  padding: 2px 2px 14px 6px;
   font-family: var(--font-sans);
   cursor: default;
 }
 
-.tickets-head-chips {
+.tickets-card {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-dock);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.tickets-card.is-early {
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.tickets-card.is-flow {
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.tickets-doc-strip-host:has(.tickets-card.is-flow) {
+  padding-bottom: 16px;
+}
+
+.tickets-card-top {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  line-height: 1.6;
+  gap: 8px;
+}
+
+.tickets-card-spacer {
+  flex: 1 1 0;
 }
 
 .tickets-head-id {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  flex: none;
   color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 13px;
 }
 
-.tickets-head-chip,
-.tickets-head-select {
-  padding: 0 6px;
-  border: 1px solid var(--border);
+/* The state, once (9a): a tinted pill with a dot. */
+.tickets-doc-status {
+  --pill: var(--text-4);
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
   border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
+  background: color-mix(in srgb, var(--pill) 14%, transparent);
+  color: var(--pill);
+  font-size: 13px;
   white-space: nowrap;
 }
 
-.tickets-head-select {
-  cursor: pointer;
+.tickets-doc-status.is-accent {
+  --pill: var(--accent);
 }
 
-.tickets-head-select:hover,
-.tickets-head-select:focus-visible {
-  border-color: var(--border-strong);
-  color: var(--text-2);
+.tickets-doc-status.is-pink {
+  --pill: var(--accent-pink);
 }
 
-.tickets-head-select option {
-  background: var(--bg-input);
-  color: var(--text-primary);
+.tickets-doc-status.is-peach {
+  --pill: var(--accent-peach);
 }
 
-.tickets-head-phase {
-  color: var(--text-2);
-  border-color: var(--border-strong);
+.tickets-doc-status.is-mint {
+  --pill: var(--accent-mint);
 }
 
-.tickets-head-branch {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+.tickets-doc-status.is-amber {
+  --pill: var(--status-modified);
+}
+
+.tickets-doc-status-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pill);
+}
+
+.tickets-doc-kind {
+  flex: none;
   color: var(--text-4);
-}
-
-.tickets-head-prio-urgent,
-.tickets-head-prio-critical {
-  color: var(--status-deleted);
-  border-color: var(--status-deleted);
-}
-
-.tickets-head-prio-high {
-  color: var(--accent-fg);
-  border-color: var(--accent);
-}
-
-.tickets-head-prio-low {
-  color: var(--text-5);
+  font-size: 13px;
 }
 
 .tickets-head .tickets-issues {
   margin-left: 0;
 }
 
-.tickets-head-spacer {
-  flex: 1;
+.tickets-doc-decision-link {
+  flex: none;
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-/* The one-click interactive dialog (req-65): a quiet text button among
- * the header chips — the accent says it starts something. */
-.tickets-head-dialog {
-  border-color: var(--accent);
-  color: var(--accent-fg);
+.tickets-doc-decision-link:hover {
+  text-decoration: underline;
 }
 
-.tickets-head-dialog:hover {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
+/* The board draws no YAML button: it shows under the pointer, like a panel's actions. */
 .tickets-head-raw {
-  color: var(--text-5);
+  flex: none;
+  opacity: 0;
 }
 
+.tickets-card:hover .tickets-head-raw,
+.tickets-head-raw:focus-visible {
+  opacity: 1;
+}
+
+.tickets-doc-btn {
+  flex: none;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tickets-doc-btn:hover,
+.tickets-doc-btn:focus-visible {
+  background: var(--active-bg);
+}
+
+.tickets-doc-btn.is-quiet {
+  height: 32px;
+  padding: 0 14px;
+  border-color: var(--border);
+}
+
+.tickets-card-grid {
+  display: grid;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.tickets-card.is-early .tickets-card-grid {
+  grid-template-columns: 80px minmax(0, 1fr) 80px minmax(0, 1fr);
+  align-items: center;
+  line-height: 20px;
+}
+
+.tickets-card.is-flow .tickets-card-grid {
+  grid-template-columns: 64px minmax(0, 1fr) 64px minmax(0, 1fr);
+  align-items: baseline;
+  line-height: 20px;
+}
+
+.tickets-card-label,
+.tickets-card-muted {
+  color: var(--text-4);
+}
+
+.tickets-card-muted {
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-card-value {
+  min-width: 0;
+}
+
+/* 9a: the values line up with the 6 px padding of the controls the board draws. */
+.tickets-card.is-early .tickets-card-value {
+  padding: 0 6px;
+}
+
+.tickets-card.is-early .tickets-card-value.is-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+}
+
+.tickets-card-branch {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+}
+
+.tickets-card-wide {
+  grid-column: span 3;
+}
+
+.tickets-doc-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-4);
+}
+
+.tickets-doc-step.is-current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tickets-doc-step.is-skipped .tickets-doc-step-title {
+  text-decoration: line-through;
+}
+
+.tickets-doc-flow {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Row 7 draws no link in the Flow row; it stays reachable under the pointer. */
+.tickets-doc-flow.is-hover-only {
+  opacity: 0;
+}
+
+.tickets-card:hover .tickets-doc-flow.is-hover-only,
+.tickets-doc-flow.is-hover-only:focus-visible {
+  opacity: 1;
+}
+
+.tickets-doc-avatar {
+  /* An inline block that clips sits on the line by its bottom edge, as the board's picture does. */
+  display: inline-block;
+  overflow: hidden;
+  flex: none;
+  box-sizing: border-box;
+  text-align: center;
+  width: var(--avatar-size, 24px);
+  height: var(--avatar-size, 24px);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--persona-color, var(--accent)) 30%, var(--active-bg));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: var(--avatar-size, 24px);
+}
+
+.tickets-doc-gate {
+  margin: 0;
+  color: var(--accent-peach);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The headline: the ticket's title when the body opens with no h1 of its own. */
 .tickets-head-title {
   display: block;
   width: 100%;
   box-sizing: border-box;
   margin: 0;
-  padding: 6px 0 0;
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--text-heading);
+  color: var(--text-primary);
   font-family: var(--drey-heading-font, var(--font-sans));
-  font-weight: 500;
-  font-size: 2.14em;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+}
+
+.tickets-head-title[hidden] {
+  display: none;
+}
+
+.tickets-doc-editor.is-flow .tickets-head-title {
+  padding: 0;
+  font-size: calc(26px * var(--drey-editor-scale, 1));
+  line-height: calc(32px * var(--drey-editor-scale, 1));
+}
+
+.tickets-doc-editor.is-early .tickets-head-title {
+  padding: 24px 0 0;
+  font-size: calc(30px * var(--drey-editor-scale, 1));
+  line-height: calc(38px * var(--drey-editor-scale, 1));
 }
 
 .tickets-head-title:focus {
   box-shadow: inset 0 -1px 0 var(--border-strong);
-}
-
-/* The work-repo checkboxes (req-72): compact chips in the ticket header;
-   the first checked repo is the primary. */
-.tickets-head-checks {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tickets-head-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.78rem;
-  color: var(--text-2);
-  cursor: pointer;
 }

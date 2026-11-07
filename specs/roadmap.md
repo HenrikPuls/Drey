@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–193, plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-07):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–193, 196 (the ticket pages match boards 7b, 7c, 7d, 7j and the 9a card; Parts block, Review splitter), plus req-98, req-101, req-104 (the desktop frame matches board 9a), req-110 (the fleet runner leaves when deactivated or when Drey quits idle), req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -225,7 +225,7 @@ owner builds without the tickets system.
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof
   card's accordion.
-- **E10-4b — Plan to accept follow-ups.** The desktop widget is E13-10;
+- **E10-4b — Plan to accept follow-ups.** The desktop widget shipped as milestone 196;
   here: the parent ticket leaves "needs shaping" once its parts are
   released (today it stays in its phase with one Log line), a per-gate
   estimate for the whole flow (the card estimates the build gate), the
@@ -279,15 +279,6 @@ ships.
 
 Order and dependencies (an item needs everything it names):
 
-10. **E13-10 — Plan to accept in the ticket.** The Parts block as an editor
-    widget under the header (persona per part, move / delete with a second
-    press, running parts locked, flow row, estimate, Approve plan). Needs
-    E13-6 (built, milestone 129); the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
-    …/release`) and the proposal text shipped with **E10-4** (milestone 126).
-    **Board 7c adds:** "starts first" / "after P1 ·
-    blocked-by P1" lines, "Typical total $a–b", the per-part estimate reading
-    "from N runs" or "not yet · fewer than 3 runs", "Ask Mission Control to
-    change the split" and "Change flow ›". **Status per part lives here** (owner, 2026-11-04: no separate plan-step list in the ticket).
 13. **E13-13 — The Work view (rest).** The first cut is built (milestone
     141: the preset, the Tickets panel / ticket / Assistant / Capacity
     arrangement, home views, Ctrl+2). What is left: the Capacity band **only
@@ -313,7 +304,7 @@ Persona names follow D7 (Pia = Mission Control, Paul plans).
   The "default flow for new plans" (E10-5b) would also get its row here.
 - **E13-11b — Flow tab, what is left.** The tab opens from the ticket
   strip and Settings; the plan block's "Change flow ›" link arrives with the
-  Parts block (E13-10, the tab can open `flow://<id>/<part>` already). The word
+  Parts block (milestone 196, the tab can open `flow://<id>/<part>` already). The word
   helpers (`changesLabelOf`, `marksOf`, `moveRoomOf`, `addablePhasesOf`) exist
   twice, in `libs/mission-ui` and in the plugin; one pure module in the
   engine package that both import would remove the copy.
@@ -384,13 +375,8 @@ owner confirms scope and order before any of it starts:
   from crew`, editable Setup, the Friction tab, the Setup fields and `Talk to …
   1:1` (E13-19) [H-01–H-03, I-02]. Files: `plugins/tickets/renderer/board/`,
   `team/team-view.ts`.
-- **E12-17 — Parts block in the ticket** (E13-10, restated; L). The screenshot
-  evidence is the raw Markdown list with `persona:` / `reason:` lines
-  [F-01, E-02]; no change of scope — this entry only records that the audit found
-  it as the largest single gap on the desk.
 - **E12-19 — Assistant labels, review layout, settings leftovers** (proposed by
-  the E12-10 audit; S). (The Assistant's top row and its way of input stay as the owner adjusted them on 2026-11-05 — `docs/design/work-panel/assistant-owner-layout-2026-11-05.png`: icon-only target switch, composer with its field text, mic, send, icon row and model name; audit row M-01 is withdrawn. Only how the chat itself looks may follow the design.) A splitter and a
-  taller diff in the Review tab; `Pause when the budget is spent` (needs
+  the E12-10 audit; S). (The Assistant's top row and its way of input stay as the owner adjusted them on 2026-11-05 — `docs/design/work-panel/assistant-owner-layout-2026-11-05.png`: icon-only target switch, composer with its field text, mic, send, icon row and model name; audit row M-01 is withdrawn. Only how the chat itself looks may follow the design.) `Pause when the budget is spent` (needs
   E12-3b's setting first); the Default flow row without the ticket dropdown;
   the Settings list no longer clips `Panels & plugins`; the disabled `Split`
   button says why; flow wording `Move earlier / Add a gate after this one /

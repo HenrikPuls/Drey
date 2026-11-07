@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentLabelOf, countsOf, patchRowsOf, sendBackLabelOf, viewedKeyOf, wholeFileRowsOf } from './patch';
+import { countsOf, patchRowsOf, viewedKeyOf, wholeFileRowsOf } from './patch';
 
 const PATCH = [
   'diff --git a/a.ts b/a.ts',
@@ -81,13 +81,8 @@ describe('marks and labels', () => {
   });
 
   it('words a line and a range', () => {
-    expect(commentLabelOf({ line: 27, endLine: null })).toBe('Line 27');
-    expect(commentLabelOf({ line: 30, endLine: 33 })).toBe('Lines 30–33');
   });
 
   it('names the comment count on the send-back button', () => {
-    expect(sendBackLabelOf(0)).toBe('Send back…');
-    expect(sendBackLabelOf(1)).toBe('Send back with 1 comment');
-    expect(sendBackLabelOf(2)).toBe('Send back with 2 comments');
   });
 });

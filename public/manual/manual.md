@@ -88,10 +88,12 @@ The frameless window is built from:
   back/forward arrows (see below), and minimize/maximize/close.
 - **Left dock** — Calendar, Files, Templates, Search, Tasks, Open
   windows, Outline, Backlinks, Source control. Every panel can be
-  collapsed to its header, dragged to another dock, or resized against
-  its neighbours.
-- **Centre column** — the tab bar, the meta bar (path, formatting
-  buttons, save, `â‹¯` menu) and the editor.
+  folded to its header with its chevron, dragged to another dock, or
+  resized against its neighbours; right-click a header to move or close
+  it. The icons at the top of a dock open and close panels.
+- **Centre column** — the tab bar, the meta bar (path, *Save* while there
+  is something to save, `</>` for the Markdown source, the `â‹¯` menu)
+  and the editor.
 - **Right dock** — the Assistant panel by default.
 - **Status bar** (bottom, 28 px) — word/character count, a context hint
   while panels are being moved, and the Settings entry.
@@ -126,12 +128,13 @@ it is not remembered across restarts.
 ![The Files panel](img/panel-files.png)
 
 The **Files panel** shows one section per registered vault: a header row
-with the vault's name (the dot marks the active vault) and that vault's
-file tree.
+with the vault's name and that vault's file tree. Its tooltip says which
+vault is the active one.
 
-- **Register more vaults** with *Add vault…* in the panel header. The
-  vault header row's context menu (right-click) offers *Set active*,
-  *Rename*, *Open in File Explorer* and *Remove*.
+- **Register more vaults** with *Add vault…* in a vault header row's
+  context menu (right-click), which also offers *Set active*, *Rename*,
+  *Open in File Explorer*, *Refresh* and *Remove*. The **+** in the panel
+  header (shown on hover) starts a new file in the active vault.
 - The **active vault** is the default target for new daily notes, quick
   capture and chats. Every operation can still address another vault
   explicitly (search scopes, the tasks panel, drag & drop).
@@ -168,7 +171,7 @@ file tree.
 ### Staying in sync
 
 By default Drey does **not** watch the vault folder — external changes
-appear after the **Refresh** button in the Files panel header (or
+appear after **Refresh** in a vault header row's context menu (or
 `vault.refresh` from the command palette). An opt-in watcher that
 reacts to outside changes immediately can be enabled in
 [Settings â†’ Vault](#settings-vault).
@@ -267,8 +270,8 @@ in Settings â†’ *Templates*.
   (the Assistant's prompts) is left out.
 - **Folding** — headings collapse Obsidian-style; the chevron appears on
   hover in the gutter.
-- **Line numbers** — the *Lines* toggle (`Ctrl+G`), an app-wide
-  preference.
+- **Line numbers** — *Line numbers* in the `⋯` menu (`Ctrl+G`), an
+  app-wide preference.
 - **Spell checking** — Hunspell dictionaries (English and German
   bundled), per-language and personal word lists in Settings â†’
   *Spelling*.
@@ -294,9 +297,9 @@ Every save keeps the overwritten text as a restorable version
 
 ![Calendar and today's daily note](img/panel-calendar.png)
 
-- The **Calendar panel**'s header is the month/year picker itself, with
-  a **Today** button (opens today's daily note) and month arrows. Days
-  that have a note carry a dot.
+- The **Calendar panel**'s title is the month/year picker; hovering the
+  header shows the **Today** button (opens today's daily note) and the
+  month arrows. Days that have a note carry a dot.
 - Daily notes live in `daily/YYYY-MM-DD.md` (folder and naming
   configurable in Settings â†’ *Daily notes*).
 - New daily notes are generated from `templates/daily.md`; the file is
@@ -1787,10 +1790,10 @@ automatically.
 - **Docked editor bands** — any pane can be dragged into the left/right
   dock (above the panels) or docked from its tab menu; it persists with
   the session. *View â†’ Reset layout* undocks them.
-- **Panels** — every panel header is a drag grip: move panels between
-  the left, right and bottom docks, resize them with the splitters,
-  collapse them to their 32 px headers. The whole layout persists
-  across restarts.
+- **Panels** — drag a panel by its header between the left, right and
+  bottom docks (or right-click the header), resize them with the
+  splitters, fold them to their headers with the chevron. The whole
+  layout persists across restarts.
 - **Views** — a view is a saved layout: its own docks and panels, split
   panes and open tabs. The title bar shows the views as one segmented
   control (*Notes · Work · …*) with a **Layout ▾** menu beside it;
@@ -2130,7 +2133,7 @@ history store is deliberately outside it).
 - **Quick capture hotkey does nothing** — another program owns
   `Ctrl+Alt+N`; Drey logs a warning to the main-process console.
 - **External file changes don't show up** — the watcher is off by
-  default; press Refresh in the Files panel or enable it in Settings â†’
+  default; use Refresh in the vault row's menu or enable it in Settings â†’
   Vault.
 - **A plugin's panel is missing** — check Settings â†’ *Panels & plugins*
   (changes apply on restart), and the plugin's status line there.

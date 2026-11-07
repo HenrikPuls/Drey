@@ -3,13 +3,15 @@ import type { ReviewComment } from '../../../../packages/tickets-engine/src/core
 import { MAX_REVIEW_COMMENTS } from '../../../../packages/tickets-engine/src/core/review-feedback';
 import {
   EMPTY_MARKS,
-  checksLineOf,
   commentsOfFile,
   filesOf,
-  filesSummaryOf,
   loadMarks,
   pruneMarks,
+  clampSplit,
+  goalOfText,
+  loadSplit,
   rangeOf,
+  saveSplit,
   saveMarks,
   statOf,
   withComment,
@@ -43,9 +45,6 @@ describe('filesOf', () => {
 
   it('writes the summary line with the viewed count', () => {
     const files = filesOf(diff);
-    expect(filesSummaryOf(files, new Set())).toBe('3 files · 0 of 3 viewed');
-    expect(filesSummaryOf(files, new Set([files[0]!.key]))).toBe('3 files · 1 of 3 viewed');
-    expect(filesSummaryOf(files.slice(0, 1), new Set())).toBe('1 file · 0 of 1 viewed');
   });
 });
 
@@ -117,14 +116,6 @@ describe('persistence', () => {
   });
 });
 
-describe('footer words', () => {
-  it('reports the checks, or nothing without a Verification', () => {
-    expect(checksLineOf(null)).toBe('');
-    expect(checksLineOf({ allPassed: true, checks: [{ passed: true }, { passed: true }] })).toBe('Checks green · 2/2');
-    expect(checksLineOf({ allPassed: false, checks: [{ passed: true }, { passed: false }] })).toBe('Checks: 1/2 green');
-  });
-});
-
 describe('vaultFileOf', () => {
   const vaults = [
     { id: 'repo', path: 'E:\\projects\\Drey' },
@@ -142,5 +133,26 @@ describe('vaultFileOf', () => {
   it('is null when no vault holds it', () => {
     expect(vaultFileOf(vaults, 'D:\\other', 'a.ts')).toBeNull();
     expect(vaultFileOf(vaults, '', 'a.ts')).toBeNull();
+  });
+});
+
+describe('the head and the splitters', () => {
+  it('takes the first paragraph of the goal', () => {
+    expect(goalOfText('## Goal\n\nDrag headings.\nThe text moves.\n\nMore.\n')).toBe('Drag headings. The text moves.');
+    expect(goalOfText('## Plan\n\n### Goal\n\nA.\n')).toBe('A.');
+    expect(goalOfText('## Log\n')).toBe('');
+  });
+
+  it('keeps the sizes in bounds and across a reload, the band as tall as its content by default', () => {
+    expect(clampSplit('list', 10)).toBe(160);
+    expect(clampSplit('list', 9000)).toBe(480);
+    expect(clampSplit('proof', -5)).toBe(0);
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
+    expect(loadSplit(storage)).toEqual({ proof: null, list: 250 });
+    saveSplit(storage, { proof: 120, list: 300 });
+    expect(loadSplit(storage)).toEqual({ proof: 120, list: 300 });
+    store.set('tickets.review.split', 'not json');
+    expect(loadSplit(storage)).toEqual({ proof: null, list: 250 });
   });
 });

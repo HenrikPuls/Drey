@@ -93,11 +93,11 @@ test.use({
 
 /**
  * A row opens the ticket document, or the thread while a run is live
- * (`defaultFaceOf`, E13-20); the face switch reaches the thread from either.
+ * (`defaultFaceOf`, E13-20); the card's Thread or the face switch reaches the thread.
  */
 async function openThread(page: Page, id: string): Promise<void> {
   await page.locator(`.work-row[data-id="${id}"]`).filter({ visible: true }).click();
-  await page.locator('.tickets-faces:visible [role="tab"]', { hasText: 'Thread' }).click();
+  await page.locator('.tickets-faces:visible [role="tab"], .tickets-card:visible .tickets-doc-btn', { hasText: 'Thread' }).first().click();
 }
 
 test.describe('Work panel (req-75 W1/W1b)', () => {
@@ -260,12 +260,12 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     }
 
     // The row menu's Open ticket opens the document in place (E13-20): the
-    // thread stays one tab away on the face switch, no split.
+    // thread stays one press away on the card, no split.
     await panel.locator('.work-row[data-id="T-0103"] .work-row-more').click();
     await page.locator('.tickets-menu .tickets-menu-item', { hasText: 'Open ticket' }).click();
     await expect(page.locator('app-tab-bar .tab', { hasText: 'T-0103.md' })).toHaveCount(1);
     await expect(page.locator('app-pane-leaf')).toHaveCount(1);
-    await expect(page.locator('.tickets-faces:visible [role="tab"]', { hasText: 'Thread' })).toBeVisible();
+    await expect(page.locator('.tickets-card:visible .tickets-doc-btn', { hasText: 'Thread' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
   });
 

@@ -1,3 +1,45 @@
+### Milestone 196 — wave 4.3: the ticket pages match boards 7b, 7c, 7d, 7j and the 9a card; E13-10 / E12-17 Parts block, E12-19 Review splitter
+
+**Not yet manually verified by the owner.** Wave row 4.3 (`desk-ticket-pages`), rulings of the integrator on Q1–Q5 of the measure sheet.
+
+**The ticket card** replaces the Ticket | Thread | Review switch, the chip row, the uppercase status, the loose chain and the action bar at the document's end. One section above the document: id, the state once as a tinted pill with a dot, the link "Decision waiting · go to the card ›" while a decision waits, Open Review (only once the ticket has passed a step) and Thread, then a quiet grid. **Two shapes by state** (ruling Q1): Inbox and Prioritized are 9a's card (Priority, Worker, Flow in arrows with "Change", Repo and branch) with a body of 16/26 in a 660 column; Shaping and later are row 7's (Flow, Worker, Cost) with 15/24 in 720. A body that opens with its own `# h1` carries the headline; otherwise the editable title stands in. A `<>` under the pointer opens the raw YAML (the meta bar's `</>` does not show it); a `noise` finding no longer draws a badge on the card.
+
+**The document**: type and width per state through a class the plugin's editor extension sets on the surface (no base change), blank lines collapse into the boards' spacing and open under the caret, `### ` chapters of a `## Plan` read as the page's headings with the `## Plan` line itself collapsed ("the plan is the ticket"). `## Verification` including its heading is the PROOF block (verdict band, checks with time, one row of tiles, the video's controls on press); `## Verlauf` is the cost by phase where it stands, from the work on (before it the card says the cost); the Log's head has its chevron and "3 entries". Plan marks sit on the lines they mean, a bar per hand and one note per block (board 7b, from `PlanMark`). Source mode decorates nothing.
+
+**E13-10 / E12-17, the Parts block** (`ticket-document/parts.ts`, `parts-model.ts`): `### Parts` drawn as cards: grip, P1, title and line (`starts first · reason`, `after P1 · reason`), state, persona pill, estimate with its basis, `⋯` (move, Change flow, delete on the second press), running parts locked, "Typical total", the flow line, "Change flow ›", "Ask Mission Control to change the split", the link to the card. No Accept here (canvas decisions 16, 28). Every edit is the engine's `planPartsEdit`, the same parser as the phone's route; the caret brings the Markdown back. The pill reads **Plan to accept** for a Shaping ticket with open parts.
+
+**The Review tab per board 7d**: head with pill and link, proof band (walkthrough tile, verdict band, chapter chips, thumbnails), file list of 250 with viewed checkboxes beside the diff (48 · 48 · 16 columns, comments that keep to the pane, delete icon, a click on the text edits). **E12-19's splitter**: both lines drag (arrow keys too), the sizes are kept per machine. **No footer** (ruling Q2): `review/events.ts` gives row 4.8's decision card the comment count and the send (`drey:tickets-review-comments`, `drey:tickets-review-send-back`); until then "Send back with N comments" shows under the pointer on the Files head. Hex colours left `review.css`.
+
+**D-45 (found on the way):** on a dricket store the Review tab read the card's stand-in path, failed with ENOENT and never asked for the diff, so the tab was empty for every store ticket. It now reads the ticket through `ticketDocument`.
+
+Outside the row's files, as allowed by ruling Q4 (or named): `plugins/tickets/main/index.ts` (the `planPartsEdit` pass-through), `packages/tickets-engine/src/server/engine.ts` (the method on the invoke channel as a parsed `table.set`, not the `TEAM_METHODS` list: that one calls a method with one argument and this one needs the actor), `plugins/tickets/renderer/index.ts` (wiring), `shared/cost-table.ts` (additive: persona, model and minutes apart for the desktop's table), `e2e/work-panel.spec.ts` (Thread from the card).
+Specs: `parts.spec.ts` (new), `dom.spec.ts` (rewritten), `model.spec.ts`, `shape.spec.ts`, `store-document.spec.ts`, `review/view.spec.ts`, `review/model.spec.ts`; e2e `parts-block.spec.ts` (new), `fidelity-desk-tickets.spec.ts` (opt-in, scratch dricket store), `ticket-document`, `ticket-header`, `review-tab`, `tickets-store-document`, `shape-in-drey`.
+
+**Fidelity:** boards `DeskShape` (7b), `DeskPlan` (7c), `DeskReview` (7d), `DeskReady` (7j), `DeskClean` (9a, the card); screenshots `test-results/fidelity/<Board>.png` and `<Board>.{overlay,diff}.png`; built app, 1440×900, scale factor 1, theme Anthrazit, docks 300 + 380 (row 7) and 300 + 420 (9a). Fixed: every card, body, proof, cost, parts and review measure of the measure sheet. Open: none. Justified:
+
+| Region | Board | Build | Justification |
+|---|---|---|---|
+| Body type across states | 9a 16/26 in 660, row 7 15/24 in 720 | the same, by state; 1 px step between Prioritized and Shaping | per-state body per boards 9a/7b (ruling Q1) |
+| Tab bar on row 7 | 32 px, 13 px, X everywhere, dot or icon per tab | 37 px, 14 px, 9a's tabs | base chrome, milestone 192 (9a wins for the frame) |
+| Meta bar on row 7 | 40 px, path 12, Lines, Save pill, "T-0118 · $1.84" | 37 px, path 13, `</>`, `⋯`, Save while dirty | base chrome, milestone 192 |
+| 7b formatting strip | Bold, Italic, Code, Paragraph, List, Quote, Link, Insert | the base's strip | base chrome, not a plugin's to draw |
+| Left dock, Assistant, status bar | Tickets rows, answer cards, Autopilot | today's panels | belong to 4.2, 4.8, 4.4 |
+| Ids, paths, titles, counts, chips' words, thumbnails | T-0130, `tickets/shaping/…`, "Before" | T-0002, `tickets/t/0000/t-2/ticket.md`, "shot 1 · …" | data; the scratch store's |
+| 7d video tile "0:48" | a length | none in the fixture: no recording is seeded (the code reads it from the file) | data |
+| 7b bullets | two on one line | two lines, the page 24 px longer below them | data |
+| 7d diff's first line | short sample lines | the seeded lines run under the pane; a scrollbar shows under the pointer only | data |
+| 7c hint "Goal, Decisions and Constraints are above…" | a line under the title; the block 26 px lower | no line | owner decision 6 precedent: sketch text dropped (ruling Q3) |
+| 7b, 7c, 7j Type row | "Type: Ship / Fix", Worker in the right column | no row, Worker in the left column | feature not yet built, id named in the report (ruling on the addendum) |
+| 9a "Start build" | primary button | none; Thread at the right end | feature not yet built, id named in the report |
+| 9a Priority, Worker | dropdowns with chevrons | plain values, set from the board | feature not yet built, id named in the report |
+| 7d "Ralf: no blockers" | third fact in the verdict band | none | feature not yet built, id named in the report |
+| 7c "blocked-by P1" | in the part's line | `after P1` and the reason | feature not yet built, id named in the report |
+| 7j "The verifier recommends accepting." | end of the verdict | none: the report carries no recommendation | feature not yet built, id named in the report |
+| 7b, 7c persona picture | illustrated portrait | initial on the persona's colour | feature not yet built, row 4.9 (`desk-persona`, 7k) |
+| 7d Files head | nothing | "Send back with N comments" under the pointer, not in the board's state | interim until 4.8 (Send back option on the decision card, build plan row 4.8) |
+| Row 7 flow "Change", card `<>` | nothing | under the pointer only, not in the board's state | not visible in the board's state; keep the flow editor and the raw YAML reachable |
+| Text | canvas export's rendering | Electron's on Windows: same font and size, no CSS difference found | text rasterization (owner decision 2026-11-07) |
+
 ### Milestone 193 — D-43: e2e engines left by an aborted run are swept
 
 **Not yet manually verified by the owner.** Owner request, outside the list (2026-11-07): five tickets engines from the

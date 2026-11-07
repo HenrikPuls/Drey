@@ -1,10 +1,9 @@
 /**
- * The ticket header in the editor (req-62, SDK 1.34; E12-12): an opened ticket
- * shows its title as a headline under a short chip row (id, phase, issues, the
- * YAML escape) and the document's strip, in place of the base's folded
- * `▸ Frontmatter` pill — and its `## Log` opens folded. The form row (priority,
- * repositories, worker, branch, Plan with agent) is gone: those are set from
- * the board and the card menu.
+ * The ticket header in the editor (req-62, SDK 1.34; E12-12; boards 9a, 7b, 7c,
+ * 7j): an opened ticket shows its card and, when the body opens with no `# h1`
+ * of its own, its title as the headline, in place of the base's folded
+ * `▸ Frontmatter` pill. Its `## Log` opens folded. A `<>` under the pointer is
+ * the way to the raw YAML.
  *
  * The header draws from the BUFFER's frontmatter, not the file on disk
  * (an unsaved edit shows at once). Reading and rewriting the YAML is the
@@ -142,6 +141,12 @@ export function logSectionRange(text: string): { from: number; to: number } | nu
   return start !== null && end !== null && end > start ? { from: start, to: end } : null;
 }
 
+/** Whether the ticket's text, after its frontmatter, opens with a `# h1`. */
+export function bodyOpensWithHeading(text: string): boolean {
+  const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, '');
+  return /^\s*#[ \t]+\S/.test(body);
+}
+
 interface HeaderModel {
   readonly meta: TicketMeta;
   readonly issues: readonly TicketIssue[];
@@ -160,10 +165,8 @@ export interface TicketHeaderDeps {
   readonly snapshot: () => BoardSnapshot | null;
   readonly invoke: (method: string, payload?: unknown) => Promise<unknown>;
   readonly onError: (message: string) => void;
-  /** The ticket document's strip under the chips (E13-6); absent = chips only. */
-  readonly strip?: TicketStrip;
-  /** The Ticket | Thread | Review control on top of the document (E13-20); absent = none. */
-  readonly faces?: (ticketId: string) => HTMLElement;
+  /** The ticket's card (E13-6, boards 9a, 7b, 7c, 7j). */
+  readonly strip: TicketStrip;
 }
 
 export interface TicketHeader {
@@ -207,17 +210,10 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
 
   function renderHeader(input: FrontmatterViewInput, path: string): HTMLElement {
     const root = el('div', 'tickets-head');
-    const chips = el('div', 'tickets-head-chips');
     const title = el('input', 'tickets-head-title');
     title.type = 'text';
     title.spellcheck = true;
-    title.setAttribute('aria-label', 'Ticket title');
-    // E13-6: the strip (status, persona, cost, estimate, chain, gate) sits
-    // between the chip row and the headline.
-    const strip = deps.strip?.mount({ path, view: input.view });
-    const ticketId = ticketIdOfPath(path) ?? undefined;
-    const faces = ticketId === undefined ? undefined : deps.faces?.(ticketId);
-    root.append(...(faces === undefined ? [] : [faces]), chips, ...(strip === undefined ? [] : [strip.node]), title);
+    title.setAttribute('aria-label', deps.api.i18n.t('ticket.card.title_label'));
 
     let model: HeaderModel | null = models.get(input.frontmatter) ?? null;
     if (model === null) {
@@ -263,48 +259,13 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
     };
 
     function paint(): void {
-      const snapshot = deps.snapshot();
       const meta = model?.meta ?? null;
-      chips.replaceChildren();
-      const id = meta?.id ?? ticketIdOfPath(path) ?? '';
-      chips.append(el('span', 'tickets-head-id', id));
-
-      // A dricket document's path carries no column: the board's card does.
-      const phaseId = phaseOfTicketPath(path) ?? cardOfDocument(snapshot, path)?.phase ?? null;
-      const phase = snapshot?.pipeline.find((p) => p.id === phaseId);
-      const phaseChip = el(
-        'span',
-        'tickets-head-chip tickets-head-phase',
-        phaseId === 'archive' ? 'Archived' : phase?.title ?? phaseId ?? '',
-      );
-      phaseChip.title = 'Phase — move the card on the board to change it';
-      chips.append(phaseChip);
-
-      const issues = model?.issues ?? [];
-      if (issues.length > 0) {
-        const worst = issues.some((i) => i.level === 'error')
-          ? 'error'
-          : issues.some((i) => i.level === 'warning')
-            ? 'warning'
-            : 'noise';
-        const badge = el('span', `tickets-issues tickets-issues-${worst}`, String(issues.length));
-        badge.title = issues.map((i) => `[${i.level}] ${i.message}`).join('\n');
-        chips.append(badge);
-      }
-
-      chips.append(el('span', 'tickets-head-spacer'));
-      const raw = el('button', 'icon-btn tickets-head-raw');
-      raw.type = 'button';
-      raw.title = 'Edit the frontmatter as YAML';
-      raw.setAttribute('aria-label', 'Edit the frontmatter as YAML');
-      raw.append(deps.api.ui.icon('code', 13));
-      raw.addEventListener('click', () => input.expandRaw());
-      chips.append(raw);
-
       if (document.activeElement !== title) {
         title.value = meta?.title ?? '';
       }
-      strip?.paint();
+      // A body that opens with its own `# h1` carries the headline (board 9a shows one, not two).
+      title.hidden = bodyOpensWithHeading(input.view.state.doc.toString());
+      strip.paint();
     }
 
     // The headline commits on Enter or when it is left; Escape restores it.
@@ -327,6 +288,8 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       void apply({ title: typed });
     });
 
+    const strip = deps.strip.mount({ path, view: input.view, meta: () => model?.meta ?? null, issues: () => model?.issues ?? [], expandRaw: () => input.expandRaw() });
+    root.append(strip.node, title);
     paint();
     const entry = { node: root, paint };
     live.add(entry);

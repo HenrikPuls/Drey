@@ -38,12 +38,6 @@ export function filesOf(diff: TicketDiff): ReviewFile[] {
   });
 }
 
-/** `3 files · 1 of 3 viewed`. */
-export function filesSummaryOf(files: readonly ReviewFile[], viewed: ReadonlySet<string>): string {
-  const seen = files.filter((file) => viewed.has(file.key)).length;
-  return `${files.length} ${files.length === 1 ? 'file' : 'files'} · ${seen} of ${files.length} viewed`;
-}
-
 /** `+84 −6`, `+61`, `−3`; '' for a binary file. */
 export function statOf(file: Pick<ReviewFile, 'added' | 'removed'>): string {
   return [file.added > 0 ? `+${file.added}` : '', file.removed > 0 ? `−${file.removed}` : ''].filter((part) => part !== '').join(' ');
@@ -162,13 +156,45 @@ export function saveMarks(storage: MarkStorage | null, ticketId: string, marks: 
   }
 }
 
-// --- the footer ---------------------------------------------------------------
+// --- the head and the splitters ---------------------------------------------------
 
-/** Left of the footer: how the checks stand; '' while the ticket has no Verification. */
-export function checksLineOf(proof: { allPassed: boolean; checks: readonly { passed: boolean }[] } | null): string {
-  if (proof === null || proof.checks.length === 0) {
-    return '';
+/** The first paragraph of the ticket's goal or description: what the head's second line opens with. */
+export function goalOfText(text: string): string {
+  const match = /^#{2,3}[ \t]+(?:Goal|Description)[ \t]*\r?\n+((?:[^#\r\n].*\r?\n?)+)/m.exec(text);
+  return match?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+/** The sizes the two draggable lines of the tab keep (E12-19): the proof band's height, the list's width. */
+export interface ReviewSplit {
+  /** Null = as tall as the band's content (the board's state). */
+  readonly proof: number | null;
+  readonly list: number;
+}
+
+const SPLIT_KEY = 'tickets.review.split';
+const DEFAULT_SPLIT: ReviewSplit = { proof: null, list: 250 };
+
+/** Keeps a dragged size usable: the diff always stays on screen. */
+export function clampSplit(axis: 'proof' | 'list', value: number): number {
+  return axis === 'proof' ? Math.min(420, Math.max(0, value)) : Math.min(480, Math.max(160, value));
+}
+
+export function loadSplit(storage: MarkStorage | null): ReviewSplit {
+  try {
+    const raw = JSON.parse(storage?.getItem(SPLIT_KEY) ?? 'null') as Partial<ReviewSplit> | null;
+    return {
+      proof: typeof raw?.proof === 'number' ? clampSplit('proof', raw.proof) : DEFAULT_SPLIT.proof,
+      list: typeof raw?.list === 'number' ? clampSplit('list', raw.list) : DEFAULT_SPLIT.list,
+    };
+  } catch {
+    return DEFAULT_SPLIT;
   }
-  const passed = proof.checks.filter((check) => check.passed).length;
-  return proof.allPassed ? `Checks green · ${passed}/${proof.checks.length}` : `Checks: ${passed}/${proof.checks.length} green`;
+}
+
+export function saveSplit(storage: MarkStorage | null, split: ReviewSplit): void {
+  try {
+    storage?.setItem(SPLIT_KEY, JSON.stringify(split));
+  } catch {
+    // A convenience only: the sizes just reset with the next tab.
+  }
 }

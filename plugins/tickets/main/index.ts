@@ -721,6 +721,8 @@ const plugin: MainPluginModule = {
       const id = str(payload, 'id');
       return id === null ? { ok: false, error: 'bad plan parts payload' } : client.invoke('planParts', id);
     });
+    // The Parts block in the ticket (E13-10): the owner's list edits, the same call as Mission Control's.
+    ctx.ipc.handle('planPartsEdit', (payload) => client.invoke('planPartsEdit', payload));
     ctx.ipc.handle('personaPause', (payload) => {
       const persona = str(payload, 'persona');
       const paused = (payload as { paused?: unknown } | null)?.paused;

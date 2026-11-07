@@ -133,13 +133,3 @@ export function viewedKeyOf(path: string, patch: string): string {
   }
   return `${path}#${(hash >>> 0).toString(36)}`;
 }
-
-/** `Line 27` or `Lines 30–33`. */
-export function commentLabelOf(comment: { line: number; endLine: number | null }): string {
-  return comment.endLine === null ? `Line ${comment.line}` : `Lines ${comment.line}–${comment.endLine}`;
-}
-
-/** The send-back button: with comments it names how many. */
-export function sendBackLabelOf(count: number): string {
-  return count === 0 ? 'Send back…' : `Send back with ${count} ${count === 1 ? 'comment' : 'comments'}`;
-}

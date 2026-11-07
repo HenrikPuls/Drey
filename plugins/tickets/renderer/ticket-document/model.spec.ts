@@ -7,10 +7,14 @@ import {
   chainOf,
   costSummary,
   costTableOfText,
+  flowItemsOf,
   offsetWords,
+  pageShapeOf,
   proofOfText,
   sectionBodyRange,
+  sectionRange,
   statusOf,
+  workerOf,
 } from './model';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
 import { i18n } from '../../../../shared/i18n';
@@ -67,14 +71,14 @@ describe('sectionBodyRange', () => {
 
 describe('proofOfText', () => {
   it('is null without a Verification section', () => {
-    expect(proofOfText('# T\n')).toBeNull();
+    expect(proofOfText(i18n, '# T\n')).toBeNull();
   });
 
   it('reads summary, checks with chapter times, shots, video and findings', () => {
-    const proof = proofOfText(`# T\n\n${renderVerificationSection(report)}`)!;
+    const proof = proofOfText(i18n, `# T\n\n${renderVerificationSection(report)}`)!;
     expect(proof.summary).toBe('2/2 green.');
     expect(proof.allPassed).toBe(true);
-    expect(proof.stamp).toBe('Tested on 2026-11-04 by the verify run — Electron 34.2.0 on win32.');
+    expect(proof.stamp).toBe('Tested on 2026-11-04 by the verify run, Electron 34.2.0 on win32.');
     expect(proof.checks.map((c) => [c.label, c.at, c.note])).toEqual([
       ['One palette after a double Ctrl+P', '0:12', null],
       ['Escape closes it', '0:24', 'focus stays'],
@@ -94,7 +98,7 @@ describe('proofOfText', () => {
       videoNotKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.',
       videoChapters: [],
     };
-    const proof = proofOfText(renderVerificationSection(failing))!;
+    const proof = proofOfText(i18n, renderVerificationSection(failing))!;
     expect(proof.summary).toBe('1/2 green, 1 failing.');
     expect(proof.allPassed).toBe(false);
     expect(proof.video).toEqual({ file: null, notKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.', chapters: [] });
@@ -180,8 +184,65 @@ describe('chainOf', () => {
   });
 });
 
+describe('the card of a page', () => {
+  const pipeline = [
+    { id: 'inbox', title: 'Inbox', handover: 'manual' },
+    { id: 'shaping', title: 'Shaping', handover: 'manual' },
+    { id: 'prioritized', title: 'Prioritized', handover: 'manual' },
+    { id: 'plan', title: 'Plan', handover: 'agent plan-default', persona: 'paul' },
+    { id: 'build', title: 'Build', handover: 'agent build-default', persona: 'ben' },
+    { id: 'ready', title: 'Ready to try', handover: 'manual' },
+    { id: 'done', title: 'Done', handover: 'none' },
+  ] as unknown as PipelinePhase[];
+  const chain = (currentPhaseId: string) => chainOf({ pipeline, currentPhaseId, card: { meta: {} } as unknown as TicketCard, personas: [] });
+
+  it('Inbox and Prioritized follow board 9a, Shaping and later row 7', () => {
+    expect(['inbox', 'prioritized', 'shaping', 'build', 'ready', null].map((phase) => pageShapeOf(phase, pipeline))).toEqual(['early', 'early', 'flow', 'flow', 'flow', 'flow']);
+  });
+
+  it('words the flow row as the boards do', () => {
+    const titles = (phase: string, parts: boolean) => flowItemsOf(i18n, chain(phase), phase, parts).map((item) => [item.title, item.state, item.note]);
+    expect(titles('shaping', false)).toEqual([
+      ['Shape', 'current', '(with you)'],
+      ['Plan', 'future', null],
+      ['Build', 'future', null],
+      ['Accept', 'future', null],
+    ]);
+    expect(titles('shaping', true).slice(0, 2)).toEqual([
+      ['Shape', 'past', null],
+      ['Plan', 'current', '(waits for you)'],
+    ]);
+    expect(titles('ready', false).slice(-2)).toEqual([
+      ['Build', 'past', null],
+      ['Accept', 'current', '(your turn)'],
+    ]);
+  });
+
+  it('names the worker of the current step, else the last one, else the next one', () => {
+    expect(workerOf(chain('build'))?.phase).toBe('build');
+    expect(workerOf(chain('ready'))?.phase).toBe('build');
+    expect(workerOf(chain('shaping'))?.phase).toBe('plan');
+  });
+
+  it('a Shaping ticket whose plan lists parts is a plan to accept', () => {
+    const board = { pipeline } as unknown as Parameters<typeof statusOf>[2];
+    expect(statusOf(i18n, null, board, 'Shaping', true)).toMatchObject({ label: 'Plan to accept', pill: 'peach' });
+    expect(statusOf(i18n, null, board, 'Shaping')).toMatchObject({ label: 'Shaping', pill: 'pink' });
+    expect(statusOf(i18n, null, board, 'Prioritized')).toMatchObject({ label: 'Prioritized', pill: 'accent' });
+  });
+});
+
+describe('sectionRange', () => {
+  it('takes the heading along', () => {
+    const text = 'x\n\n## Verlauf\n\n- a\n- b\n\n## Log\n\n- c\n';
+    const range = sectionRange(text, 'Verlauf')!;
+    expect(text.slice(range.from, range.to)).toBe('## Verlauf\n\n- a\n- b');
+    expect(sectionRange(text, 'Plan')).toBeNull();
+  });
+});
+
 describe('statusOf', () => {
-  const board = { columns: [] } as never;
+  const board = { columns: [], pipeline: [] } as never;
   const row = (need: Record<string, unknown> | null, extra: Record<string, unknown> = {}) =>
     ({ need, run: null, card: { blocked: [] }, phase: { id: 'build' }, ...extra }) as never;
 
@@ -197,7 +258,7 @@ describe('statusOf', () => {
 
   it('names a running and a blocked ticket, and an idle one by its phase', () => {
     expect(statusOf(i18n, row(null, { run: {} }), board, 'Build').label).toBe('Running');
-    expect(statusOf(i18n, row(null, { card: { blocked: ['T-0001'] } }), board, 'Build')).toMatchObject({ label: 'Blocked', line: 'by T-0001' });
+    expect(statusOf(i18n, row(null, { card: { blocked: ['T-0001'] } }), board, 'Build')).toMatchObject({ label: 'Blocked', pill: 'amber' });
     expect(statusOf(i18n, null, board, 'Build')).toMatchObject({ label: 'Build', tone: 'idle' });
   });
 });

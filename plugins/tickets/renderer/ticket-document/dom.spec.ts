@@ -2,15 +2,16 @@
 import { describe, expect, it, vi } from 'vitest';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
 import { i18n } from '../../../../shared/i18n';
-import { GO_TO_DECISION_CARD, actionBarNode, costNode, proofNode, stripNode } from './dom';
+import { GO_TO_DECISION_CARD, cardNode, costNode, decisionLinkNode, proofNode, type CardFacts } from './dom';
 import type { ProofView } from './model';
 
 const proof: ProofView = {
   summary: '2/2 green.',
   allPassed: true,
-  stamp: 'Tested on 2026-11-04 by Tessa.',
+  stamp: 'Tested on 2026-11-04 by Tessa, Electron 34.2.0 on win32.',
+  tester: 'Tessa',
   checks: [
-    { label: 'One palette', passed: true, note: null, at: '0:12' },
+    { label: 'One palette', passed: true, note: 'tessa', at: '0:12' },
     { label: 'Escape closes it', passed: false, note: 'focus lost', at: null },
   ],
   shots: [{ file: 'verify-1.png', caption: 'shot 1 · One palette' }],
@@ -19,74 +20,76 @@ const proof: ProofView = {
 };
 
 describe('proofNode', () => {
-  it('draws the verdict, the checks, the picture and the player', () => {
+  it('draws the verdict, the checks and one row of tiles', () => {
     const open = vi.fn();
-    const node = proofNode({ vaultId: 'v1', openFile: open }, proof);
+    const node = proofNode({ i18n, vaultId: 'v1', openFile: open }, proof);
+    expect(node.querySelector('.tickets-doc-kicker')?.textContent).toBe('Proof');
     expect(node.querySelector('.tickets-doc-verdict')?.textContent).toBe('2/2 green.');
+    expect(node.querySelector('.tickets-doc-verdict-box')?.textContent).toBe('2/2 green. Tested on 2026-11-04 by Tessa, Electron 34.2.0 on win32.');
     expect(node.querySelectorAll('.tickets-doc-check')).toHaveLength(2);
-    expect(node.querySelector('.tickets-doc-check.is-fail .tickets-doc-check-meta')?.textContent).toBe('focus lost');
-    const image = node.querySelector('img')!;
-    expect(image.getAttribute('src')).toBe('drey-asset://v1/asset/tickets/attachments/verify-1.png');
-    (node.querySelector('.tickets-doc-shot-open') as HTMLButtonElement).click();
+    expect(node.querySelector('.tickets-doc-check.is-pass .tickets-doc-check-meta')?.textContent).toBe('tessa · 0:12');
+    expect(node.querySelector('img')?.getAttribute('src')).toBe('drey-asset://v1/asset/tickets/attachments/verify-1.png');
+    node.querySelector<HTMLButtonElement>('button.tickets-doc-shot')!.click();
     expect(open).toHaveBeenCalledWith('tickets/attachments/verify-1.png');
     const video = node.querySelector('video')!;
     expect(video.getAttribute('src')).toBe('drey-asset://v1/asset/tickets/videos/v.webm');
-    expect(video.controls).toBe(true);
-    expect(node.querySelector('.tickets-doc-chapter')?.textContent).toBe('0:12 One palette');
+    expect(video.controls).toBe(false);
+    expect(node.querySelector('.tickets-doc-shot.is-video')?.textContent).toBe('video · 1 chapter');
     expect(node.querySelector('.tickets-doc-findings li')?.textContent).toBe('Slow start.');
   });
 
-  it('replaces the player with the not-kept line', () => {
-    const node = proofNode({ vaultId: null, openFile: vi.fn() }, { ...proof, video: { file: null, notKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.', chapters: [] } });
+  it('gives the video its controls when the tile is pressed', () => {
+    const node = proofNode({ i18n, vaultId: null, openFile: vi.fn() }, proof);
+    node.querySelector<HTMLElement>('.tickets-doc-shot.is-video')!.click();
+    expect(node.querySelector('video')!.controls).toBe(true);
+  });
+
+  it('jumps to a check from its time', () => {
+    const node = proofNode({ i18n, vaultId: null, openFile: vi.fn() }, proof);
+    const video = node.querySelector('video')!;
+    video.play = vi.fn(async () => undefined);
+    node.querySelector<HTMLElement>('.tickets-doc-check-meta.is-jump')!.click();
+    expect(video.currentTime).toBe(12);
+  });
+
+  it('replaces the video with the not-kept line', () => {
+    const node = proofNode({ i18n, vaultId: null, openFile: vi.fn() }, { ...proof, video: { file: null, notKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.', chapters: [] } });
     expect(node.querySelector('video')).toBeNull();
     expect(node.querySelector('.tickets-doc-note')?.textContent).toBe('Video not kept: 31.2 MB exceeds the 25 MB limit.');
   });
 
-  it('hides gallery and player when the ticket carries none', () => {
-    const node = proofNode({ vaultId: null, openFile: vi.fn() }, { ...proof, shots: [], video: null, findings: [] });
+  it('hides tiles and findings when the ticket carries none', () => {
+    const node = proofNode({ i18n, vaultId: null, openFile: vi.fn() }, { ...proof, shots: [], video: null, findings: [] });
     expect(node.querySelector('img, video, .tickets-doc-shots, .tickets-doc-findings')).toBeNull();
   });
 });
 
 describe('costNode', () => {
+  const row = { phase: 'Build', model: 'Ben · sonnet', persona: 'Ben', modelName: 'sonnet', minutes: 14, tokens: '88k', time: '14 min', cost: '$0.94', pending: false, bad: false, meta: '' };
   const view = {
-    rows: [
-      { phase: 'Build', model: 'Ben · sonnet', tokens: '88k', time: '14 min', cost: '$0.94', pending: false, bad: false, meta: '' },
-      { phase: 'Review', model: '', tokens: '', time: '', cost: '', pending: true, bad: false, meta: '' },
-    ],
+    rows: [row, { ...row, phase: 'Review', persona: '', modelName: '', minutes: null, tokens: '', time: '', cost: '', pending: true }],
     total: { tokens: '88k', time: '14 min', cost: '$0.94' },
   };
 
-  it('lists the runs, a quiet row for a phase without a run, and the total row', () => {
+  it('says the total in its kicker and draws the runs as the board does', () => {
     const node = costNode(i18n, view);
-    expect(Array.from(node.querySelectorAll('th')).map((c) => c.textContent)).toEqual(['Phase', 'Model', 'Tokens', 'Time', 'Cost']);
-    const rows = Array.from(node.querySelectorAll('tbody tr'));
-    expect(rows[0]!.textContent).toBe('BuildBen · sonnet88k14 min$0.94');
-    expect(rows[1]!.textContent).toBe('Reviewno run yet');
-    expect(rows[1]!.classList.contains('is-pending')).toBe(true);
-    expect(node.querySelector('tfoot tr')?.textContent).toBe('Total88k14 min$0.94');
+    expect(node.querySelector('.tickets-doc-kicker')?.textContent).toBe('Cost · $0.94 in total');
+    const rows = Array.from(node.querySelectorAll('.tickets-doc-table-row'));
+    expect(rows.map((r) => Array.from(r.children).map((c) => c.textContent))).toEqual([
+      ['Phase', 'Model', 'Tokens', 'Time', 'Cost'],
+      ['Build · Ben', 'sonnet', '88k', '14m', '$0.94'],
+      ['Review', 'no run yet'],
+      ['Total', '', '88k', '14m', '$0.94'],
+    ]);
+    expect(rows[2]!.classList.contains('is-pending')).toBe(true);
   });
 });
 
-describe('actionBarNode', () => {
-  const icon = (): SVGElement => document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  const deps = () => ({ icon, decisionLinkText: 'Decision waiting · go to the card', onThread: vi.fn(), onReview: vi.fn() });
-  const labels = (node: HTMLElement): string[] => Array.from(node.querySelectorAll('button')).map((b) => b.textContent ?? '');
-  const bar = (decide: boolean) => ({ decide, acceptLabel: 'Accept and move to Commit', ticketId: 'T-0121' });
-
-  it('carries no Accept or Send back at a checkpoint, only the link to the decision card (req-97)', () => {
-    const d = deps();
-    const node = actionBarNode(d, bar(true));
-    expect(labels(node)).toEqual(['Thread', 'Open Review']);
-    expect(node.querySelector('.tickets-doc-decision-link')?.textContent).toBe('Decision waiting · go to the card');
-    node.querySelectorAll('button').forEach((b) => b.click());
-    expect([d.onThread, d.onReview].map((f) => f.mock.calls.length)).toEqual([1, 1]);
-  });
-
-  it('the link focuses the card that answers the event, and opens the thread when none does', () => {
-    const d = deps();
-    const node = actionBarNode(d, bar(true));
-    const link = node.querySelector<HTMLAnchorElement>('.tickets-doc-decision-link')!;
+describe('decisionLinkNode', () => {
+  it('focuses the card that answers the event, and runs the fallback when none does', () => {
+    const fallback = vi.fn();
+    const link = decisionLinkNode(i18n, 'T-0121', fallback);
+    expect(link.textContent).toBe('Decision waiting · go to the card ›');
     const seen: string[] = [];
     const listener = (event: Event): void => {
       const detail = (event as CustomEvent<{ id: string; handled: boolean }>).detail;
@@ -97,46 +100,78 @@ describe('actionBarNode', () => {
     link.click();
     document.removeEventListener(GO_TO_DECISION_CARD, listener);
     expect(seen).toEqual(['T-0121']);
-    expect(d.onThread).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
 
     link.click();
-    expect(d.onThread).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows no link and only Thread and Open Review off a checkpoint', () => {
-    const node = actionBarNode(deps(), bar(false));
-    expect(labels(node)).toEqual(['Thread', 'Open Review']);
-    expect(node.querySelector('.tickets-doc-decision-link')).toBeNull();
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('stripNode', () => {
-  it('shows status, persona, cost, estimate, chain and gate', () => {
-    const node = stripNode({
-      status: { label: 'Needs you', tone: 'needs', kind: 'Question', line: 'waits for your answer' },
-      who: 'Tessa',
-      step: 'Step: Test',
-      kind: 'Question',
-      cost: '$1.20 so far',
-      estimate: 'est. $3.00–5.20 · from 3 runs',
-      chain: [
-        { phase: 'build', title: 'Build', state: 'past', who: 'Ben', personaId: 'ben', checkpoint: false, inserted: false, skipped: false, notify: false },
-        { phase: 'commit', title: 'Accept', state: 'current', who: 'you', personaId: null, checkpoint: true, inserted: false, skipped: false, notify: false },
-      ],
-      gate: 'Waits for you: should it move the section?',
-    });
-    expect(node.querySelector('.tickets-doc-status')?.textContent).toBe('Needs you');
-    expect(node.querySelector('.tickets-doc-kind')?.textContent).toBe('Question');
-    expect(node.querySelector('.tickets-doc-step-now')?.textContent).toBe('Step: Test');
-    expect(node.querySelector('.tickets-doc-who')?.textContent).toBe('Tessa');
-    expect(node.querySelector('.tickets-doc-cost-fact')?.textContent).toBe('$1.20 so far');
-    expect(node.querySelector('.tickets-doc-estimate')?.textContent).toBe('est. $3.00–5.20 · from 3 runs');
-    expect(Array.from(node.querySelectorAll('.tickets-doc-step')).map((s) => s.textContent)).toEqual(['✓BuildBen', '◆Acceptyou']);
-    expect(node.querySelector('.tickets-doc-gate')?.textContent).toBe('Waits for you: should it move the section?');
+describe('cardNode', () => {
+  const facts = (over: Partial<CardFacts> = {}): CardFacts => ({
+    shape: 'flow',
+    id: 'T-0118',
+    pill: { label: 'Ready to try', tone: 'mint' },
+    kind: '',
+    issues: null,
+    flow: [
+      { title: 'Build', state: 'past', note: null, skipped: false },
+      { title: 'Accept', state: 'current', note: '(your turn)', skipped: false },
+    ],
+    priority: 'Normal',
+    worker: 'Tessa',
+    workerNote: '',
+    avatar: null,
+    repo: 'drey',
+    branch: 't/T-0118',
+    cost: '$1.84 in total · est. $1.50–2.40 · from 3 runs',
+    gate: '',
+    decide: true,
+    canReview: true,
+    ...over,
+  });
+  const actions = () => ({ i18n, onThread: vi.fn(), onReview: vi.fn(), onFlow: vi.fn() });
+  const labels = (node: HTMLElement): string[] => Array.from(node.querySelectorAll('.tickets-card-top button')).map((b) => b.textContent ?? '');
+  const grid = (node: HTMLElement): string[] => Array.from(node.querySelectorAll('.tickets-card-label')).map((l) => l.textContent ?? '');
+
+  it('row 7: the state once, the link, Open Review and Thread, Flow / Worker / Cost', () => {
+    const a = actions();
+    const node = cardNode(a, facts());
+    expect(node.classList.contains('is-flow')).toBe(true);
+    expect(node.querySelector('.tickets-head-phase')?.textContent).toBe('Ready to try');
+    expect(node.querySelector('.tickets-doc-status.is-mint')).not.toBeNull();
+    expect(node.querySelector('.tickets-doc-decision-link')).not.toBeNull();
+    expect(labels(node)).toEqual(['Open Review', 'Thread']);
+    expect(grid(node)).toEqual(['Flow', 'Worker', 'Cost']);
+    expect(Array.from(node.querySelector('.tickets-doc-chain')!.children).map((c) => c.textContent)).toEqual(['✓ Build', '·', 'Accept', '(your turn)', 'Change']);
+    expect(node.querySelector('.tickets-doc-cost-fact')?.textContent).toBe('$1.84 in total · est. $1.50–2.40 · from 3 runs');
+    node.querySelectorAll<HTMLButtonElement>('.tickets-card-top button').forEach((b) => b.click());
+    expect([a.onReview, a.onThread].map((f) => f.mock.calls.length)).toEqual([1, 1]);
   });
 
-  it('omits what it does not have', () => {
-    const node = stripNode({ status: { label: 'Build', tone: 'idle', kind: '', line: '' }, kind: '', who: '', step: '', cost: null, estimate: null, chain: [], gate: '' });
-    expect(node.querySelector('.tickets-doc-kind, .tickets-doc-who, .tickets-doc-step-now, .tickets-doc-cost-fact, .tickets-doc-estimate, .tickets-doc-chain, .tickets-doc-gate')).toBeNull();
+  it('9a: Priority / Worker / Flow / Repo, the flow in arrows with its Change link, no Review before there are changes', () => {
+    const a = actions();
+    const node = cardNode(a, facts({ shape: 'early', decide: false, canReview: false, worker: 'opencode', workerNote: '· default', flow: [{ title: 'Build', state: 'future', note: null, skipped: false }, { title: 'Accept', state: 'future', note: null, skipped: false }] }));
+    expect(node.classList.contains('is-early')).toBe(true);
+    expect(labels(node)).toEqual(['Thread']);
+    expect(grid(node)).toEqual(['Priority', 'Worker', 'Flow', 'Repo']);
+    expect(node.textContent).toContain('Build → Accept');
+    expect(node.textContent).toContain('opencode · default');
+    expect(node.querySelector('.tickets-card-branch')?.textContent).toBe('t/T-0118');
+    node.querySelector<HTMLButtonElement>('.tickets-doc-flow')!.click();
+    expect(a.onFlow).toHaveBeenCalledTimes(1);
+  });
+
+  it('7b: the worker is a picture', () => {
+    const node = cardNode(actions(), facts({ avatar: { initials: 'P', color: '#123', name: 'Paul' } }));
+    expect(node.querySelector<HTMLElement>('.tickets-doc-avatar')?.title).toBe('Paul');
+  });
+
+  it('adds the issue badge and the gate only when there is something to say', () => {
+    const plain = cardNode(actions(), facts({ decide: false }));
+    expect(plain.querySelector('.tickets-issues, .tickets-doc-gate, .tickets-doc-decision-link')).toBeNull();
+    const full = cardNode(actions(), facts({ issues: { count: 2, worst: 'error', title: 'x' }, gate: 'Waits for you: which one?' }));
+    expect(full.querySelector('.tickets-issues-error')?.textContent).toBe('2');
+    expect(full.querySelector('.tickets-doc-gate')?.textContent).toBe('Waits for you: which one?');
   });
 });
