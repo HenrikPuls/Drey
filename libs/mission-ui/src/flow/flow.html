@@ -1,3 +1,194 @@
+@if (pad()) {
+<section class="pd-flow" [attr.aria-label]="'flow.pad.title' | t: { ticket: flow()?.ticket ?? '' }">
+  <mc-app-bar [title]="'flow.pad.title' | t: { ticket: flow()?.ticket ?? '' }" [back]="flow() === null ? ('flow.pad.back_plan' | t) : backLabel()" (backed)="close()" />
+
+  <div class="pd-fbody">
+    @if (flow(); as f) {
+      @if (readOnly()) {
+        <p class="pd-fnote">{{ f.readOnly ?? ('flow.pad.read_only' | t) }}</p>
+      }
+
+      <div class="pd-fflow">
+        <div class="pd-ftitle">
+          <b>{{ 'flow.pad.for_ticket' | t }}</b>
+          <span class="pd-fchip">{{ chip() }}</span>
+        </div>
+        <div class="pd-fstrip" role="group" [attr.aria-label]="'flow.pad.gates' | t">
+          @for (row of padRows(); track row.step.index; let first = $first; let at = $index) {
+            <div class="pd-fcell">
+              @if (!first) {
+                <button
+                  type="button"
+                  class="pd-fins"
+                  [disabled]="readOnly()"
+                  [attr.aria-expanded]="adding() === padRows()[at - 1]!.step.index"
+                  [attr.aria-label]="'flow.pad.insert_before' | t: { title: row.step.title }"
+                  (click)="toggleAdding(padRows()[at - 1]!.step.index)"
+                >
+                  <span class="pd-fins-line" aria-hidden="true"></span>
+                  <span class="pd-fins-dot" aria-hidden="true">+</span>
+                </button>
+              }
+              <button
+                type="button"
+                class="pd-fgate"
+                [class.draft]="row.dashed"
+                [class.skip]="row.step.skipped"
+                [class.sel]="selected() === row.step.index"
+                [attr.aria-pressed]="selected() === row.step.index"
+                [attr.aria-label]="row.label"
+                (click)="select(row.step)"
+              >
+                <span class="pd-fcaps">{{ row.step.title }}</span>
+                <span class="pd-fwho">
+                  <mc-ph-avatar [name]="row.name" [color]="row.tint" [size]="24" />
+                  <b>{{ row.name }}</b>
+                </span>
+                <span class="pd-fsub">{{ row.sub }}</span>
+                <span class="pd-fmark" [class.run]="row.step.state === 'current'">{{ row.extra }}</span>
+              </button>
+            </div>
+          }
+        </div>
+        @if (adding() !== null) {
+          <div class="pd-fadd" role="group" [attr.aria-label]="'flow.pad.add_group' | t">
+            @for (phase of addable(); track phase.id) {
+              <button type="button" class="pd-fpick" [disabled]="busy()" (click)="add(phase.id, adding()!)">{{ phase.title }}</button>
+            } @empty {
+              <span class="pd-fnote">{{ 'flow.pad.no_phase' | t }}</span>
+            }
+          </div>
+        }
+        <p class="pd-fexplain">{{ explain() }}</p>
+      </div>
+
+      @if (reason(); as why) {
+        <div class="pd-fpaul" role="status">
+          <span class="pd-fvia">
+            <mc-ph-avatar name="Paul" [color]="paulColor()" [size]="20" />
+            {{ 'flow.pad.paul_via' | t }}
+          </span>
+          <span class="pd-fp">{{ why }}</span>
+          @for (line of changeLines(); track line) {
+            <span class="pd-fp">{{ line }}</span>
+          }
+          <button type="button" class="pd-flink" (click)="undoDraft()">{{ 'flow.pad.undo_draft' | t }}</button>
+        </div>
+      }
+
+      @if (inspector(); as ins) {
+        <div class="pd-fcard" role="group" [attr.aria-label]="'flow.pad.gate' | t: { title: ins.step.title }">
+          <div class="pd-fhead">
+            <mc-ph-avatar [name]="ins.who" [color]="padRowOf(ins.step.index)?.tint ?? 'var(--text-2)'" [size]="24" />
+            <b>{{ 'flow.pad.gate' | t: { title: ins.step.title } }}</b>
+            @if (changed().has(ins.step.index)) {
+              <span class="pd-fgrey">{{ 'flow.pad.gate_draft' | t }}</span>
+            }
+          </div>
+
+          @if (ins.running) {
+            <p class="pd-fnote">{{ 'flow.pad.running_hint' | t }}</p>
+          } @else if (!ins.editable) {
+            <p class="pd-fnote">{{ 'flow.pad.locked_hint' | t }}</p>
+          }
+
+          <div class="pd-fgrid">
+            <label class="pd-ffield">
+              <span class="pd-flabel">{{ 'flow.pad.who' | t }}</span>
+              <select class="pd-fsel" [disabled]="!ins.editable || busy()" (change)="pickPersona(ins.step, $event)">
+                @if (!ins.owner) {
+                  <option value="" [selected]="!ins.step.pinned">{{ 'flow.pad.default_persona' | t }}</option>
+                }
+                @for (p of personasFor(ins.step); track p.id) {
+                  <option [value]="p.id" [selected]="ins.step.pinned && ins.step.persona === p.id">{{ p.title }}</option>
+                }
+              </select>
+            </label>
+            <label class="pd-ffield">
+              <span class="pd-flabel">{{ 'flow.pad.model' | t }}</span>
+              <select class="pd-fsel ro" disabled>
+                <option>{{ ins.owner ? ('flow.pad.you' | t) : (ins.step.model ?? ('flow.pad.model_none' | t)) }}</option>
+              </select>
+            </label>
+            <label class="pd-ffield">
+              <span class="pd-flabel">{{ 'flow.pad.runs_after' | t }}</span>
+              <select class="pd-fsel ro" disabled>
+                <option>{{ ins.afterWho ?? ('flow.pad.runs_after_start' | t) }}</option>
+              </select>
+            </label>
+            <div class="pd-ftell">
+              <span class="pd-ftext">
+                {{ 'flow.pad.tell' | t }}
+                <span class="pd-fhint">{{ 'flow.pad.tell_hint' | t }}</span>
+              </span>
+              <button
+                type="button"
+                class="pd-fswitch"
+                role="switch"
+                [class.on]="ins.step.notify"
+                [attr.aria-checked]="ins.step.notify"
+                [attr.aria-label]="'flow.pad.tell' | t"
+                [disabled]="!ins.editable || busy()"
+                (click)="setNotify(ins.step, !ins.step.notify)"
+              >
+                <span class="pd-fknob"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="pd-fbtns">
+            <button type="button" class="pd-fbtn" [disabled]="!ins.editable || !ins.earlier || busy()" (click)="move(ins.step, -1)">{{ 'flow.pad.move_earlier' | t }}</button>
+            <button type="button" class="pd-fbtn" [disabled]="!ins.editable || !ins.later || busy()" (click)="move(ins.step, 1)">{{ 'flow.pad.move_later' | t }}</button>
+            <button type="button" class="pd-fbtn dashed" [disabled]="readOnly() || busy()" (click)="toggleAdding(ins.step.index)">{{ 'flow.pad.add_after' | t }}</button>
+            <span class="pd-fgrow"></span>
+            @if (ins.step.skipped) {
+              <button type="button" class="pd-fbtn" [disabled]="!ins.editable || busy()" (click)="restore(ins.step)">{{ 'flow.pad.restore' | t }}</button>
+            } @else {
+              <button type="button" class="pd-fbtn danger" [disabled]="!ins.editable || busy()" (click)="remove(ins.step)">{{ 'flow.pad.remove' | t }}</button>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="pd-fask">
+        <label class="pd-fsr" for="pd-flow-ask">{{ 'flow.pad.ask_label' | t }}</label>
+        <textarea
+          id="pd-flow-ask"
+          class="pd-fin"
+          rows="1"
+          [value]="ask()"
+          [disabled]="readOnly() || busy()"
+          (input)="onAsk($event)"
+          (keydown.enter)="$event.preventDefault(); askPaul()"
+        ></textarea>
+        <button type="button" class="pd-fsend" [attr.aria-label]="'flow.pad.send' | t" [attr.title]="'flow.pad.send' | t" [disabled]="readOnly() || busy()" (click)="askPaul()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        </button>
+      </div>
+    } @else if (error(); as e) {
+      <p class="pd-fnote" role="alert">{{ e }}</p>
+    } @else {
+      <p class="pd-fnote" aria-live="polite">{{ 'flow.pad.loading' | t }}</p>
+    }
+  </div>
+
+  @if (flow() !== null) {
+    <footer class="pd-ffoot">
+      @if (message(); as m) {
+        <p class="pd-ferror" role="alert">{{ m }}</p>
+      }
+      <div class="pd-frow">
+        <span class="pd-fstatus">{{ draftLine() }}</span>
+        <button type="button" class="pd-ffbtn" [disabled]="readOnly() || busy() || (flow()?.chain?.length ?? 0) === 0" (click)="reset()">{{ 'flow.pad.reset' | t }}</button>
+        <button type="button" class="pd-ffbtn" (click)="close()">{{ 'flow.pad.discard' | t }}</button>
+        <button type="button" class="pd-ffbtn save" [disabled]="readOnly() || busy() || !dirty()" (click)="save()">{{ 'flow.pad.save' | t }}</button>
+      </div>
+    </footer>
+  }
+</section>
+} @else {
 <section class="fe" aria-label="Flow editor">
   <header class="fe-head">
     <button type="button" class="fe-back" (click)="close()">
@@ -210,3 +401,4 @@
     </footer>
   }
 </section>
+}

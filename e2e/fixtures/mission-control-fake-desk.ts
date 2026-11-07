@@ -156,6 +156,9 @@ function boardsRoute(pathname: string, pad: boolean): unknown {
     const found = (pad ? BOARDS.PAD_BOARD : BOARDS.BOARD).columns.flatMap((c) => c.tickets).find((t) => t.id === id);
     return found === undefined ? { ok: false, error: 'not found' } : { ok: true, card: found, text: (pad ? BOARDS.PAD_TICKET_TEXT[id] : undefined) ?? BOARDS.TICKET_TEXT[id] ?? `---\nid: ${id}\n---\n`, revision: '1' };
   }
+  if (pad && /^\/api\/tickets\/T-0130\/flow\/\d+$/.test(pathname)) {
+    return BOARDS.PAD_FLOW_130;
+  }
   const diff = /^\/api\/tickets\/([^/]+)\/diff$/.exec(pathname);
   if (pad && diff !== null) {
     return decodeURIComponent(diff[1]!) === 'T-0121' ? BOARDS.PAD_DIFF_121 : { files: [], truncated: false };

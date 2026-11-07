@@ -434,3 +434,66 @@ export const PAD_ESTIMATES: Record<string, unknown> = {
   ...ESTIMATES,
   'build/ben': estimate('build', 'ben', 'qwen3-coder', 1.45, 1.1, 1.8),
 };
+
+/** 5i: the flow of T-0130's third part as the desk answers it before Paul's draft (the board's sample says part 3 whichever part is opened). */
+const flowStep = (index: number, phase: string, title: string, extra: Record<string, unknown>) => ({
+  index,
+  phase,
+  title,
+  state: 'future',
+  inserted: false,
+  skipped: false,
+  moved: false,
+  notify: false,
+  persona: null,
+  pinned: false,
+  model: null,
+  owner: false,
+  locked: false,
+  ...extra,
+});
+const FLOW_BASE_STEPS = [
+  flowStep(1, 'build', 'Build', { persona: 'ben', pinned: true, model: 'opus' }),
+  flowStep(2, 'review', 'Review', { persona: 'ralf', model: 'sonnet' }),
+  flowStep(3, 'verify', 'Verify', { persona: 'tessa', model: 'sonnet' }),
+  flowStep(4, 'accept', 'Accept', { owner: true }),
+];
+export const PAD_FLOW_130 = {
+  ok: true,
+  ticket: 'T-0130',
+  title: 'Voice capture for tickets',
+  scope: { kind: 'part', index: 2, title: 'Ticket from transcript' },
+  chain: [],
+  saved: [],
+  steps: FLOW_BASE_STEPS,
+  phases: [
+    { id: 'build', title: 'Build' },
+    { id: 'review', title: 'Review' },
+    { id: 'security', title: 'Security' },
+    { id: 'verify', title: 'Verify' },
+    { id: 'accept', title: 'Accept' },
+  ],
+  personas: [
+    { id: 'ralf', kind: 'agent', title: 'Ralf', color: 'var(--accent-peach)', model: 'sonnet' },
+    { id: 'ben', kind: 'agent', title: 'Ben', color: 'var(--accent)', model: 'opus' },
+    { id: 'paul', kind: 'agent', title: 'Paul', color: 'var(--accent-peach)', model: 'sonnet' },
+    { id: 'tessa', kind: 'agent', title: 'Tessa', color: 'var(--ok)', model: 'sonnet' },
+    { id: 'you', kind: 'human', title: 'You', color: 'var(--text)', model: '' },
+  ],
+  readOnly: null,
+  reason: null,
+};
+
+/** 5i: Paul's draft (what `POST /api/tickets/T-0130/flow-draft` answers): a security pass by Ralf after the review, with a card for the owner. */
+export const PAD_FLOW_130_DRAFT = {
+  ...PAD_FLOW_130,
+  chain: ['insert security after review'],
+  steps: [
+    FLOW_BASE_STEPS[0],
+    FLOW_BASE_STEPS[1],
+    flowStep(3, 'security', 'Security', { inserted: true, persona: 'ralf', pinned: true, model: 'sonnet', notify: true }),
+    { ...FLOW_BASE_STEPS[2], index: 4 },
+    { ...FLOW_BASE_STEPS[3], index: 5 },
+  ],
+  reason: 'Part 3 touches the command parser, so I added a security pass by Ralf after the review. You would be told when it is done.',
+};

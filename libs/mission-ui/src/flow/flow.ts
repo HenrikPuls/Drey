@@ -1,5 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import type { McFlowPersona, McFlowStep } from '../api/dto';
+import { AppBar } from '../app-bar/app-bar';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { McI18n } from '../i18n/i18n.service';
+import { PhoneAvatar } from '../phone/avatar';
+import { padSignal } from '../phone/phone';
 import {
   MC_FLOW_STATE,
   addablePhasesOf,
@@ -25,12 +30,16 @@ import {
  */
 @Component({
   selector: 'mc-flow-editor',
+  imports: [AppBar, McI18nPipe, PhoneAvatar],
   templateUrl: './flow.html',
-  styleUrl: './flow.css',
+  styleUrls: ['./flow.css', './pad.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FlowEditor {
   private readonly state = inject(MC_FLOW_STATE);
+  private readonly i18n = inject(McI18n);
+  /** The iPad's face (board 5i); desktop web and the phone keep the list below. */
+  protected readonly pad = padSignal();
 
   protected readonly flow = computed(() => this.state.flow());
   protected readonly error = computed(() => this.state.error());
@@ -79,6 +88,82 @@ export class FlowEditor {
     });
   });
 
+  /** The iPad's strip: per gate the persona's name, its model line and the draft marks (board 5i). */
+  protected readonly padRows = computed(() => {
+    const flow = this.flow();
+    if (flow === null) {
+      return [];
+    }
+    const t = (key: Parameters<McI18n['t']>[0]): string => this.i18n.t(key);
+    return this.rows().map((row) => {
+      const step = row.step;
+      const name = step.persona !== null ? row.who : step.owner ? t('flow.pad.you') : t('flow.pad.automatic');
+      const model = step.model === null ? (step.pinned ? t('flow.pad.pinned') : '') : step.pinned ? this.i18n.t('flow.pad.model_pinned', { model: step.model }) : step.model;
+      const sub = step.owner && step.model === null ? t('flow.pad.manual_gate') : model;
+      const extra = step.skipped
+        ? t('flow.pad.mark_removed')
+        : step.state === 'current'
+          ? t('flow.pad.mark_running')
+          : row.dashed && step.notify
+            ? t('flow.pad.mark_draft_tells')
+            : row.dashed
+              ? t('flow.pad.mark_draft')
+              : step.notify
+                ? t('flow.pad.mark_tells')
+                : '';
+      const tint = row.tint !== '' ? row.tint : step.owner ? 'var(--text)' : 'var(--text-2)';
+      const label = this.i18n.t(step.state === 'current' ? 'flow.pad.gate_label_current' : 'flow.pad.gate_label', { title: step.title, who: name });
+      return { ...row, name, sub, extra, tint, label };
+    });
+  });
+
+  /** Paul's picture on his card: his persona's colour. */
+  protected readonly paulColor = computed(() => this.flow()?.personas.find((p) => p.id === 'paul')?.color || 'var(--text-2)');
+
+  protected padRowOf(index: number): { readonly tint: string } | undefined {
+    return this.padRows().find((row) => row.step.index === index);
+  }
+
+  /** Where the flow was opened from: the plan to accept (a part's flow) or the ticket itself. */
+  protected readonly backLabel = computed(() => {
+    const flow = this.flow();
+    return flow === null || flow.scope.kind === 'part' ? this.i18n.t('flow.pad.back_plan') : flow.ticket;
+  });
+
+  /** The standard flow's gates in words, and the generic hint around it. */
+  protected readonly explain = computed(() => {
+    const flow = this.flow();
+    const gates = (flow?.steps ?? []).filter((s) => !s.inserted).map((s) => this.i18n.t('flow.pad.gate_who', { title: s.title, who: whoOf(s, flow!) }));
+    return gates.length === 0 ? this.i18n.t('flow.pad.explain_generic') : this.i18n.t('flow.pad.explain', { gates: gates.join(', ') });
+  });
+
+  /** One sentence per gate the draft added, after the gate it follows. */
+  protected readonly changeLines = computed(() => {
+    const flow = this.flow();
+    if (flow === null) {
+      return [];
+    }
+    const changed = this.changed();
+    const lines: string[] = [];
+    flow.steps.forEach((step, at) => {
+      const before = flow.steps[at - 1];
+      if (before !== undefined && step.inserted && !step.skipped && changed.has(step.index)) {
+        lines.push(this.i18n.t(step.notify ? 'flow.pad.change_added_tell' : 'flow.pad.change_added', { title: step.title, who: whoOf(step, flow), after: before.title }));
+      }
+    });
+    return lines;
+  });
+
+  /** The footer's left side: the number of changes in the draft, and the part it belongs to. */
+  protected readonly draftLine = computed(() => {
+    const flow = this.flow();
+    if (flow === null || !this.dirty()) {
+      return this.i18n.t('flow.pad.no_changes');
+    }
+    const n = flow.chain.length;
+    return flow.scope.kind === 'part' ? this.i18n.t('flow.pad.draft_count_part', { n, part: flow.scope.index + 1 }) : this.i18n.t('flow.pad.draft_count', { n });
+  });
+
   protected readonly current = computed<McFlowStep | null>(() => {
     const flow = this.flow();
     const at = this.selected();
@@ -101,6 +186,7 @@ export class FlowEditor {
       running,
       editable: !step.locked && !this.readOnly(),
       after: after?.title ?? null,
+      afterWho: after === null ? null : this.i18n.t('flow.pad.gate_who', { title: after.title, who: whoOf(after, flow) }),
       earlier: room.earlier,
       later: room.later,
       owner: step.owner,
@@ -148,6 +234,15 @@ export class FlowEditor {
 
   protected setPersona(step: McFlowStep, persona: string | null): Promise<boolean> {
     return this.run({ op: 'persona', step: step.index, persona });
+  }
+
+  /** The persona select of the iPad: an empty value is the pipeline default. */
+  protected async pickPersona(step: McFlowStep, event: Event): Promise<void> {
+    const select = event.target as HTMLSelectElement;
+    const before = step.pinned ? (step.persona ?? '') : '';
+    if (!(await this.setPersona(step, select.value === '' ? null : select.value))) {
+      select.value = before;
+    }
   }
 
   protected setNotify(step: McFlowStep, on: boolean): Promise<boolean> {
@@ -202,7 +297,7 @@ export class FlowEditor {
   }
 
   protected onAsk(event: Event): void {
-    this.ask.set((event.target as HTMLInputElement).value);
+    this.ask.set((event.target as HTMLInputElement | HTMLTextAreaElement).value);
   }
 
   protected undoDraft(): void {
