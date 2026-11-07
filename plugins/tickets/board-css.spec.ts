@@ -37,7 +37,7 @@ describe('the board stylesheet', () => {
     bar.className = 'tickets-statusbar';
     document.body.append(bar);
     expect(getComputedStyle(bar).height).toBe('auto');
-    expect(getComputedStyle(bar).minHeight).toBe('36px');
+    expect(getComputedStyle(bar).minHeight).toBe('32px');
   });
 
   it('D-11: the store vocabulary\'s top priority wears the urgent chip', () => {

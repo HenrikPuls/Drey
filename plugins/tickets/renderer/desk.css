@@ -766,7 +766,7 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
 .desk-confirm .desk-btn {
   flex: 1 1 0;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-chip);
   border-color: var(--field-border);
 }
 
@@ -957,7 +957,7 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
 .desk-pool-model {
   padding: 1px 6px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-chip);
   background: var(--active-bg);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -981,7 +981,7 @@ app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not
   content: '';
   width: 2px;
   height: 14px;
-  border-radius: 1px;
+  border-radius: 0;
   background: var(--border);
 }
 

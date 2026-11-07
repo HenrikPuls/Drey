@@ -45,6 +45,7 @@ the Board's head, columns and cards, the Capacity band, the Crew head, cards and
 | Tab bar, tab and strip heights, title bar, status bar | 4 px lower docks | one line at y 77 | owner decision 2026-11-07 (`decisions.md`, milestone 192) |
 | Strip glyph for Tickets | ticket glyph | `layers` | owner decision 2026-11-07: our set stands in |
 | Counts, names, ages, costs, ticket text, estimates (`$3.00–5.20`), `Prioritized`/`Inbox` totals, the Tasks icon in both docks | sample | the seeded English vault; settled costs, not estimates | data |
+| Model chip, stop-confirm buttons (7f) | radius 6 px | 4 px (`--radius-chip`) | owner decision (`notes.md` 4): radii are 4 / 8 / 16 |
 | Row title text | canvas export | Electron | text rasterization: same font, size, weight, line height; no CSS difference found |
 
 ### Milestone 193 — D-43: e2e engines left by an aborted run are swept
