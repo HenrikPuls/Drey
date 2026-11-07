@@ -5,6 +5,8 @@ import { isStoreDocumentPath, storeDocumentHeader, storeDocumentHeaderEdit } fro
 const PATH = 'tickets/t/0000/t-30/ticket.md';
 const FRONTMATTER = ['---', 'id: t-30', 'title: From the document: with a colon', 'stage: inbox', 'owner: ', 'x-legacy-id: T-0030', '---'].join('\n');
 
+const PREFIXED = 'work/store/tickets/t/0000/t-30/ticket.md';
+
 const snapshot = {
   columns: [
     {
@@ -67,5 +69,18 @@ describe('storeDocumentHeaderEdit', () => {
 
   it('answers an error for a title that would break the line', () => {
     expect(storeDocumentHeaderEdit(PATH, FRONTMATTER, { title: 'a\nstage: done' }, snapshot).ok).toBe(false);
+  });
+});
+
+describe('a checkout inside a larger vault (D-25)', () => {
+  it('answers the header model of a prefixed document', () => {
+    expect(isStoreDocumentPath(PREFIXED)).toBe(true);
+    const reply = storeDocumentHeader(PREFIXED, FRONTMATTER, snapshot);
+    expect(reply.ok && reply.meta.id).toBe('T-0030');
+  });
+
+  it('edits the title of a prefixed document', () => {
+    const reply = storeDocumentHeaderEdit(PREFIXED, FRONTMATTER, { title: 'Renamed' }, snapshot);
+    expect(reply.ok && reply.frontmatter).toContain('title: Renamed');
   });
 });

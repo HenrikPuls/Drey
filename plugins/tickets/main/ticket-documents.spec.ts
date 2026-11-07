@@ -193,3 +193,16 @@ describe('TicketDocuments (E14-4c)', () => {
     await expect(refused.documents.route.save({ vaultId: 'meta', path: 'a.md', body: 'x', force: false })).rejects.toThrow('not part of the ticket checkout');
   });
 });
+
+describe('a checkout inside a larger vault (D-25)', () => {
+  const vaults = async () => [{ id: 'big', path: '/data', exists: true }];
+
+  it('hands out the document with its prefix and titles it by its id', async () => {
+    const { documents } = make({ checkout: async () => '/data/work/store', vaults });
+    await documents.refresh();
+    const prefixed = 'work/store/tickets/t/0000/t-63/ticket.md';
+    expect(documents.owns('big', prefixed)).toBe(true);
+    expect(documents.owns('big', 'tickets/t/0000/t-63/ticket.md')).toBe(false);
+    expect(documents.route.title?.('big', prefixed, '---\ntitle: Pin tabs\n---\n')).toBe('T-0063 · Pin tabs');
+  });
+});

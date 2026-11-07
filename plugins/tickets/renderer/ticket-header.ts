@@ -19,7 +19,7 @@ import type {
   FrontmatterViewInput,
 } from '../../../shared/plugin-api/renderer';
 import { stripPhasePrefix, type BoardSnapshot, type TicketCard, type TicketIssue, type TicketMeta } from '../shared/tickets';
-import { idOfDocumentPath } from '../../../packages/tickets-engine/src/store/document-paths';
+import { idInVaultPath } from '../../../packages/tickets-engine/src/store/document-paths';
 import { toDisplayId } from '../../../packages/tickets-engine/src/store/ids';
 import { maskFenceLines } from '../../../shared/markdown/fences';
 import type { TicketStrip } from './ticket-document/strip';
@@ -38,7 +38,7 @@ export function ticketIdOfPath(path: string | null): string | null {
     return null;
   }
   const normal = path.split('\\').join('/');
-  return FILES_TICKET.exec(normal)?.[1] ?? idOfDocumentPath(normal);
+  return FILES_TICKET.exec(normal)?.[1] ?? idInVaultPath(normal);
 }
 
 /** A ticket document of the board, in either store shape. */
@@ -61,7 +61,7 @@ export function showsTicketDocument(snapshot: BoardSnapshot | null, vaultId: str
   if (vaultId === snapshot.vaultId) {
     return true;
   }
-  return idOfDocumentPath((path ?? '').split('\\').join('/')) === id && snapshot.columns.some((c) => c.tickets.some((t) => t.id === id));
+  return idInVaultPath((path ?? '').split('\\').join('/')) === id && snapshot.columns.some((c) => c.tickets.some((t) => t.id === id));
 }
 
 /**
@@ -81,7 +81,7 @@ export function ticketTabTitle(i18n: DreyPluginApi['i18n'], id: string, title: s
  * there the phase is the card's.
  */
 export function phaseOfTicketPath(path: string): string | null {
-  if (idOfDocumentPath(path) !== null) {
+  if (idInVaultPath(path) !== null) {
     return null;
   }
   const match = /^tickets\/([^/]+)\//.exec(path);
@@ -99,7 +99,7 @@ export function cardOfDocument(snapshot: BoardSnapshot | null, path: string | nu
     return null;
   }
   const normal = path.split('\\').join('/');
-  const storeId = idOfDocumentPath(normal);
+  const storeId = idInVaultPath(normal);
   return snapshot.columns.flatMap((c) => c.tickets).find((t) => (storeId === null ? t.path === normal : t.id === storeId)) ?? null;
 }
 
