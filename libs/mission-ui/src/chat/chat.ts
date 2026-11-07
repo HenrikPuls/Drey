@@ -1099,6 +1099,16 @@ export class Chat {
   readonly threadBack = output<void>();
   private readonly padCards = inject(PadCards);
   protected readonly padCard = computed(() => (this.assistant() ? this.padCards.card() : null));
+  /** The card grows with a mark: the Assistant keeps its foot in view, as the board shows it. */
+  private readonly followPadCard = effect(() => {
+    this.padCard()?.selected();
+    const el = this.thread()?.nativeElement;
+    if (el !== undefined && this.assistant()) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  });
   /** The bar's back control: only the thread's, to its ticket. */
   protected readonly barBack = computed(() => {
     const ticket = this.padThread();

@@ -282,3 +282,19 @@
     border-left-color: var(--accent);
   }
 }
+
+/* The iPad's editor (10r): task rows as in View, the source box under the caret in mono also on a heading. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  .mdx:not(.mdx-view) .cm-line:has(.lp-task) {
+    min-height: 45px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--panel-2);
+  }
+  .mdx:not(.mdx-view) .cm-activeLine,
+  .mdx:not(.mdx-view) .cm-activeLine * {
+    font-family: var(--mono);
+    font-size: var(--ph-15);
+    font-weight: 400;
+    line-height: 24px;
+  }
+}

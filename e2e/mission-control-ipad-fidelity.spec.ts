@@ -43,13 +43,25 @@ const shot = async (page: Page, board: string) => {
 };
 const area = (page: Page, name: string) => page.locator('mc-shell-header .sw', { hasText: name }).click();
 /** The conversation of 10e: a session opened from the chats, then back to the ticket. */
-const session = async (page: Page, title: string) => {
+const session = async (page: Page, title: string, pickFirst = true) => {
   await ticket(page, title);
   await page.locator('mc-ticket .ph-thread').click();
-  await page.locator('mc-pad-chats .row').first().click();
+  if (pickFirst) {
+    await page.locator('mc-pad-chats .row').first().click();
+  }
   await settle(page);
   await page.locator('mc-chat mc-app-bar button.back').click();
   await settle(page);
+};
+/** A shape session on T-0130 (5b): Thread finds it, the Assistant shows it. */
+const SHAPE_FILE = 'tickets/_meta/chat/shape-t-0130.md';
+const shapeSession = async (page: Page, messages: readonly Record<string, unknown>[]) => {
+  const meta = { file: SHAPE_FILE, title: 'Shape T-0130', ticket: 'T-0130', createdAt: new Date(2026, 10, 7, 14, 0).toISOString(), updatedAt: new Date(2026, 10, 7, 14, 2).toISOString(), pending: 0 };
+  await page.route('**/api/chat/sessions', async (route) => {
+    const reply = await route.fetch();
+    await route.fulfill({ response: reply, json: [meta, ...((await reply.json()) as unknown[])] });
+  });
+  await page.route(`**/api/chat/sessions/${encodeURIComponent(SHAPE_FILE)}`, (route) => route.fulfill({ json: { ...meta, messages, proposals: [] } }));
 };
 const ticket = async (page: Page, title: string) => {
   await page.locator('mc-work .ph-trow', { hasText: title }).first().click();
@@ -76,8 +88,12 @@ test.describe('landscape', () => {
 
   test('5b shape', async ({ page }) => {
     await needsOf(page, (needs) => needs.map((need) => (need['ticketId'] === 'T-0130' ? PAD_SHAPE_QUESTION : need)));
+    await shapeSession(page, [
+      { role: 'mission', text: 'Paul drafted Goal, Decisions and Constraints in the ticket. Edit it right there; your changes go with your next message.', at: new Date(2026, 10, 7, 14, 0).toISOString(), thought: null },
+      { role: 'mission', text: 'I read your change to the second decision. That keeps the capture window simple. One thing is open: how much of this is one ticket?', at: new Date(2026, 10, 7, 14, 2).toISOString(), thought: null },
+    ]);
     await open(page);
-    await ticket(page, 'Voice capture for tickets');
+    await session(page, 'Voice capture for tickets', false);
     await page.getByRole('radio', { name: /^3 parts/ }).click();
     await shot(page, 'PadShape');
   });

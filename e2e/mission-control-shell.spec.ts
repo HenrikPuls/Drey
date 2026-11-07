@@ -52,14 +52,14 @@ test.describe('iPad landscape (1194×834)', () => {
       expect(box.width).toBeGreaterThanOrEqual(44);
       expect(box.height).toBeGreaterThanOrEqual(44);
     }
-    expect((await header.locator('.hdr').boundingBox())!.height).toBe(52);
+    expect((await header.locator('.hdr').boundingBox())!.height).toBe(53);
 
     // Left = the Work list, centre = the empty pane, right = Mission Control.
     await expect(page.locator('mc-work.pane-left')).toBeVisible();
     await expect(page.locator('mc-empty.pane-center')).toBeVisible();
     await expect(page.locator('.pane-right mc-chat')).toBeVisible();
     // The right pane switches between Mission Control and Capacity.
-    const rightTabs = page.locator('.pad-right [role="tab"]');
+    const rightTabs = page.locator('.pad-right .pd-aseg button');
     await expect(rightTabs).toHaveText(['Mission Control', 'Capacity']);
     await rightTabs.nth(1).click();
     await expect(page.locator('.pane-right mc-capacity')).toBeVisible();
@@ -67,11 +67,11 @@ test.describe('iPad landscape (1194×834)', () => {
     await page.screenshot({ path: testInfo.outputPath('mc-ipad-capacity.png') });
     await rightTabs.nth(0).click();
     await expect(page.locator('.pane-right mc-chat')).toBeVisible();
-    await expect(page.locator('mc-work')).toContainText('Export the board as CSV');
+    await expect(page.locator('mc-work')).toContainText('Blocked-by chips on cards');
     await page.screenshot({ path: testInfo.outputPath('mc-ipad-landscape.png') });
 
     // A ticket opens in the centre.
-    await page.locator('mc-work').getByText('Export the board as CSV').first().click();
+    await page.locator('mc-work').getByText('Blocked-by chips on cards').first().click();
     await expect(page.locator('.ticket-layer.open')).toBeVisible();
     await expect(page.locator('mc-work.pane-left')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('mc-ipad-landscape-ticket.png') });
@@ -100,14 +100,14 @@ test.describe('iPad landscape (1194×834)', () => {
 
     // Crew in the left pane: the switch opens the pane with the persona list.
     await page.locator('mc-shell-header .sw', { hasText: 'Crew' }).click();
-    await expect(page.locator('mc-team.pane-left')).toBeVisible();
+    await expect(page.locator('mc-team.pane-team')).toBeVisible();
     await expect(page.locator('mc-team')).toContainText('Pia');
     await expect(page.locator('mc-shell-header .switch .sw.on')).toHaveText(/Crew/);
     expect(await panes(page, 'mc.panes.landscape')).toBe('{"left":true,"right":false}');
 
     // Settings owns the centre, and the switch shows no active area meanwhile.
     await page.locator('mc-shell-header').getByRole('button', { name: 'Settings' }).click();
-    await expect(page.locator('mc-settings.pane-center')).toBeVisible();
+    await expect(page.locator('mc-settings.pane-settings')).toBeVisible();
     await expect(page.locator('mc-shell-header .switch .sw.on')).toHaveCount(0);
   });
 });

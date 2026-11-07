@@ -675,7 +675,9 @@
     color: var(--text-2);
   }
   .pd-rfbtn,
+  /* The board's link inherits the page's 17 px, unlike Send back beside it. */
   .pd-raccept {
+    font-size: var(--ph-17);
     display: flex;
     flex: none;
     align-items: center;

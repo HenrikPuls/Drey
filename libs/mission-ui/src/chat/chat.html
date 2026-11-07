@@ -9,7 +9,7 @@
   </mc-app-bar>
   }
 
-  @if (shape(); as sh) {
+  @if (!assistant() && shape(); as sh) {
     <div class="shapectx" aria-label="Shape session">
       <span class="via-dot" aria-hidden="true"></span>
       <span class="shapeline">{{ sh.line }}</span>
@@ -99,7 +99,9 @@
               </div>
             } @else {
               <div class="msg mission">
-                <span class="ph-meta">{{ metaOf(item.message.at) }}</span>
+                @if (!(assistant() && shape())) {
+                  <span class="ph-meta">{{ metaOf(item.message.at) }}</span>
+                }
                 @if (shape()) {
                   <ng-container [ngTemplateOutlet]="via" />
                 }
