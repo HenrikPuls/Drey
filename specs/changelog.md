@@ -61,7 +61,7 @@ Desktop web (a mouse, decision 13) keeps its wide templates; the rulings Q1–Q9
   - Per-card Pause: the persona head's Pause. Pause all and Stop all: the Crew bar.
   - The proposals count on the persona's first tab: kept, `Chat · n` while there are any (the board's state has none).
   - The review face's gate bar: the ticket face's Flow row, and its ⋯ → the gate chain. The review face's Ticket / Thread / Review tabs: the bar's back to the ticket, `Thread` there.
-- **Specs:** `ticket/shape-face.spec.ts`, `withoutEmptyHeadings`; `shell/header.spec` loses the badge. New
+- **Specs:** `ticket/shape-face.spec.ts`, `withoutEmptyHeadings`; `shell/header.spec` loses the badge; `autopilot.spec` reads the resume label on the popover's chip. New
   `e2e/mission-control-ipad-fidelity.spec.ts`; `startFakeDesk({ boards: true, pad: true })` overlays the phone's sample, which stays as
   it was. iPad assertions changed in `mission-control-shell` (header 53, the target segment, rows for cards, `pane-team`,
   `pane-settings`), `-notes` (rows, no modes while viewing, no Ask), `-work-settings` (Settings' `Change…`); phone assertions untouched.
@@ -128,7 +128,7 @@ heads, rows, every layout on the measure sheet. Open rows: none.
 | 5f | the other categories 1.6 % | Assistant, Editor, Tickets | Chat, Devices, Engine, Autopilot | owner decision Q5 |
 | 5f | search zone 4.0 % | filter icon, `This vault` | absent | feature not yet built — req-130 |
 | 5f | under the Text row 32.8 % | Layout row, then Assistant, Editor at 699 | no Layout row, so the next sections sit higher, with the client's names | feature not yet built — req-130; owner decision Q5 |
-| 10e, 7.3 % raw | header, list, head, head row, card 0.0–0.1 % | | | fixed |
+| 10e, 6.8 % raw | header, list, head, head row, card 0.0–0.1 % | | | fixed |
 | 10e | grid 9.1 %, link 2.8 % +23, Goal and Parts 1.2 % +23 | Plan · Build · …, one line; `Ben asks about heading drag`; `$0.58` | six states, two lines; `Ben has a question`; no spent cost | data instead of sample content; req-116 |
 | 10e | Assistant head 35.8 % | `Model · Mission Control` | `Mission Control · Capacity` | owner decision Q1, req-127 |
 ### Milestone 196 — wave 4.3: the ticket pages match boards 7b, 7c, 7d, 7j and the 9a card; E13-10 / E12-17 Parts block, E12-19 Review splitter
