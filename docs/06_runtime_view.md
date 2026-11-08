@@ -4131,7 +4131,34 @@ sequenceDiagram
     S->>S: held by nothing for service.idleMinutes (15): engine closes, lock removed, exit
 ```
 
-Two levels of sleep: the runner component keeps req-110's verdict (a live
+The sleep above is the **background** mode (`service.enabled` on). The
+background service is optional (the owner's ruling on Q3) and **off by
+default**: then the service follows Drey —
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant M as Drey main (main-window.ts)
+    participant G as Tickets quit guard (SDK 1.53)
+    participant S as Drey Service (with Drey)
+    O->>M: closes the window
+    M->>M: save-before-exit prompt (renderer) — save / discard
+    M->>G: runQuitGuards()
+    alt service off and a run is live
+        G->>O: N agent runs are still running — Stop the runs and quit / Keep running (enable the service) / Cancel
+        alt Stop
+            G->>S: abortAll (the Notaus)
+        else Keep running
+            G->>S: configSet service.enabled = true — next tick: background mode
+        else Cancel
+            G-->>M: false — the window stays
+        end
+    end
+    M->>M: the window closes, Drey quits
+    S->>S: no Drey on the event stream for 10 s (with Drey): stop live runs, leave
+```
+
+Two levels of sleep in background mode: the runner component keeps req-110's verdict (a live
 run or an On/Paused Autopilot keeps it; Off, Drey gone or its own idle span
 let it sleep), and wakes inside the process on the next write that needs it
 (D-51, req-154). The service leaves only when nothing holds it for its own

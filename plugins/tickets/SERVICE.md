@@ -7,6 +7,19 @@ file is the tool-neutral guide for the owner at a terminal and for coding
 agents; the Crew runner's own routes, run states and diagnosis stay in
 [FLEET.md](FLEET.md).
 
+## Optional: background, or with Drey
+
+The owner's ruling (Q3, 2026-11-08): the background service is **optional**,
+`service.enabled` in Settings → Tickets → *Background service*, **off by
+default**. The same process runs either way; the setting decides how long it
+lives (it is re-read every tick from the engine's config, so a switch applies
+at once):
+
+| Mode | `service.enabled` | Lives | Live runs when Drey closes |
+|---|---|---|---|
+| **with Drey** | off (default) | as long as a Drey is open: 10 s after the last Drey's event stream closed it stops its live runs and leaves (2 min for a Drey that never came); a paired phone does not keep it | Drey asks first: *Stop the runs and quit* / *Keep running (enable the service)* / *Cancel* (a quit guard, SDK 1.53) |
+| **background** | on | independently of Drey, until nothing holds it (the two-level sleep below); with `service.autostart` also started at Windows sign-in | they go on; Drey asks nothing |
+
 ## Components
 
 | Component | What | State |
@@ -31,7 +44,8 @@ e2e isolation stay where they were (req-173 may move it).
 ├── service.lock        discovery: pid, build, control port + token, one record per component
 ├── service.log         the one log: `<ISO time> <level> <component> <message>`, capped at 1 MB
 ├── service-start.log   stdout/stderr of the last start (a start that dies says why here)
-├── config.json         the engine's config (keys unchanged; `service.vaultPath`, `service.idleMinutes`, `service.autostart` added)
+├── start-service.vbs   the Windows sign-in launcher (only while start with Windows is on)
+├── config.json         the engine's config (keys unchanged; added: `service.enabled`, `service.autostart`, `service.vaultPath`, `service.idleMinutes`)
 └── fleet/              the Crew runner's root (FLEET.md): runs/, chain.json, runner.log
 ```
 
@@ -49,6 +63,7 @@ Written owner-only and atomically, rewritten whenever a component changes:
   "vaultPath": "E:\\notes",
   "port": 51234,
   "token": "<bearer of the control port AND the engine's invoke channel>",
+  "mode": "background",
   "components": {
     "engine":  { "state": "running",  "detail": "E:\\notes", "port": 51233 },
     "runner":  { "state": "running",  "detail": "127.0.0.1:51240", "port": 51240, "token": "<runner bearer>", "pid": 12345, "build": "…" },
@@ -77,7 +92,7 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 | `--status` | the components, read from `service.lock` and `/status`; exit code 3 when not running |
 | `--version` | the app version and the build stamp |
 | `--stop` | asks the service to leave (live runs are stopped first, like the owner's quit) |
-| `--autostart on\|off\|status` | start with Windows (opt-in, off by default): the per-user `Run` value `DreyService` |
+| `--autostart on\|off\|status` | start with Windows (opt-in, off by default; `on` also switches the background service on): the per-user `Run` value `DreyService` |
 | `--vault <path> [--home <dir>]` | run the service (what Drey does); without `--vault` the last one from `config.json` |
 
 ## Control routes
@@ -93,7 +108,8 @@ Invoke-RestMethod "http://127.0.0.1:$($l.port)/status" -Headers $h
 | Route | What |
 |---|---|
 | `GET /health` | `{ok, pid, build}` |
-| `GET /status` | `{pid, build, startedAt, vaultPath, components, sleep, dreyClients}` — `sleep` is `{sleep: true}` or `{sleep: false, reason: "drey" \| "runner" \| "remote gateway"}` |
+| `GET /status` | `{pid, build, startedAt, vaultPath, mode, components, sleep, dreyClients}` — `mode` is `background` or `with-drey`; `sleep` (background mode) is `{sleep: true}` or `{sleep: false, reason: "drey" \| "runner" \| "remote gateway"}` |
+| `POST /settings` `{enabled?, autostart?}` | writes `service.enabled` / `service.autostart` into the engine's config and applies them at once (what `--autostart` sends to a running service) |
 | `GET /log?tail=N&component=<name>` | the log tail, plain text, optionally one component |
 | `POST /components/runner/start` | wake the Crew runner |
 | `POST /components/runner/stop` | put it to sleep — its live runs are stopped first |
@@ -126,7 +142,13 @@ tick until the old runner has gone. Handed-over runs wake the runner at
 boot so they are taken back at once. Nothing else changes shape: `config.json`,
 `fleet/runs/` and `chain.json` are read where they are.
 
-**Sleep, in two levels.**
+**With Drey (the service off).** The service follows Drey: when no Drey has
+held the event stream for 10 s it stops its live runs (the runner's graceful
+stop) and leaves — also after a Drey crash. Drey's quit guard asked the owner
+before a deliberate close; *Keep running* switches the service on, and it
+stays.
+
+**Sleep, in two levels (the service on).**
 
 1. *The Crew runner* sleeps on req-110's verdict (`fleet/runner-lifecycle.ts`):
    a live run or an On/Paused Autopilot keeps it; otherwise it goes when the
@@ -144,12 +166,19 @@ boot so they are taken back at once. Nothing else changes shape: `config.json`,
 The boot rule of ADR-0077 stands: every runner wake starts with the
 Autopilot Off, except a handover, which keeps the master as it stood.
 
-**Start with Windows** is opt-in (`--autostart on`; the Settings switch
-arrives with req-165). In Node mode the `Run` entry goes through a hidden
-PowerShell that sets `ELECTRON_RUN_AS_NODE` (a console may flash for an
-instant at log-in); the process mode is the owner's open question Q3 and
-only `launch.ts` changes with the answer. A log-in start with no paired
-device and no Drey leaves after the idle span.
+**Start with Windows** is opt-in and belongs to the background mode: on
+while `service.enabled` and `service.autostart` are both on (Settings →
+Tickets, or `--autostart on`). The service applies it whenever that changes:
+it writes `start-service.vbs` into its home — `wscript` sets
+`ELECTRON_RUN_AS_NODE` and starts the entry with no window — and the per-user
+`Run` value `DreyService` naming it. Off removes the value only when it names
+this home's launcher, so a test home never touches the owner's entry. A
+sign-in start with no paired device and no Drey leaves after the idle span.
+
+**Process mode.** Node under Electron's binary, not a headless Electron: the
+optional service needs no Chromium for either mode, and Node mode keeps the
+~50–80 MB out (ADR-0092, "As built"). Only `service/launch.ts` builds the
+command.
 
 ## Diagnosing
 

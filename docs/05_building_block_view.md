@@ -305,8 +305,10 @@ row for the **MCP server**, which stays in the Drey process until req-167. `serv
 Drey and a terminal find it (it replaced `engine.lock` and `fleet/runner.json`); `service.log` is
 the one log, the component a field. The tickets plugin is its client
 (`plugins/tickets/main/service-lifecycle.ts`: adopt, hand an older build over, or start through the
-one launch seam) and never stops it; it leaves once no Drey, no awake runner and no enabled gateway
-with a paired device has held it for the idle span. Operations: `plugins/tickets/SERVICE.md`; the
+one launch seam) and never stops it. The background service is optional (`service.enabled`, off by
+default, the owner's ruling): off, it follows Drey and stops its live runs 10 s after the last Drey
+left (Drey's quit guard, SDK 1.53, asks first); on, it leaves once no Drey, no awake runner and no
+enabled gateway with a paired device has held it for the idle span. Operations: `plugins/tickets/SERVICE.md`; the
 file table is in §5.41 (row "Drey Service").
 
 ```mermaid

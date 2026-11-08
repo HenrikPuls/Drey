@@ -1398,9 +1398,10 @@ Each column's dialog prompt is a prompt file like any other: a phase's
 default applies (`plan-interactive-default` — editable in Settings → Tickets,
 re-added by "Add Drey's prompts").
 
-Runs survive closing Drey — the runner lives in **Drey Service**, the one
-background process that comes with Drey (it also holds the tickets board and
-the phone gateway) — and,
+With the **background service** switched on (Settings → *Tickets* →
+*Background service*, off by default), runs survive closing Drey — the runner
+then lives in **Drey Service**, the background process that comes with Drey
+(it also holds the tickets board and the phone gateway) — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
 still-running worker back. (A Claude Code worker cannot be taken back; its run
 reads *Running* with a *not connected* note and can be stopped — or its
@@ -1427,8 +1428,14 @@ so does an On or Paused Autopilot — the chain keeps working with Drey
 closed. It wakes by itself the next time a run starts or the Autopilot is
 switched On. Drey Service itself leaves a while after that (15 minutes by
 default) once no Drey is open — unless remote access is on with a paired
-phone or tablet, which keeps it there for them. `service-main.js
---autostart on` starts it with Windows.
+phone or tablet, which keeps it there for them. *Start with Windows* (in the
+same section) starts it when you sign in.
+
+With the background service **off**, everything stops with Drey. Closing
+Drey while an agent run is still running asks first: *Stop the runs and
+quit*, *Keep running (enable the service)* — which switches the background
+service on and lets the runs finish — or *Cancel*. Phones and tablets reach
+the board only while Drey is open.
 
 ### The chain runs itself (milestone 85)
 

@@ -443,7 +443,10 @@ by themselves** (On), only finish what runs (Paused), or wait for the owner
   once the run settles it sleeps after the idle span. Only an explicit Off
   puts it to sleep at once. Since req-164 "start" is a wake of the Crew
   runner component inside Drey Service, and "leave" is its sleep; the
-  service process itself has a second, outer sleep (SERVICE.md).
+  service process itself has a second, outer sleep (SERVICE.md). With the
+  background service **off** (the default) the runner's runs end with Drey:
+  closing Drey with a live run asks *Stop the runs and quit* / *Keep running
+  (enable the service)* / *Cancel*, and the service follows Drey out.
 - **A down runner reads as Off (D-51).** No runner means `chain: null` in
   the fleet snapshot; every client shows that as Off and the switch turns
   it On from there. A start that fails is refused with its cause
