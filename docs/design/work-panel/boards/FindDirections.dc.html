@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Search and Tasks, three directions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:default}
+.ib{width:24px;height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;border-radius:4px;color:#b3b7bc}
+.ph{height:28px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 6px 0 4px}
+.pc{width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;border-radius:4px;color:#b3b7bc}
+.pt{font-size:13px;font-weight:600;color:#f4f5f6}
+.pn{font-size:13px;color:#b3b7bc;margin-left:4px}
+.pa{margin-left:auto;display:flex;gap:2px}
+.dock{width:300px;height:640px;flex-shrink:0;display:flex;flex-direction:column;background:#222326;border:1px solid #3b3d42;overflow:hidden}
+.seg{display:flex;gap:2px;padding:2px;background:#18191b;border:1px solid #3b3d42;border-radius:8px}
+.sg{height:26px;padding:0 10px;display:flex;align-items:center;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.sg.on{background:#2c2d31;color:#f4f5f6;font-weight:600}
+.si{width:26px;height:26px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:4px;background:transparent;color:#b3b7bc}
+.si.on{background:#2c2d31;color:#f4f5f6}
+.fld{margin:0 8px 8px;min-height:32px;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:0 4px 0 8px;background:#18191b;border:1px solid #747980;border-radius:8px;color:#b3b7bc}
+.fld svg{flex-shrink:0}
+.t3{font-size:13px;line-height:18px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fld input{flex-grow:1;min-width:0;background:transparent;border:0;color:#f4f5f6;font:inherit;font-size:14px;padding:0}
+.chip{height:22px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 4px 0 6px;background:rgba(142,203,239,0.14);color:#8ecbef;border-radius:4px;font-size:13px}
+.tg{width:24px;height:24px;flex-shrink:0;padding:0;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.tg.on{background:#2c2d31;color:#f4f5f6}
+.fcs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 8px 8px}
+.fc{height:24px;display:flex;align-items:center;gap:4px;padding:0 8px;border:1px solid #3b3d42;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.fc.on{background:#2c2d31;border-color:#2c2d31;color:#f4f5f6}
+.gh{height:28px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 12px 0 8px;margin-top:4px;color:#b3b7bc}
+.ghn{font-size:13px;font-weight:600;color:#f4f5f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ghd{font-size:13px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0}
+.ghc{margin-left:auto;font-size:13px;flex-shrink:0}
+.hit{display:flex;flex-direction:column;gap:1px;padding:6px 12px 6px 26px;border-bottom:1px solid #2c2d31}
+.t1{font-size:14px;line-height:20px;color:#f4f5f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t2{display:flex;align-items:center;gap:6px;font-size:13px;line-height:18px;color:#b3b7bc;white-space:nowrap;overflow:hidden}
+.mk{background:rgba(142,203,239,0.14);color:#f4f5f6;border-radius:2px}
+.task{display:flex;gap:10px;padding:6px 12px 6px 12px;border-bottom:1px solid #2c2d31}
+.cb{width:16px;height:16px;margin-top:2px;flex-shrink:0;box-sizing:border-box;border:1.5px solid #747980;border-radius:4px}
+.tb{display:flex;flex-direction:column;gap:1px;min-width:0;flex-grow:1}
+.band{height:28px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 12px 0 8px;border-top:1px solid #3b3d42;color:#b3b7bc}
+.cap{font-size:14px;font-weight:600;color:#f4f5f6}
+</style>
+</helmet>
+<div style="width: 1120px; height: 780px; box-sizing: border-box; padding: 48px; display: flex; gap: 60px; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px">
+
+  <!-- A: one panel, two modes -->
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <span class="cap">A · Find: one field, Search | Tasks</span>
+    <section class="dock" aria-label="Direction A">
+      <div class="ph">
+        <button type="button" class="pc" aria-label="Collapse Find"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <span class="pt">Find</span><span class="pn">6 open</span>
+      </div>
+      <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px">
+        <div class="seg" role="tablist" aria-label="Find mode">
+          <button type="button" role="tab" aria-selected="false" class="sg">Search</button>
+          <button type="button" role="tab" aria-selected="true" class="sg on">Tasks</button>
+        </div>
+        <span style="flex-grow: 1"></span>
+        <div class="seg" role="tablist" aria-label="Scope">
+          <button type="button" class="si" aria-label="This note"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h6"></path></svg></button>
+          <button type="button" class="si on" aria-label="This vault"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"></path></svg></button>
+          <button type="button" class="si" aria-label="All vaults"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></button>
+        </div>
+      </div>
+      <label class="fld"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg><input aria-label="Find text and #tags"></label>
+      <div class="fcs">
+        <button type="button" class="fc on">Hide done</button>
+        <button type="button" class="fc on">Checkboxes</button>
+        <button type="button" class="fc on">#task</button>
+      </div>
+      <div class="gh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">website-relaunch.md</span><span class="ghd">projects</span><span class="ghc">3</span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Send the offer to Miller &amp; Co</span><span class="t2"><span style="color: #ee8f89; display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Nov 4</span>·<span>High</span>·<span>Next steps</span></span></span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Review the logo drafts</span><span class="t2"><span style="color: #8ecbef; font-weight: 600; display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Today</span>·<span>Next steps</span></span></span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Book the photographer</span><span class="t2"><span style="display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Nov 12</span>·<span>Shoot</span></span></span></div>
+      <div class="gh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">2026-11-05 design review.md</span><span class="ghd">meetings</span><span class="ghc">2</span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Share the slides with the team</span><span class="t2"><span>Action items</span></span></span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Ask Dana about the colour tokens</span><span class="t2"><span>Low</span>·<span>Action items</span></span></span></div>
+    </section>
+  </div>
+
+  <!-- B: one field, two folding bands -->
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <span class="cap">B · One field, two bands that fold</span>
+    <section class="dock" aria-label="Direction B">
+      <div class="ph">
+        <button type="button" class="pc" aria-label="Collapse Find"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <span class="pt">Find</span>
+        <span class="pa">
+          <button type="button" class="ib" aria-label="This note"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h6"></path></svg></button>
+          <button type="button" class="ib" aria-label="This vault" style="background: #2c2d31; color: #f4f5f6"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"></path></svg></button>
+          <button type="button" class="ib" aria-label="All vaults"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></button>
+        </span>
+      </div>
+      <label class="fld" style="margin-top: 4px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg><input aria-label="Find text and #tags" value="logo"><button type="button" class="tg">Aa</button><button type="button" class="tg">ab</button><button type="button" class="tg">.*</button></label>
+      <div class="band"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">Notes</span><span class="ghc">4 in 2 files</span></div>
+      <div class="gh" style="margin-top: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">website-relaunch.md</span><span class="ghd">projects</span><span class="ghc">3</span></div>
+      <div class="hit"><span class="t1">Brand <span style="color: #b3b7bc; font-size: 13px">:12</span></span><span class="t3">The new <span class="mk">logo</span> keeps the blue of the old one</span></div>
+      <div class="hit"><span class="t1">Next steps <span style="color: #b3b7bc; font-size: 13px">:24</span></span><span class="t3">Review the <span class="mk">logo</span> drafts before Friday</span></div>
+      <div class="hit"><span class="t1">Shoot <span style="color: #b3b7bc; font-size: 13px">:40</span></span><span class="t3">Print the <span class="mk">logo</span> on the backdrop</span></div>
+      <div class="gh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">2026-11-05 design review.md</span><span class="ghd">meetings</span><span class="ghc">1</span></div>
+      <div class="hit"><span class="t1">Decisions <span style="color: #b3b7bc; font-size: 13px">:8</span></span><span class="t3">Dana prefers the round <span class="mk">logo</span></span></div>
+      <div class="band" style="margin-top: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">Tasks</span><span class="ghc">1 open</span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Review the <span class="mk">logo</span> drafts</span><span class="t2"><span style="color: #8ecbef; font-weight: 600; display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Today</span>·<span>website-relaunch.md</span></span></span></div>
+    </section>
+  </div>
+
+  <!-- C: tasks as a saved search -->
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <span class="cap">C · Tasks as a saved search in Search</span>
+    <section class="dock" aria-label="Direction C">
+      <div class="ph">
+        <button type="button" class="pc" aria-label="Collapse Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <span class="pt">Search</span><span class="pn">6 tasks</span>
+      </div>
+      <label class="fld" style="margin-top: 4px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg><span class="chip">#task<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></span><input aria-label="Search text and #tags"><button type="button" class="tg">Aa</button><button type="button" class="tg">ab</button><button type="button" class="tg">.*</button></label>
+      <div class="fcs">
+        <button type="button" class="fc on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>Open tasks</button>
+        <button type="button" class="fc">Due this week</button>
+        <button type="button" class="fc">#meeting</button>
+        <button type="button" class="ib" aria-label="Save this search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+      </div>
+      <div class="gh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">website-relaunch.md</span><span class="ghd">projects</span><span class="ghc">3</span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Send the offer to Miller &amp; Co</span><span class="t2"><span style="color: #ee8f89; display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Nov 4</span>·<span>High</span>·<span>Next steps</span></span></span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Review the logo drafts</span><span class="t2"><span style="color: #8ecbef; font-weight: 600; display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Today</span>·<span>Next steps</span></span></span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Book the photographer</span><span class="t2"><span style="display: flex; gap: 4px; align-items: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Nov 12</span>·<span>Shoot</span></span></span></div>
+      <div class="gh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">2026-11-05 design review.md</span><span class="ghd">meetings</span><span class="ghc">2</span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Share the slides with the team</span><span class="t2"><span>Action items</span></span></span></div>
+      <div class="task"><span class="cb"></span><span class="tb"><span class="t1">Ask Dana about the colour tokens</span><span class="t2"><span>Low</span>·<span>Action items</span></span></span></div>
+    </section>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":780}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

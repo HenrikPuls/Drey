@@ -2,7 +2,11 @@
 
 Exported on 2026-11-06 from the owner's design canvas "Drey Tickets — Workflow
 redesign" (artifact `a401ec8a-b3e4-459f-b9df-ff8893105b9f`, version
-`1793992275-ade0`). **This folder is what "it looks like the design" means.**
+`1793992275-ade0`; the 9c, 9d and 9e boards `DeskFind`, `DeskFindParts`,
+`FindDirections`, `FindSimple`, `DeskSourceControl`, `DeskSourceControlParts`,
+`DeskOutline`, `DeskOutlineParts` and `canvas.json` from version
+`1794096178-a5ad`, 2026-11-08).
+**This folder is what "it looks like the design" means.**
 A session that builds or changes a screen reads the board's HTML for the exact
 measures, colours, spacing and strings, opens the PNG to see it, and compares
 its own screenshot against the PNG before it reports done (see
@@ -12,11 +16,11 @@ appearance** where they disagree.
 
 Files: one `<Name>.dc.html` per board (plain HTML, inline styles; the
 `<x-dc>` / `<helmet>` wrappers are the canvas runtime's), `support.js` — a
-small stand-in for that runtime, so the seven boards that hold a template
-(`{{holes}}` from `renderVals()`, `<sc-for>`, `<sc-if>`: DeskClean,
-DeskPersona, DeskSettings, PadFlow, PadReview, PadSettings, PadTeam) render
-outside the canvas (it runs the board's own embedded sample-data script; the
-other 33 boards are static and ignore it), one
+small stand-in for that runtime, so the ten boards that hold a template
+(`{{holes}}` from `renderVals()`, `<sc-for>`, `<sc-if>`: DeskClean, DeskFind,
+DeskOutline, DeskPersona, DeskSettings, DeskSourceControl, PadFlow, PadReview,
+PadSettings, PadTeam) render outside the canvas (it runs the board's own
+embedded sample-data script; the other 38 boards are static and ignore it), one
 `<Name>.png` rendered at the board's own size with headless Edge
 (`--window-size=<w>,<h> --screenshot`), `canvas.json` (positions, sizes,
 titles, order, notes) and `notes.md` (the sticky notes, decisions 1–31 under
@@ -56,6 +60,14 @@ above.
 | 7k · Persona setup: profile, picture, work, permissions, prompt blocks | `DeskPersona` | 1440×900 | desktop |
 | 9a · Drey today, cleaned up — ticket T-0017 in Work, Assistant without the rail | `DeskClean` | 1440×900 | desktop |
 | 9b · Drey today — Calendar, Source control, Outline, Search and Tasks redesigned — **not a target design** (owner, 2026-11-06; a sketch, nothing is measured against it) | `DeskPanels` | 1440×900 | desktop |
+| 9c · Find: Search and Tasks in one left-dock panel, Search mode (req-161, accepted 2026-11-08) | `DeskFind` | 1440×900 | desktop |
+| 9c · Find, the parts at 1:1: Tasks mode, folded, status, field, Replace, tag completion, menus, hits, task rows, due order | `DeskFindParts` | 1480×1160 | desktop |
+| 9d · Source control: branch line, commit field, staged / changes / history (req-162, accepted 2026-11-08) | `DeskSourceControl` | 1440×900 | desktop |
+| 9d · Source control, the parts at 1:1: merge, amend, busy, hover actions, branch line, menu, empty and read-only | `DeskSourceControlParts` | 1480×1160 | desktop |
+| 9e · Outline: the heading tree, every level folds (req-162, accepted 2026-11-08) | `DeskOutline` | 1440×900 | desktop |
+| 9e · Outline, the parts at 1:1: three levels, all collapsed, folded, empty | `DeskOutlineParts` | 1120×620 | desktop |
+| 9c · Find simplified — the owner's ruling (mode as title, one menu, Replace switch); superseded by `DeskFind`, history only | `FindSimple` | 1120×760 | sketch |
+| 9c · req-161 directions: A chosen, B and C rejected — history only | `FindDirections` | 1120×780 | sketch |
 | 10a · Mission Control, answer card with big touch targets | `MPhoneChat` | 390×844 | phone |
 | 10b · menu: the root screen with Notes, Work, Crew, Settings and chats | `MPhoneMenu` | 390×844 | phone |
 | 10c · Work: the desktop ticket list, sized for touch | `MPhoneWork` | 390×844 | phone |

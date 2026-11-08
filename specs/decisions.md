@@ -8,6 +8,16 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **Search and Tasks as two bands of one panel, or tasks as a saved search** (owner, 2026-11-07; req-161, board
+  `FindDirections`). Direction B (one field, a "Notes" band and a "Tasks" band that fold) mixed both lists in one
+  height and left open whether Match case / Regular expression apply to tasks; direction C (tasks as a saved search
+  inside Search) hid the task list behind a saved query and needed saved searches as a new feature. The owner chose
+  A: one panel Find with the mode Search | Tasks over one shared field.
+- **Find with always-visible segments, filter chips and inline toggles** (owner, 2026-11-08; req-161, the first
+  `DeskFind`). A row with a Search | Tasks segment and a scope segment, Aa · ab · .* in the field, task filter chips
+  under it and four header icons: "extrem überladen". Replaced by the mode as the title, one ⋯ menu for scope,
+  match options, filters, order, Export and Summarize, and a Replace switch in the field.
+
 - **The attach button in the phone's chat composer** (2026-11-07; integrator, recommendation of milestone 194's measure
   sheet). Board 10a's composer has none and its bar no free control, so the button left the phone. Attaching from the
   phone waits for a place (req-114); it is not a deviation to re-open on the board.
@@ -40,7 +50,10 @@ one means moving it back to the roadmap with a new justification.
   stays in the canvas and in `docs/design/work-panel/boards/` as a sketch of how the panels could
   look, but no session builds it and the fidelity rule does not measure the panels against it. The
   frame of 9a (req-104) remains the target for the dock headers and the panel chrome; the panels'
-  content stays as it is.
+  content stays as it is. *Later (owner, 2026-11-08):* for Source control and Outline the look of 9b
+  is wanted after all; it is measured and completed in boards 9d `DeskSourceControl` and 9e
+  `DeskOutline` (req-162), and those boards are the target, not 9b. Search and Tasks became Find
+  (9c, req-161). Calendar stays as built.
 
 - **An agent moving a ticket into Done on a store, and a pipeline key for Accept's run** (req-99a,
   2026-11-06). `dk` refuses an agent's release into a terminal stage (seen in E14-5, checked again

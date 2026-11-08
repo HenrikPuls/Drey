@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drey: Find, simpler</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:default}
+.ib{width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;border-radius:4px;color:#b3b7bc}
+.ib[aria-pressed="true"],.ib[aria-expanded="true"]{background:#2c2d31;color:#f4f5f6}
+.ib.sm{width:24px;height:24px}
+.ph{height:28px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 6px 0 4px}
+.pc{width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;border-radius:4px;color:#b3b7bc}
+.pn{font-size:13px;color:#b3b7bc;margin-left:4px;white-space:nowrap}
+.pa{margin-left:auto;display:flex;gap:2px}
+.ph.hover{background:#2c2d31}
+.seg{display:flex;flex-shrink:0;gap:2px;padding:2px;background:#18191b;border:1px solid #3b3d42;border-radius:8px}
+.sg{height:26px;padding:0 10px;display:flex;align-items:center;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.sg[aria-selected="true"]{background:#2c2d31;color:#f4f5f6;font-weight:600}
+.si{width:26px;height:26px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:4px;background:transparent;color:#b3b7bc}
+.si[aria-selected="true"]{background:#2c2d31;color:#f4f5f6}
+.fld{margin:0 8px 8px;min-height:32px;box-sizing:border-box;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 4px 0 8px;background:#18191b;border:1px solid #747980;border-radius:8px;color:#b3b7bc}
+.fld svg{flex-shrink:0}
+.fld input{flex-grow:1;min-width:0;height:30px;background:transparent;border:0;color:#f4f5f6;font:inherit;font-size:14px;padding:0;outline:none}
+.chip{height:22px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 4px 0 6px;background:rgba(142,203,239,0.14);color:#8ecbef;border-radius:4px;font-size:13px;white-space:nowrap}
+.chip button{width:14px;height:14px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:4px;background:transparent;color:#8ecbef}
+.tgs{display:flex;flex-shrink:0}
+.tg{width:24px;height:24px;flex-shrink:0;padding:0;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.tg[aria-pressed="true"]{background:#2c2d31;color:#f4f5f6}
+.fcs{display:flex;flex-wrap:wrap;flex-shrink:0;align-items:center;gap:6px;padding:0 8px 8px}
+.fc{height:24px;display:flex;align-items:center;padding:0 8px;box-sizing:border-box;border:1px solid #3b3d42;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.fc[aria-pressed="true"]{background:#2c2d31;border-color:#2c2d31;color:#f4f5f6}
+.gh{height:28px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 12px 0 8px;margin-top:4px;background:transparent;border:0;width:100%;box-sizing:border-box;color:#b3b7bc;font:inherit;text-align:left}
+.ghn{font-size:13px;font-weight:600;color:#f4f5f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.ghd{font-size:13px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1000 auto}
+.ghv{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 6px;border:1px solid #3b3d42;border-radius:4px;font-size:13px;color:#b3b7bc}
+.ghc{margin-left:auto;font-size:13px;flex-shrink:0}
+.hit{display:flex;flex-direction:column;gap:1px;padding:6px 12px 6px 26px;border:0;border-bottom:1px solid #2c2d31;background:transparent;width:100%;box-sizing:border-box;color:#f4f5f6;font:inherit;text-align:left;position:relative}
+.hit[aria-current="true"]{background:#2c2d31}
+.t1{display:flex;align-items:baseline;gap:4px;font-size:14px;line-height:20px;color:#f4f5f6;white-space:nowrap;overflow:hidden}
+.t1 b{font-weight:400;overflow:hidden;text-overflow:ellipsis}
+.ln{font-size:13px;color:#b3b7bc;flex-shrink:0}
+.t3{font-size:13px;line-height:18px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk{background:rgba(142,203,239,0.14);color:#f4f5f6;border-radius:2px}
+.task{display:flex;gap:10px;padding:6px 12px;border-bottom:1px solid #2c2d31}
+.cb{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;box-sizing:border-box;border:1.5px solid #747980;border-radius:4px;background:transparent;padding:0;display:flex;align-items:center;justify-content:center;color:#101113}
+.cb[aria-checked="true"]{background:#8ecbef;border-color:#8ecbef}
+.tb{display:flex;flex-direction:column;gap:1px;min-width:0;flex-grow:1}
+.tt{border:0;background:transparent;padding:0;text-align:left;font:inherit;font-size:14px;line-height:20px;color:#f4f5f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm{display:flex;align-items:center;gap:6px;font-size:13px;line-height:18px;color:#b3b7bc;white-space:nowrap;overflow:hidden}
+.bd{height:18px;display:flex;align-items:center;gap:4px;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-size:13px}
+.bd.over{color:#ee8f89}
+.bd.today{color:#8ecbef;font-weight:600}
+.task.done .tt{color:#b3b7bc;text-decoration:line-through}
+.empty{margin:0;padding:12px;font-size:14px;line-height:20px;color:#b3b7bc}
+.err{margin:0;padding:0 12px 8px;font-size:13px;line-height:18px;color:#ee8f89}
+.tab{height:24px;padding:0 6px;display:flex;align-items:center;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.tab[aria-selected="true"]{color:#f4f5f6;font-weight:600}
+.fld.focus{border-color:#8ecbef}
+.col{width:302px;display:flex;flex-direction:column;gap:8px}
+.lab{font-size:13px;line-height:18px;color:#b3b7bc}
+.box{width:300px;display:flex;flex-direction:column;background:#222326;border:1px solid #3b3d42;position:relative;overflow:visible}
+.menu{position:absolute;right:6px;top:28px;width:236px;box-sizing:border-box;z-index:3;display:flex;flex-direction:column;padding:6px;background:#2c2d31;border:1px solid #747980;border-radius:8px}
+.mh{padding:4px 8px;font-size:13px;line-height:18px;color:#b3b7bc}
+.mi{height:28px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:#f4f5f6;font:inherit;font-size:14px;text-align:left}
+.mi .ck{width:14px;height:14px;flex-shrink:0;display:flex;color:#f4f5f6}
+.mi .k{margin-left:auto;font-size:13px;color:#b3b7bc}
+.ms{height:1px;background:#3b3d42;margin:4px 0}
+</style>
+</helmet>
+<div style="width: 1120px; height: 760px; box-sizing: border-box; padding: 48px; display: flex; gap: 60px; align-items: flex-start; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px">
+
+  <div class="col">
+    <span class="lab">1 · At rest: two rows, nothing else</span>
+    <section class="box" aria-label="Find, Search mode at rest">
+      <div class="ph">
+        <button type="button" class="pc" aria-expanded="true" aria-label="Collapse Find"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <div role="tablist" aria-label="Find mode" style="display: flex">
+          <button type="button" role="tab" aria-selected="true" class="tab">Search</button>
+          <button type="button" role="tab" aria-selected="false" class="tab">Tasks</button>
+        </div>
+        <span class="pn">6 in 3 files</span>
+      </div>
+      <div class="fld">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <span class="chip">#project<button type="button" aria-label="Remove #project"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></span>
+        <input aria-label="Find text and #tags" value="logo">
+        <button type="button" class="ib sm" aria-label="Clear" title="Clear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+        <button type="button" class="ib sm" aria-pressed="false" aria-label="Replace" title="Replace"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg></button>
+      </div>
+      <button type="button" class="gh" aria-expanded="true" style="margin-top: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">website-relaunch.md</span><span class="ghd">projects</span><span class="ghc">3</span></button>
+      <button type="button" class="hit"><span class="t1"><b>Brand</b><span class="ln">:12</span></span><span class="t3">The new <span class="mk">logo</span> keeps the blue of the old one</span></button>
+      <button type="button" class="hit"><span class="t1"><b>Next steps</b><span class="ln">:24</span></span><span class="t3">Review the <span class="mk">logo</span> drafts before Friday</span></button>
+      <button type="button" class="hit"><span class="t1"><b>Shoot</b><span class="ln">:40</span></span><span class="t3">Print the <span class="mk">logo</span> on the backdrop</span></button>
+      <button type="button" class="gh" aria-expanded="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">2026-11-05 design review.md</span><span class="ghd">meetings</span><span class="ghc">2</span></button>
+      <button type="button" class="hit"><span class="t1"><b>Decisions</b><span class="ln">:8</span></span><span class="t3">Dana prefers the round <span class="mk">logo</span></span></button>
+      <button type="button" class="hit"><span class="t1"><b>Action items</b><span class="ln">:15</span></span><span class="t3">Ask Dana about the <span class="mk">logo</span> colours</span></button>
+    </section>
+
+    <span class="lab" style="margin-top: 16px">2 · Replace on: the second row appears</span>
+    <section class="box" aria-label="Field with Replace on" style="padding-top: 8px">
+      <div class="fld focus">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <input aria-label="Find text and #tags" value="logo">
+        <button type="button" class="ib sm" aria-label="Clear" title="Clear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+        <button type="button" class="ib sm" aria-pressed="true" aria-label="Replace" title="Replace"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg></button>
+      </div>
+      <div class="fld">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg>
+        <input aria-label="Replace with" value="wordmark">
+        <button type="button" class="ib sm" aria-label="Replace all" title="Replace all"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <span class="lab">3 · Search: everything else is in one menu</span>
+    <section class="box" aria-label="Find, Search menu" style="height: 480px">
+      <div class="ph hover">
+        <button type="button" class="pc" aria-expanded="true" aria-label="Collapse Find"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <div role="tablist" aria-label="Find mode" style="display: flex">
+          <button type="button" role="tab" aria-selected="true" class="tab">Search</button>
+          <button type="button" role="tab" aria-selected="false" class="tab">Tasks</button>
+        </div>
+        <span class="pn">2 in this note</span>
+        <span class="pa"><button type="button" class="ib sm" aria-haspopup="menu" aria-expanded="true" aria-label="More" title="More"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"></circle><circle cx="12" cy="12" r="1.3"></circle><circle cx="19" cy="12" r="1.3"></circle></svg></button></span>
+      </div>
+      <div class="fld">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <input aria-label="Find text and #tags" value="logo">
+        <button type="button" class="ib sm" aria-label="Clear" title="Clear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+        <button type="button" class="ib sm" aria-pressed="false" aria-label="Replace" title="Replace"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg></button>
+      </div>
+      <div role="menu" aria-label="Find options" class="menu">
+        <span class="mh">Look in</span>
+        <button type="button" role="menuitemradio" aria-checked="true" class="mi"><span class="ck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>This note</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="mi"><span class="ck"></span>This vault</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="mi"><span class="ck"></span>All vaults</button>
+        <div class="ms"></div>
+        <button type="button" role="menuitemcheckbox" aria-checked="true" class="mi"><span class="ck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Match case</button>
+        <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi"><span class="ck"></span>Whole word</button>
+        <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi"><span class="ck"></span>Regular expression</button>
+        <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi"><span class="ck"></span>Include chats</button>
+        <div class="ms"></div>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Export results to a note</button>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Summarize</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <span class="lab">4 · Tasks: filters and order in the same menu</span>
+    <section class="box" aria-label="Find, Tasks menu" style="height: 480px">
+      <div class="ph hover">
+        <button type="button" class="pc" aria-expanded="true" aria-label="Collapse Find"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <div role="tablist" aria-label="Find mode" style="display: flex">
+          <button type="button" role="tab" aria-selected="false" class="tab">Search</button>
+          <button type="button" role="tab" aria-selected="true" class="tab">Tasks</button>
+        </div>
+        <span class="pn">6 open</span>
+        <span class="pa"><button type="button" class="ib sm" aria-haspopup="menu" aria-expanded="true" aria-label="More" title="More"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"></circle><circle cx="12" cy="12" r="1.3"></circle><circle cx="19" cy="12" r="1.3"></circle></svg></button></span>
+      </div>
+      <div class="fld"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input aria-label="Find text and #tags"></div>
+      <button type="button" class="gh" aria-expanded="true" style="margin-top: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><span class="ghn">website-relaunch.md</span><span class="ghd">projects</span><span class="ghc">3</span></button>
+      <div class="task"><button type="button" class="cb" role="checkbox" aria-checked="false" aria-label="Mark done"></button><span class="tb"><button type="button" class="tt">Send the offer to Miller &amp; Co</button><span class="tm"><button type="button" class="bd over"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Nov 4</button>·<span>Next steps</span></span></span></div>
+      <div role="menu" aria-label="Find options" class="menu">
+        <span class="mh">Look in</span>
+        <button type="button" role="menuitemradio" aria-checked="false" class="mi"><span class="ck"></span>This note</button>
+        <button type="button" role="menuitemradio" aria-checked="true" class="mi"><span class="ck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>This vault</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="mi"><span class="ck"></span>All vaults</button>
+        <div class="ms"></div>
+        <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi"><span class="ck"></span>Show done</button>
+        <button type="button" role="menuitemcheckbox" aria-checked="true" class="mi"><span class="ck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Checkbox tasks</button>
+        <button type="button" role="menuitemcheckbox" aria-checked="true" class="mi"><span class="ck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>#task lines</button>
+        <div class="ms"></div>
+        <span class="mh">Order</span>
+        <button type="button" role="menuitemradio" aria-checked="true" class="mi"><span class="ck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>File order</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="mi"><span class="ck"></span>Due date</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="mi"><span class="ck"></span>Priority</button>
+      </div>
+    </section>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
