@@ -5,7 +5,7 @@
 Proposed (design session 2026-11-07/08, owner rulings R1–R4 in
 `docs/design/work-panel/crew-internals-concept.md`). Amends ADR-0088's E3
 (the coaching thread) and concept v2 §4.5/§4.7 (the persona chat as a direct
-call). Resolves D-52 when built (req-165, req-166).
+call). Resolves D-52 when built (req-168, req-169).
 
 ## Context
 

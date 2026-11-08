@@ -6,7 +6,7 @@ Proposed (design session 2026-11-07/08, owner rulings R5 and R7 in
 `docs/design/work-panel/crew-internals-concept.md`). A later change of
 ADR-0071 (one vault toolset) and ADR-0075 ("vault access for a worker goes
 through Drey's governed MCP server" — promised, never wired). Gives req-142
-its enforcement. Built as req-164.
+its enforcement. Built as req-167.
 
 ## Context
 

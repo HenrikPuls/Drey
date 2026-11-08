@@ -1,3 +1,12 @@
+### Design — the Crew internals concept (2026-11-07/08)
+
+Documentation only, no code. A design session with the owner settled how the Crew works inside: fourteen rulings in
+`docs/design/work-panel/crew-internals-concept.md` (the 1:1 as a persona session; memory and journal apart, written in a
+closing round on a signal; the vault MCP served by one shipped background process "Drey Service"; a model table and a
+capacity pool where a session requests a capability class; sessions as records with a working directory; configuration
+in three layers), ADR-0092 to ADR-0095 as proposals, three HTML mockups under `crew-internals/`. The build is req-164 to
+req-173 on the roadmap, in that order; req-152 and req-153 are closed by them, req-112 is replaced by req-170.
+
 ### Milestone 207 — D-51 the Autopilot switches on again, req-154 chats work without the Autopilot
 
 **Not yet manually verified by the owner.**

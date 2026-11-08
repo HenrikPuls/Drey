@@ -5,7 +5,7 @@
 Proposed (design session 2026-11-07/08, owner ruling R6 in
 `docs/design/work-panel/crew-internals-concept.md`). Amends ADR-0075 (the
 fleet runner as a standalone companion) and ADR-0088 (the engine as its own
-process); changes ADR-0021 (the MCP server's home). Built as req-161–163
+process); changes ADR-0021 (the MCP server's home). Built as req-164–163
 once the integrator schedules them.
 
 ## Context

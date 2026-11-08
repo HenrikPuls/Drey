@@ -6,7 +6,7 @@ Proposed (design session 2026-11-08, owner rulings R9 and R10 in
 `docs/design/work-panel/crew-internals-concept.md`). Settles req-112 (the
 model budget) and absorbs req-63's `fleet.pool.<provider>.size` and
 req-113's per-ticket allowance. Amends ADR-0077 (provider pools) and concept
-v2 §4.6 (the router policies). Built as req-167.
+v2 §4.6 (the router policies). Built as req-170.
 
 ## Context
 
@@ -81,7 +81,7 @@ record). `chain.json` keeps runtime state only, one per tickets vault.
   cannot have its class waits. The owner accepts latency over a weaker
   answer.
 - The Persona page shows the pool rows with class, factor and busy slots and
-  links to Settings → Models for the definitions (req-168).
+  links to Settings → Models for the definitions (req-171).
 - Mission Control gains the queue as a reportable state ("why is T-0122
   waiting") and a pin as a proposal card ("take opus for T-0130").
 - Open: the class names (A/B/C or words), whether the global cap is in cost
