@@ -1,6 +1,6 @@
 # 0080 — Fleet worktrees: a visible home in the tickets repo and git-only cleanup
 
-- Status: accepted (2026-10-20, T-0044; owner request, outside the list)
+- Status: superseded 2026-11-08 (the tickets plugin was removed; kept as history) — was: accepted (2026-10-20, T-0044; owner request, outside the list)
 - Builds on: [ADR-0075](0075-agent-fleet-architecture-governance-and-run-control.md) (one worktree per run),
   [ADR-0076](0076-ticket-repository-format-and-coordination.md) (the tickets repo),
   T-0047's `prepareWorktree` state machine

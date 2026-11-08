@@ -1,6 +1,6 @@
 # 0077 — Continuous orchestration: column runners, the dispatcher, and the chain's control model
 
-- Status: accepted (2026-10-18, milestone 85; ticket T-0007)
+- Status: superseded 2026-11-08 (the tickets plugin was removed; kept as history) — was: accepted (2026-10-18, milestone 85; ticket T-0007)
 - Amends: [ADR-0075](0075-ticket-pipeline-and-agent-fleet.md) (the fleet's run model; the "dispatcher/reaper only if
   trial data justifies" reservation is superseded) and M84's "a green gate moves the ticket on its own" rule
 - Companion: [ADR-0076](0076-tickets-repository-as-system-of-record.md) (the format; unchanged — the chain's control

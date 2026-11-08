@@ -1,6 +1,6 @@
 # 0087 — The Work panel replaces the kanban board
 
-- Status: accepted (2026-10-31, with req-75 W1; the stages W2–W9 are
+- Status: superseded 2026-11-08 (the tickets plugin was removed; kept as history) — was: accepted (2026-10-31, with req-75 W1; the stages W2–W9 are
   confirmed one by one as they start)
 - Amends: [ADR-0076](0076-ticket-repository-format-and-coordination.md)
   (the board is no longer the tickets UI; the repository format stays),

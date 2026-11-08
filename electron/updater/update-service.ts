@@ -1,5 +1,5 @@
 import { app, dialog, shell, type BrowserWindow } from 'electron';
-import { NsisUpdater } from 'electron-updater';
+import { AppImageUpdater, NsisUpdater } from 'electron-updater';
 import { RELEASES_PAGE_URL, isNewerVersion, isVersionSkipped } from '../../shared/updates';
 import type { UpdatePhase, UpdateStatus } from '../../shared/ipc-api';
 import type { AppConfigStore } from '../app-config';
@@ -16,10 +16,12 @@ import { logLine } from '../logger';
  * "update available → download?" then "downloaded → install now?";
  * "Skip this version" persists `updates.skippedVersion`.
  *
- * Inert unless this is a packaged Windows NSIS install: a dev run, a
- * non-Windows platform and the portable exe report `unsupported` (the
- * portable build has no installer to run — it gets the releases-page
- * fallback instead).
+ * Three modes. A packaged Windows NSIS install and a Linux AppImage
+ * update in place (download, then install at quit). A Linux install that
+ * is not an AppImage (the .deb) is **notify-only**: the same check and
+ * asks, but "Download" opens the releases page — a package manager
+ * owns that install. A dev run, macOS and the Windows portable exe
+ * report `unsupported` (releases-page fallback on a manual check).
  */
 
 /**
@@ -49,21 +51,37 @@ export interface UpdateServiceDeps {
    * packaged, non-portable Windows build. Specs inject a fake.
    */
   readonly createUpdater?: () => UpdaterHandle | null;
+  /** Notify-only mode (a .deb install); the default reads the platform. */
+  readonly notifyOnly?: () => boolean;
 }
 
 /** How the ask dialogs' answers map to the flow. */
 type DownloadChoice = 'download' | 'skip' | 'later';
 
 function defaultCreateUpdater(): UpdaterHandle | null {
+  if (!app.isPackaged) {
+    return null;
+  }
+  if (process.platform === 'linux') {
+    // The same updater checks for a .deb (it only reads latest-linux.yml);
+    // `isNotifyOnly` keeps it from ever downloading there.
+    return new AppImageUpdater();
+  }
   const portable = process.env['PORTABLE_EXECUTABLE_DIR'] !== undefined;
-  if (!app.isPackaged || process.platform !== 'win32' || portable) {
+  if (process.platform !== 'win32' || portable) {
     return null;
   }
   return new NsisUpdater();
 }
 
+/** Linux, but not running from an AppImage: installed by a package manager. */
+function defaultNotifyOnly(): boolean {
+  return process.platform === 'linux' && process.env['APPIMAGE'] === undefined;
+}
+
 export class UpdateService {
   private readonly updater: UpdaterHandle | null;
+  private readonly notifyOnly: boolean;
   private phase: UpdatePhase = 'idle';
   private availableVersion: string | null = null;
   private progressPercent: number | null = null;
@@ -74,6 +92,7 @@ export class UpdateService {
 
   constructor(private readonly deps: UpdateServiceDeps) {
     this.updater = (deps.createUpdater ?? defaultCreateUpdater)();
+    this.notifyOnly = (deps.notifyOnly ?? defaultNotifyOnly)();
     if (this.updater === null) {
       this.phase = 'unsupported';
       return;
@@ -164,6 +183,10 @@ export class UpdateService {
    */
   async download(): Promise<UpdateStatus> {
     if (this.updater === null || this.availableVersion === null || this.isBusy()) {
+      return this.status();
+    }
+    if (this.notifyOnly) {
+      this.openReleasesPage();
       return this.status();
     }
     this.progressPercent = 0;
@@ -287,8 +310,14 @@ export class UpdateService {
       message: 'A Drey update is available',
       detail:
         `Drey ${version} is available — this installation runs ${app.getVersion()}.\n\n` +
-        'The download comes from the Drey releases on GitHub.',
-      buttons: ['Download update', 'Skip this version', 'Remind me later'],
+        (this.notifyOnly
+          ? 'This installation is managed by your package manager — download the new package from the Drey releases on GitHub.'
+          : 'The download comes from the Drey releases on GitHub.'),
+      buttons: [
+        this.notifyOnly ? 'Open releases page' : 'Download update',
+        'Skip this version',
+        'Remind me later',
+      ],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
@@ -322,8 +351,8 @@ export class UpdateService {
   private async showUnsupported(): Promise<void> {
     await this.showInfo(
       'This installation cannot update itself',
-      'Updates install over the Windows setup (NSIS) build. This is a development run, ' +
-        'a different platform, or the portable build — download the new version from the ' +
+      'Updates install over the Windows setup (NSIS) build or a Linux AppImage. This is a development run, ' +
+        'macOS, or the portable build — download the new version from the ' +
         'releases page instead.',
     );
   }

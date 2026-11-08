@@ -130,3 +130,15 @@ The positive answer of a manual check is no longer a dialog: an
 inline text — a six-second note in the status bar for a Help-menu
 check, the green status line in Settings → Updates for a check from
 there. The asks and the failure dialogs are unchanged.
+
+## Later change: Linux (2026-11-08)
+
+The update flow also runs on Linux. A **Linux AppImage** updates in place
+through electron-updater's `AppImageUpdater` (reads `latest-linux.yml` from
+the same GitHub release, download, install at quit — same asks as Windows).
+A **.deb** install is **notify-only**: the same quiet check and the same
+"update available" ask, but the first button reads "Open releases page" and
+nothing is downloaded, because a package manager owns that install (a
+self-replacing binary under `/opt` would fight it). No apt repository is
+hosted. macOS and the Windows portable exe stay `unsupported`.
+CI attaches the AppImage, the .deb and `latest-linux.yml` to the release.

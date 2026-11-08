@@ -6,22 +6,3 @@ reads `AGENTS.md`). The complete, binding project context lives in
 anything: language conventions, the no-global-Node toolchain, architecture
 decisions, ownership map, coding style, and working style all apply to every
 agent, regardless of tool.
-
-**Fleet workers** — an unattended run on a ticket, whose brief names a
-ticket file — start from
-[`docs/agents/fleet-worker.md`](docs/agents/fleet-worker.md) instead: the
-toolchain, where things live, and which of `CLAUDE.md`'s interactive rules
-do not apply to an unattended run. Open `CLAUDE.md` only at the section a
-step needs.
-
-Tool-neutral operational guides:
-
-- [`plugins/tickets/FLEET.md`](plugins/tickets/FLEET.md) — running and
-  diagnosing the fleet runner (agent runs on tickets: status, HTTP surface,
-  run files, chain state). Read it when the user asks about the agent
-  runner, the fleet, ticket runs, or a stuck/red ticket.
-- [`plugins/tickets/BOARD.md`](plugins/tickets/BOARD.md) — working the
-  board's owner checkpoints by hand (commit → done: verify implemented,
-  merged and pushed, then move per the ticket schema). Read it when the
-  user asks about tickets on commit, moving tickets to done, or cleaning
-  up the board.

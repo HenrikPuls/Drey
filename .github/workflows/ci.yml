@@ -1,4 +1,4 @@
-# CI for Drey (Windows-first, see docs/07_deployment_view.md).
+# CI for Drey (Windows and Linux jobs, see docs/07_deployment_view.md).
 #
 # One windows-latest job, one build, in pipeline order:
 # lint -> import cycles -> typechecks -> unit tests -> build -> e2e
@@ -119,12 +119,6 @@ jobs:
       - name: Build (renderer + main + plugins)
         run: npm run build
 
-      # The tickets remote specs (req-66) drive the phone client in a plain
-      # headless Chromium beside the Electron app -- Playwright's own browser,
-      # which npm ci does not download.
-      - name: Install Playwright's headless Chromium (tickets remote e2e)
-        run: node node_modules/@playwright/test/cli.js install --only-shell chromium
-
       - name: E2E (Playwright drives the built Electron app)
         env:
           # ADR-0068: the sample plugin is an e2e fixture, NOT part of the
@@ -185,4 +179,75 @@ jobs:
             release/drey-*-portable.exe
             release/drey-*-setup.exe.blockmap
             release/latest.yml
+          generate_release_notes: true
+
+  linux:
+    name: Build, test & package (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout (full history for the build stamp)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint, cycles, typechecks
+        run: npm run lint && npm run cycles && npm run typecheck
+
+      - name: Unit tests (renderer + plugins)
+        run: npm run test:app && npm run test:plugins
+
+      - name: Fetch the draw.io web app
+        run: npm run fetch:drawio
+
+      - name: Build (renderer + main + plugins)
+        run: npm run build
+
+      # Ubuntu 24.04 runners forbid unprivileged user namespaces, which
+      # Chromium's sandbox needs -- without this Electron aborts at launch.
+      - name: Allow Electron's sandbox (user namespaces)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Electron needs a display on a headless runner.
+      - name: E2E (Playwright drives the built Electron app under xvfb)
+        env:
+          DREY_BUILD_SAMPLE_PLUGINS: 1
+        run: npm run build:plugins && xvfb-run --auto-servernum npm run e2e:run
+
+      - name: Package (AppImage + deb)
+        run: node node_modules/electron-builder/cli.js --linux --publish never
+
+      - name: Smoke-test the packed app
+        run: xvfb-run --auto-servernum npm run verify:pack
+
+      - name: Upload packages (v* tags and manual runs)
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: drey-linux-${{ github.sha }}
+          path: |
+            release/drey-*.AppImage
+            release/drey_*.deb
+          if-no-files-found: error
+          retention-days: 3
+
+      # latest-linux.yml is what the AppImage updater (ADR-0074, Linux
+      # later change) reads; the .deb only notifies and opens this page.
+      - name: Attach packages to GitHub Release (v* tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            release/drey-*.AppImage
+            release/drey_*.deb
+            release/latest-linux.yml
           generate_release_notes: true

@@ -1,4 +1,4 @@
-# Windows packaging for Drey (electron-builder). See
+# Windows + Linux packaging for Drey (electron-builder). See
 # docs/07_deployment_view.md and
 # docs/09_architecture_decisions/0023-windows-packaging-electron-builder.md.
 #
@@ -71,6 +71,9 @@ extraResources:
   # window / taskbar icon while that theme is on. The exe keeps win.icon.
   - from: build/icon-cyberpunk.ico
     to: icon-cyberpunk.ico
+  # Linux loads the window icon from the .png twins (an .ico throws).
+  - from: build/icon-cyberpunk.png
+    to: icon-cyberpunk.png
 
 # Explorer "Open with" / default-program registration (ADR-0054). NSIS only:
 # a per-user install writes HKCU/Software/Classes entries, the uninstaller
@@ -108,3 +111,28 @@ nsis:
 
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
+
+# Linux: an AppImage (runs anywhere, no install) and a .deb. File
+# associations above double as the desktop entry's MimeType list (md, txt);
+# the in-app updater is Windows-only (electron/updater/update-service.ts),
+# so Linux builds are updated by installing a newer package.
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: build/icon.png
+  category: Office
+  synopsis: Private Markdown note vault with a local AI assistant
+  maintainer: Henrik Puls <puls@newgraphic.de>
+  executableName: drey
+  desktop:
+    entry:
+      Name: Drey
+      Keywords: notes;markdown;vault;
+      StartupWMClass: drey
+
+appImage:
+  artifactName: ${productName}-${version}.${ext}
+
+deb:
+  artifactName: ${productName}_${version}_${arch}.${ext}

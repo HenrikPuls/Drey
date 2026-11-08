@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PluginConfigStore, type ConfigIo } from './plugin-config-store';
 
@@ -67,7 +68,7 @@ describe('PluginConfigStore', () => {
   it('a read racing a cold-store set still sees the set value afterwards', async () => {
     const files = new Map<string, string>();
     const { io, pendingReads, releaseAll } = deferredIo(files);
-    const store = new PluginConfigStore('\\root', io);
+    const store = new PluginConfigStore('/root', io);
 
     // The get goes out first (cold cache, its disk read pending), the
     // set lands while it waits. The queue serializes them; the set's
@@ -86,7 +87,7 @@ describe('PluginConfigStore', () => {
   it('a set is write-through: the next get never re-reads the disk', async () => {
     const files = new Map<string, string>();
     const { io, releaseAll } = deferredIo(files);
-    const store = new PluginConfigStore('\\root', io);
+    const store = new PluginConfigStore('/root', io);
 
     const setP = store.set('drawio', 'format', 'png');
     await settle();
@@ -101,7 +102,7 @@ describe('PluginConfigStore', () => {
   it('two sets to one plugin serialize; both keys land on disk', async () => {
     const files = new Map<string, string>();
     const { io, releaseAll } = deferredIo(files);
-    const store = new PluginConfigStore('\\root', io);
+    const store = new PluginConfigStore('/root', io);
 
     const first = store.set('tickets', 'vaultId', 'v1');
     const second = store.set('tickets', 'gitPath', 'git');
@@ -109,21 +110,21 @@ describe('PluginConfigStore', () => {
     releaseAll();
     await Promise.all([first, second]);
 
-    const stored = JSON.parse(files.get('\\root\\tickets\\config.json') ?? '{}') as Record<string, unknown>;
+    const stored = JSON.parse(files.get(path.join('/root', 'tickets', 'config.json')) ?? '{}') as Record<string, unknown>;
     expect(stored['vaultId']).toBe('v1');
     expect(stored['gitPath']).toBe('git');
   });
 
   it('a corrupt config never blocks the plugin; the next set heals it', async () => {
-    const files = new Map<string, string>([['\\root\\old\\config.json', '{not json']]);
+    const files = new Map<string, string>([[path.join('/root', 'old', 'config.json'), '{not json']]);
     const { io, releaseAll } = deferredIo(files);
-    const store = new PluginConfigStore('\\root', io);
+    const store = new PluginConfigStore('/root', io);
 
     await expect(store.get<string>('old', 'anything')).resolves.toBeUndefined();
     const setP = store.set('old', 'repaired', true);
     releaseAll();
     await setP;
-    const stored = JSON.parse(files.get('\\root\\old\\config.json') ?? '{}') as Record<string, unknown>;
+    const stored = JSON.parse(files.get(path.join('/root', 'old', 'config.json')) ?? '{}') as Record<string, unknown>;
     expect(stored['repaired']).toBe(true);
   });
 });

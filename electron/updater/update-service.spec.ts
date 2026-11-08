@@ -121,6 +121,7 @@ function makeService(updates: Partial<UpdatesConfig> = {}): {
       window.closed ? null : (window as unknown as BrowserWindow),
     appConfig: fakeConfigStore(updates),
     createUpdater: () => updater as unknown as UpdaterHandle,
+    notifyOnly: () => false,
   });
   return { service, updater, window };
 }
@@ -219,6 +220,7 @@ describe('UpdateService', () => {
       getMainWindow: () => null,
       appConfig: store,
       createUpdater: () => updater as unknown as UpdaterHandle,
+      notifyOnly: () => false,
     });
     updater.checkForUpdates.mockResolvedValue(checkResult('0.7.0'));
     mocks.responses.push(1); // "Skip this version"
@@ -226,6 +228,27 @@ describe('UpdateService', () => {
     await service.checkManually();
     expect(updater.downloadUpdate).not.toHaveBeenCalled();
     expect(store.get().updates.skippedVersion).toBe('0.7.0');
+  });
+
+  it('notify-only (a .deb): "Open releases page" opens the browser and never downloads', async () => {
+    const updater = new FakeUpdater();
+    const service = new UpdateService({
+      getMainWindow: () => null,
+      appConfig: fakeConfigStore(),
+      createUpdater: () => updater as unknown as UpdaterHandle,
+      notifyOnly: () => true,
+    });
+    updater.checkForUpdates.mockResolvedValue(checkResult('0.7.0'));
+    mocks.responses.push(0);
+
+    await service.checkManually();
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    expect(mocks.openExternal).toHaveBeenCalledTimes(1);
+    expect(service.status().phase).toBe('available');
+
+    await service.download();
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    expect(mocks.openExternal).toHaveBeenCalledTimes(2);
   });
 
   it('stops at the found version on "Remind me later"', async () => {

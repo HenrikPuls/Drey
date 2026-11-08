@@ -1,4 +1,26 @@
 
+### Linux port + removal of the tickets plugin (release 0.8.2)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-08
+(outside the list). `plugins/tickets/` (board, fleet runner, remote
+gateway, `fleet_*` tools), its seven e2e specs and fixture,
+`specs/ticket-schema.md`, `docs/agents/fleet-worker.md`, the work-panel
+design files, the `ticket-handling` skill and the prompt `.gitattributes`
+are gone; AGENTS.md, CLAUDE.md and the CI (Playwright-Chromium step) lost
+their references (`specs/decisions.md` records it). The Linux port: the
+app code was already largely platform-neutral (terminal launcher,
+non-mac window chrome, win32-only updater and `taskkill`); added
+`linux` targets in `electron-builder.yml` (AppImage + deb, md/txt
+associations), `pack:linux` / `pack:dir:linux`, a platform-aware
+`verify:pack`, `dev.sh`, and a `linux` CI job (xvfb e2e, pack, smoke).
+The update flow (ADR-0074 later change): AppImage updates in place via
+`AppImageUpdater`, a .deb is notify-only ("Open releases page"); CI
+attaches `latest-linux.yml`. Spec: notify-only mode in `update-service.spec.ts`.
+Linux fixes found by the e2e run: the window icon is the `.png` twin on
+non-Windows (an `.ico` made `config:set` throw on every theme change);
+`pack:linux` builds AppImage + deb + `latest-linux.yml`; plugin/app tests
+run with `--no-experimental-webstorage` (Node 25+).
+
 ### req-94 — CI green again: the e2e suite runs, and is typechecked
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

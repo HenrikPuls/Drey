@@ -2,6 +2,8 @@
 
 ## Status
 
+Superseded 2026-11-08 (the tickets plugin was removed; kept as history). Was:
+
 Accepted (2026-10-17, owner plan review). The tickets foundation it
 sits on ships with milestone 83 (ADR-0076); the fleet runner and run
 control are milestone 84; continuous orchestration is milestone 85 and

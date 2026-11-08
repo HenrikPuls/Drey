@@ -1,6 +1,6 @@
 # 0086 — Tickets remote access
 
-- Status: accepted (2026-10-30, req-66; owner decisions D1–D5)
+- Status: superseded 2026-11-08 (the tickets plugin was removed; kept as history) — was: accepted (2026-10-30, req-66; owner decisions D1–D5)
 - Amends: the "No server" principle (`specs/roadmap.md`, Core
   Architectural Principles) with one opt-in, documented exception
 - Relates: [ADR-0075](0075-agent-fleet-architecture-governance-and-run-control.md) (the fleet runner, which

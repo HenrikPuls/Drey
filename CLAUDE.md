@@ -8,7 +8,6 @@ data schema, and classifier design live in `specs/`:
 - `specs/roadmap.md` — overall concept, open work in priority order, open risks
 - `specs/decisions.md` — ideas excluded or decided against (do not re-propose)
 - `specs/frontmatter-schema.md` — file/frontmatter format
-- `specs/ticket-schema.md` — the tickets repository format (ADR-0075/0076)
 - `specs/classifier-spec.md` — LLM prompts for task/note detection and tag suggestions
 - `specs/changelog.md` — what has shipped, newest first (the record; read on demand)
 
@@ -17,9 +16,6 @@ binding specification, not just background reading.
 
 `AGENTS.md` is the tool-neutral entry point for coding agents; it points
 here, and everything in this file binds every agent regardless of tool.
-An unattended **fleet worker** on a ticket starts from
-`docs/agents/fleet-worker.md` instead (toolchain, where things live, which
-interactive rules below do not apply to it) and opens this file by section.
 
 ## Language Convention
 
@@ -50,7 +46,13 @@ interactive rules below do not apply to it) and opens this file by section.
   JSON verdict, so matching the German note content buys nothing; the
   earlier "keep prompts German" exception was dropped in milestone 12.1.
 
-## Toolchain — no global Node
+## Toolchain — no global Node (Windows) / Node on PATH (Linux)
+
+**On Linux** (Drey runs there since the Linux port) a Node >= 24 on PATH
+is fine — `nvm` or the distro package; `./dev.sh` runs `npm ci` when
+`node_modules/` is missing and starts the app (`--built`, `--multi` like
+the PowerShell script). `npm run pack:linux` / `pack:dir:linux` build the
+AppImage + deb. The rest of this section describes the Windows setup.
 
 There is **no global `node`/`npm` on PATH** (neither in PowerShell nor in a
 Bash shell). A portable Node lives at `.tools/node/` (gitignored, so the
@@ -502,13 +504,6 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 - `drawio/` — the diagram editor tab (ADR-0064)
 - `git/` — Git vaults + Source control panel incl. merge, stash, amend,
   file history (ADR-0065 + M67)
-- `tickets/` — the kanban board over a dedicated tickets repository:
-  capture → inbox, transitions as one-commit git moves, claims/takeover,
-  derived order + sparse pins, the deterministic validator
-  (ADR-0075/0076, M83; format spec `specs/ticket-schema.md`); the fleet
-  runner + run control (M84) and the chain orchestrator — dispatcher,
-  master/brakes, breaker, ci handover, the fleet_* MCP tools
-  (ADR-0077, M85)
 - `sample/` — the authoring reference, dev/test-only (ADR-0068);
   `plugins/TUTORIAL.md` + `plugins/AUTHORING.md` are the guides
 

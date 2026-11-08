@@ -16,5 +16,8 @@ export default defineConfig({
     environment: 'node',
     include: ['plugins/**/*.spec.ts', 'electron/**/*.spec.ts', 'shared/**/*.spec.ts'],
     globals: true,
+    // Node >= 25 ships its own experimental `localStorage` global, which
+    // shadows jsdom's and breaks every spec that reads it.
+    execArgv: ['--no-experimental-webstorage'],
   },
 });
