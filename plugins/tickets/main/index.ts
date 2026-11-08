@@ -50,7 +50,7 @@ import { createFleetSnapshotSender } from './fleet-snapshot';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
-import { ensureEngine, syncChatConfig, syncNotesVault, syncStoreConfig } from './engine-lifecycle';
+import { ensureService, syncChatConfig, syncNotesVault, syncStoreConfig } from './service-lifecycle';
 import { TicketDocuments, askToAddCheckout } from './ticket-documents';
 import { isStoreDocumentPath, storeDocumentHeader, storeDocumentHeaderEdit } from './store-document-header';
 import { checkoutOf, readStoreSettings } from '../../../packages/tickets-engine/src/store/store-settings';
@@ -92,7 +92,7 @@ const plugin: MainPluginModule = {
     // Drey is a native client of it over the loopback invoke channel, and
     // so is the phone through the gateway's pairing. Adopt a live engine
     // or spawn one; never stop it.
-    const endpoints = await ensureEngine(ctx, ctx.log);
+    const endpoints = await ensureService(ctx, ctx.log);
     const client = new EngineClient(endpoints);
     // D-1: the assistant LLM settings reach the engine at activation (above)
     // AND whenever Settings -> Assistant changes them -- the chat reads them
