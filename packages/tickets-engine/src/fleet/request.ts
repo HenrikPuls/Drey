@@ -19,7 +19,7 @@ import {
 import { acceptanceCommands, acceptanceFinding, ticketSections } from '../core/ticket-files';
 import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
 import { isAutoPhase } from './chain';
-import { personaCoachingSection, personaMemorySection, personaSkillsSection } from './context-pack';
+import { personaMemorySection, personaSkillsSection } from './context-pack';
 import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunDkTarget, type RunRequest, type WorkerProviderId } from './protocol';
 import { ticketCopyPathFor, worktreePathFor } from './worktree-home';
 
@@ -115,6 +115,8 @@ export interface ComposeRunInput {
 export interface PersonaDispatch {
   /** The persona id — what `RunInfo.persona` stamps and the report groups by. */
   readonly id: string;
+  /** The persona's role for the brief's persona line (D-60); absent = id only. */
+  readonly role?: string | null;
   /** The harness pin (`opencode` | `claude-code` | `kimi`; anything unreadable leaves the ring in charge). */
   readonly worker: string;
   /** The model pin. */
@@ -123,8 +125,6 @@ export interface PersonaDispatch {
   readonly prompt: string | null;
   /** The persona's memory text ('' when the file is absent). */
   readonly memory: string;
-  /** The persona's coaching thread text ('' when thread.md is absent) — U4. */
-  readonly coaching: string;
   /** The texts of the skills its record names (D-46); absent = none. */
   readonly skills?: readonly { readonly name: string; readonly text: string }[];
 }
@@ -272,7 +272,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         ...(extraReadGrounds.length > 0 ? { extraRepos: extraReadGrounds } : {}),
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
         ...(persona !== null
-          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id }
+          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), personaId: persona.id, personaRole: persona.role ?? null }
           : {}),
       })
     : composeInstruction({
@@ -299,7 +299,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         caps: input.caps ?? DEFAULT_FLEET_CAPS,
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
         ...(persona !== null
-          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching) }
+          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), personaId: persona.id, personaRole: persona.role ?? null }
           : {}),
       });
   // A scout run never gates and never moves (concept §5.6) — the same

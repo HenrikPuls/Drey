@@ -18,9 +18,10 @@ import { PERSONAS_DIR } from './persona';
  * Writes are strict — exactly the line shape above, one line per message
  * (a multi-line message flattens to one); the reader forgives: an
  * unreadable line is skipped, never a guess (ADR-0076's asymmetric
- * tolerance). The last lines ride every persona run's instruction as the
- * `## Coaching` slice (fleet/context-pack.ts), so what the owner taught
- * in conversation reaches the next dispatch.
+ * tolerance). The thread is the owner's note to the persona, read on the
+ * Crew tab's 1:1 pane; since milestone 212 (D-61) no run brief carries
+ * it — nothing is adopted without the owner's review (concept R2/R14),
+ * and req-168 turns the thread into a persona session.
  */
 
 export interface PersonaThreadMessage {

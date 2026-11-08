@@ -19,8 +19,6 @@ import type { ChatBridge, ChatCommand, ChatModelFailure, ChatShapeReply, ChatStr
 import { parseEnvelope, type ChatEnvelope } from '../core/chat-intents';
 import { causeOf, chatFailure, chatRequest, deltaOf, httpReason, resolveChatModel, type ChatDialect } from './chat-model';
 
-/** One mission turn may take this long before the bridge gives up — honestly. */
-const TURN_TIMEOUT_MS = 120_000;
 /** A shape turn may read the repository this many times before it must answer. */
 const MAX_READ_ROUNDS = 3;
 
@@ -137,8 +135,6 @@ export interface ChatBridgeDeps {
   readonly config: ChatLlmConfig;
   /** The transport; the global fetch by default (the specs inject a fake). */
   readonly fetch?: typeof fetch;
-  /** The clock; the turn-timeout check reads it, so a spec can simulate a stall. */
-  readonly now?: () => number;
   /** The system prompt of every turn; MISSION_SYSTEM_PROMPT by default (the aggregator passes its own). */
   readonly systemPrompt?: string;
 }
@@ -154,7 +150,6 @@ interface TurnOutcome {
 
 export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
   const transport = deps.fetch ?? fetch;
-  const now = deps.now ?? Date.now;
   const systemPrompt = deps.systemPrompt ?? MISSION_SYSTEM_PROMPT;
 
   return {
@@ -174,13 +169,18 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
       }
       const { spec } = resolved;
       const dialect: ChatDialect = spec.dialect;
-      const refuse = (code: 'unreachable' | 'refused' | 'timeout', reason: string): TurnOutcome =>
+      const refuse = (code: 'unreachable' | 'refused' | 'cancelled', reason: string): TurnOutcome =>
         fail(chatFailure(code, spec.provider, spec.baseUrl, spec.model, reason));
 
+      // No timeout of its own (D-63, ADR-0014): a local model may think
+      // for minutes, so the turn streams until the model ends or the
+      // client cancels — its signal is the one thing that aborts the call.
       const controller = new AbortController();
-      const startedAt = now();
-      const watchdog = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
-      watchdog.unref?.();
+      const onCancel = (): void => controller.abort();
+      if (input.signal?.aborted === true) {
+        controller.abort();
+      }
+      input.signal?.addEventListener('abort', onCancel, { once: true });
       try {
         const shape = input.shape;
         const sources: string[] = [];
@@ -200,6 +200,9 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
         ];
         let envelope: ChatEnvelope | null = null;
         for (let round = 0; ; round++) {
+          if (controller.signal.aborted) {
+            return refuse('cancelled', 'the turn was cancelled.');
+          }
           const request = chatRequest(spec, messages);
           const response = await transport(request.url, {
             method: 'POST',
@@ -220,16 +223,10 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
             // as it types would print the document escaped. The screen waits
             // (and shows what Paul reads) until the finished turn is read back.
             (delta) => (shape === undefined ? emit({ kind: 'text', text: delta }) : undefined),
-            () => {
-              if (now() - startedAt > TURN_TIMEOUT_MS) {
-                controller.abort();
-                return 'the model took too long to answer — try again.';
-              }
-              return null;
-            },
+            controller.signal,
           );
-          if (reply.timedOut !== null) {
-            return refuse('timeout', reply.timedOut);
+          if (controller.signal.aborted) {
+            return refuse('cancelled', 'the turn was cancelled.');
           }
           envelope = parseEnvelope(reply.text, input.priorities);
           if (envelope === null) {
@@ -268,11 +265,11 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
         return { ...out, shape: shaped };
       } catch (error) {
         if (controller.signal.aborted) {
-          return refuse('timeout', 'the model took too long to answer — try again.');
+          return refuse('cancelled', 'the turn was cancelled.');
         }
         return refuse('unreachable', `could not be reached — ${causeOf(error)}.`);
       } finally {
-        clearTimeout(watchdog);
+        input.signal?.removeEventListener('abort', onCancel);
       }
     },
   };
@@ -282,21 +279,20 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
  * Walks one SSE body: blank-line frames, `data:` lines, `[DONE]` ignored.
  * Every content delta reaches `onDelta` as it arrives (the UI's live
  * text); the full accumulated reply returns for the envelope parse. The
- * `onChunk` check folds a never-ending stream into the turn timeout.
+ * walk ends when the body ends or the client's signal aborts it — there
+ * is no clock in here (D-63, ADR-0014).
  */
 async function readSse(
   body: AsyncIterable<Uint8Array>,
   dialect: ChatDialect,
   onDelta: (delta: string) => void,
-  onChunk: () => string | null,
-): Promise<{ readonly text: string; readonly timedOut: string | null }> {
+  signal: AbortSignal,
+): Promise<{ readonly text: string }> {
   let text = '';
   let buffer = '';
-  let timedOut: string | null = null;
   const decoder = new TextDecoder();
   for await (const chunk of body) {
-    timedOut = onChunk();
-    if (timedOut !== null) {
+    if (signal.aborted) {
       break;
     }
     buffer += decoder.decode(chunk, { stream: true });
@@ -318,5 +314,5 @@ async function readSse(
       }
     }
   }
-  return { text, timedOut };
+  return { text };
 }

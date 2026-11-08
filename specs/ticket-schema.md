@@ -994,7 +994,8 @@ automatic column, ordered by priority class (the configured
 vocabulary's first half before its second — see `priorities:` above),
 then column rank — the rightmost column first, so
 finishing beats starting — then the column's derived order. Each candidate takes a slot of the provider pool its
-assignment resolves to; a full pool makes it wait, a running run is
+assignment resolves to — for a persona run the pool of the model entry its
+pool and router pick (D-62, `models.pool` above); a full pool makes it wait, a running run is
 never preempted.
 
 ## `_meta/personas/` — the agent personas (E3)
@@ -1027,8 +1028,8 @@ tickets/_meta/personas/
   | `role` | `planner \| builder \| reviewer \| tester \| custom` | `custom` |
   | `worker` | the CLI harness (`claude-code`, `opencode`, `api`) | `opencode` |
   | `models.default` | the model nothing else decides | `opus` |
-  | `models.pool` | allowed models; the order is the fallback order on rate-limits/outages | `[models.default]` |
-  | `models.router` | `off \| budget \| escalate-on-fail` — a router only ever picks inside the pool | `off` |
+  | `models.pool` | allowed models in fallback order. An entry is `<model>` or `<worker provider>/<model>` (`kimi/k2`; a slash after anything else is part of the model id, `zai/glm-5.3`) — the entry's provider pool takes the run, else the persona's `worker`. At dispatch (milestone 212, D-62) an entry whose provider pool has no free slot is skipped | `[models.default]` |
+  | `models.router` | `off \| budget \| escalate-on-fail` — a router only ever picks inside the pool: `off` walks the default then the pool in order, `budget` the pool in order (curated cheapest first), `escalate-on-fail` the default then one pool step further per failed run of the ticket in this phase. `runner.log` names the chosen model and why. req-170 replaces this with a class request | `off` |
   | `color` | `#rrggbb`, the chips and avatars | `#a78bfa` |
   | `skills` | names of skill files the persona carries: `<name>.md` or `<name>/SKILL.md`, in the persona's own `skills/` folder, else `_meta/skills/`. A run's brief carries their text as `## Skills` (D-46) | `[]` |
   | `budget` | USD per day — the Crew card shows the day's costs against it | unset (null) |
@@ -1072,10 +1073,11 @@ tickets/_meta/personas/
 
   The writer is strict (a multi-line message flattens to one line); the
   reader forgives — an unparseable line is skipped, never guessed. Every
-  append is one commit `personas: <id> thread`. The run brief's context
-  pack carries the last 5 messages, newest first, under a `## Coaching`
-  heading, so what the owner taught in conversation reaches the next
-  dispatch; an absent or empty thread adds no section at all.
+  append is one commit `personas: <id> thread`. No run brief carries the
+  thread (milestone 212, D-61 — until then the last 5 messages rode as a
+  `## Coaching` section without the owner's review): nothing a persona
+  reads is adopted automatically (concept R2/R14); req-168 turns the
+  thread into a persona session, req-169 brings the reviewed memory.
 
 **The improvement loop (E6).** Two more files may live in the persona
 directory — the worker's findings and the aggregation's proposals (the

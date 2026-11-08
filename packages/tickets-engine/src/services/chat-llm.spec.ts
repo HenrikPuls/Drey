@@ -51,6 +51,26 @@ function hangingFetch(calls: RecordedCall[]): typeof fetch {
   }) as typeof fetch;
 }
 
+/** A fetch stand-in whose body yields its frames only after `delayMs` (a model thinking for a long time). */
+function slowFetch(calls: RecordedCall[], frames: string[], delayMs: number): typeof fetch {
+  return (async (url: unknown, init?: unknown) => {
+    calls.push({ url: String(url), init: (init ?? {}) as RequestInit });
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        init && (init as RequestInit).signal?.addEventListener('abort', () => controller.error(new Error('aborted')));
+        setTimeout(() => {
+          for (const frame of frames) {
+            controller.enqueue(encoder.encode(frame));
+          }
+          controller.close();
+        }, delayMs);
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  }) as typeof fetch;
+}
+
 function chatConfig(values: Record<string, string>): { get<T>(key: string): Promise<T | undefined> } {
   return { get: async <T,>(key: string) => values[key] as T | undefined };
 }
@@ -290,27 +310,50 @@ describe('createChatBridge', () => {
     expect(result.say).toMatch(/outside its envelope/);
   });
 
-  it('gives up honestly when the model stalls past the 120 s turn timeout', async () => {
+  it('never gives up on a slow model: an answer after ten minutes still lands (D-63, ADR-0014)', async () => {
     vi.useFakeTimers();
     try {
       const calls: RecordedCall[] = [];
       const bridge = createChatBridge({
         config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
-        fetch: hangingFetch(calls),
+        fetch: slowFetch(calls, [frame('{"say":"Finally."}')], 10 * 60_000),
       });
       const { events, emit } = collect();
       const pending = bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit });
-      await vi.advanceTimersByTimeAsync(121_000);
+      await vi.advanceTimersByTimeAsync(9 * 60_000);
+      expect(events).toEqual([]); // still streaming — nothing aborted, nothing said
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
       const result = await pending;
 
       expect(calls).toHaveLength(1);
-      expect(result.commands).toEqual([]);
-      expect(result.failure?.code).toBe('timeout');
-      expect(result.say).toMatch(/too long/);
-      expect(events).toEqual([]);
+      expect(result.failure).toBeUndefined();
+      expect(result.say).toBe('Finally.');
+      // the progress signal: the stream's text event reached the client
+      expect(events).toEqual([{ kind: 'text', text: '{"say":"Finally."}' }]);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("the client's cancel ends the turn: the signal aborts the request, the outcome says cancelled (D-63)", async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: hangingFetch(calls),
+    });
+    const { events, emit } = collect();
+    const cancel = new AbortController();
+    const pending = bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit, signal: cancel.signal });
+    await vi.waitFor(() => expect(calls).toHaveLength(1)); // the request is out and streaming
+    cancel.abort();
+    const result = await pending;
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.init.signal?.aborted).toBe(true); // the request itself was aborted, not just abandoned
+    expect(result.commands).toEqual([]);
+    expect(result.failure?.code).toBe('cancelled');
+    expect(result.say).toMatch(/cancelled/);
+    expect(events).toEqual([]);
   });
 
   it('puts the tickets the owner named after the digest, before any desktop reference (D-7a)', async () => {

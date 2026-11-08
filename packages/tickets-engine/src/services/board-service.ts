@@ -3091,11 +3091,11 @@ export class EngineBoardService {
       const derived = deriveWorkerModel(personaResolution.persona, null);
       personaDispatch = {
         id: personaResolution.persona.id,
+        role: personaResolution.persona.role,
         worker: derived.workerChoice,
         model: derived.model ?? '',
         prompt: await loader.prompt(personaResolution.persona.id),
         memory: await loader.memory(personaResolution.persona.id),
-        coaching: await loader.thread(personaResolution.persona.id),
         skills: await this.personaSkillsFor(vault, personaResolution.persona),
       };
     }
@@ -3846,8 +3846,8 @@ export class EngineBoardService {
   /**
    * One owner message into the coaching thread (U4): appended as exactly
    * one line (a file is created chat-session style when absent), one
-   * commit `personas: <id> thread` — the next run's `## Coaching` slice
-   * reads it back.
+   * commit `personas: <id> thread`. Since milestone 212 (D-61) no run reads
+   * it back: nothing is adopted unreviewed; req-168 makes it a session.
    */
   personaThreadAppend(input: { id: string; text: string; actor?: string }): Promise<PersonaThreadReply> {
     return this.enqueue(async () => {

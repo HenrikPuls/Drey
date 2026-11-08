@@ -23,7 +23,7 @@ import { assembleBoard, type BoardFile } from '../core/ticket-board';
 import { promptVersion, stripPromptVersion } from '../core/default-prompts';
 import { patchTicketFile } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
-import { HUMAN_PERSONA_ID, PERSONAS_DIR, isHumanPersona, loadPersonaSkills, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution, type PersonaSkill } from '../core/persona';
+import { HUMAN_PERSONA_ID, PERSONAS_DIR, isHumanPersona, loadPersonaSkills, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaModelChoice, type PersonaResolution, type PersonaSkill } from '../core/persona';
 import { chainPersonaAt, manualStepAfter } from '../core/manual-gate';
 import { renderStatusComment } from '../core/status-comment';
 import { dkTargetFor } from './dk-target';
@@ -59,7 +59,7 @@ import type {
   RunRequest,
   WorkerProviderId,
 } from './protocol';
-import { DEFAULT_FLEET_CAPS, normalizeFleetPools, WORKER_PROVIDERS } from './protocol';
+import { DEFAULT_FLEET_CAPS, isWorkerProvider, normalizeFleetPools, WORKER_PROVIDERS } from './protocol';
 
 const CHAIN_FILE = 'chain.json';
 
@@ -96,8 +96,6 @@ interface TicketPersona {
   readonly prompt: string | null;
   /** The persona's memory.md text ('' when absent). */
   readonly memory: string;
-  /** The persona's thread.md text ('' when absent) — the coaching slice's source. */
-  readonly coaching: string;
   /** The texts of the skills its record names (D-46). */
   readonly skills: readonly PersonaSkill[];
 }
@@ -1200,6 +1198,26 @@ export class Orchestrator {
    * first and continues from the branch instead of starting over. No new
    * state — the supervisors' records are the truth.
    */
+  /**
+   * How many runs of the ticket failed in this column since its last
+   * success there (D-62: the escalate-on-fail router's step).
+   */
+  private failedRunsInColumn(ticketId: string, column: string): number {
+    const mine = this.allRecords()
+      .filter((r) => r.info.ticketId === ticketId && (r.request.column ?? null) === column)
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt));
+    let failed = 0;
+    for (const record of mine) {
+      if (record.info.state === 'done') {
+        break;
+      }
+      if (record.info.state === 'failed') {
+        failed += 1;
+      }
+    }
+    return failed;
+  }
+
   private lastGateFailure(ticketId: string, column: string): string | null {
     // Only the same column's failures count, and a later successful run of
     // the ticket there clears the slate — an older plan-phase or reaper
@@ -1339,12 +1357,28 @@ export class Orchestrator {
       if (this.master === 'run') {
         await this.parkHumanGates(config, snap, personas, busyTickets, modes);
       }
-      const poolOf = (card: BoardColumn['tickets'][number], phase: PipelinePhase): WorkerProviderId | null => {
+      // D-62: the persona's pool and router pick the model (and with it the
+      // provider pool) against the planner's free slots at this point of
+      // the pass; dispatchOne reads the same choice back.
+      const modelChoices = new Map<string, PersonaModelChoice>();
+      const poolOf = (
+        card: BoardColumn['tickets'][number],
+        phase: PipelinePhase,
+        free: Readonly<Partial<Record<WorkerProviderId, number>>> = {},
+      ): WorkerProviderId | null => {
         const persona = personas.get(card.id)?.persona ?? null;
         if (persona !== null) {
           const parsed = parseWorkerValue(persona.worker);
           if (parsed !== null) {
-            return parsed.provider; // the persona's harness decides the pool
+            const choice = personaModelFor(persona, {
+              phase: phase.id,
+              provider: parsed.provider,
+              freeSlots: free,
+              failedRuns: this.failedRunsInColumn(card.id, phase.id),
+            });
+            modelChoices.set(card.id, choice);
+            // the chosen pool entry's provider, else the persona's harness
+            return choice.provider !== null && isWorkerProvider(choice.provider) ? choice.provider : parsed.provider;
           }
         }
         const repo = card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
@@ -1388,7 +1422,7 @@ export class Orchestrator {
       const dispatched = new Set<string>(plan.map((item) => item.card.id));
       const refusedByColumn = new Map<string, string>();
       for (const item of plan) {
-        const outcome = await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap, personas);
+        const outcome = await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap, personas, modelChoices.get(item.card.id) ?? null);
         if (outcome === 'refused' && !refusedByColumn.has(item.workingPhase)) {
           refusedByColumn.set(item.workingPhase, item.card.id);
         }
@@ -1622,7 +1656,6 @@ export class Orchestrator {
         let persona: Persona | null = null;
         let prompt: string | null = null;
         let memory = '';
-        let coaching = '';
         let skills: readonly PersonaSkill[] = [];
         if (resolution.persona !== null) {
           const text = await fileOf(`${PERSONAS_DIR}/${resolution.persona}/persona.md`);
@@ -1636,7 +1669,6 @@ export class Orchestrator {
           if (persona !== null) {
             prompt = await fileOf(`${PERSONAS_DIR}/${persona.id}/prompt.md`);
             memory = (await fileOf(`${PERSONAS_DIR}/${persona.id}/memory.md`)) ?? '';
-            coaching = (await fileOf(`${PERSONAS_DIR}/${persona.id}/thread.md`)) ?? '';
             const loaded = await loadPersonaSkills(fileOf, persona.id, persona.skills);
             skills = loaded.skills;
             if (loaded.missing.length > 0) {
@@ -1644,7 +1676,7 @@ export class Orchestrator {
             }
           }
         }
-        personas.set(card.id, { resolution, persona, prompt, memory, coaching, skills });
+        personas.set(card.id, { resolution, persona, prompt, memory, skills });
       }
     }
     return personas;
@@ -1767,6 +1799,7 @@ export class Orchestrator {
     card: BoardColumn['tickets'][number],
     snap: BoardSnapshot,
     personas: ReadonlyMap<string, TicketPersona>,
+    modelChoice: PersonaModelChoice | null = null,
   ): Promise<'dispatched' | 'refused' | 'skipped'> {
     const workingPhase = snap.pipeline.find((p) => p.id === workingPhaseId) ?? null;
     const repo =
@@ -1923,11 +1956,13 @@ export class Orchestrator {
         ? {
             persona: {
               id: persona.id,
-              worker: persona.worker,
-              model: personaModelFor(persona, null).model,
+              role: persona.role,
+              // D-62: the pool/router choice of this pass; a pool entry may
+              // name its own provider (`kimi/k2`), else the persona's harness runs.
+              worker: modelChoice?.provider ?? persona.worker,
+              model: (modelChoice ?? personaModelFor(persona, null)).model,
               prompt: personaPrompt,
               memory: entry?.memory ?? '',
-              coaching: entry?.coaching ?? '',
               skills: entry?.skills ?? [],
             },
           }
@@ -1950,7 +1985,8 @@ export class Orchestrator {
         `dispatched ${card.id} (${workingPhaseId} pool, ${composed.request.provider}` +
           `${composed.request.model !== null ? `/${composed.request.model}` : ''}` +
           `${composed.persona !== null ? `, persona ${composed.persona}` : ''}` +
-          `${composed.request.form === 'scout' ? ', scout' : ''}) as ${outcome.run.id}`,
+          `${composed.request.form === 'scout' ? ', scout' : ''}) as ${outcome.run.id}` +
+          `${modelChoice !== null && persona !== null ? ` — model ${modelChoice.model}: ${modelChoice.reason}` : ''}`,
       );
       // E7: the ledger's dispatched line and the ticket's `working` line.
       this.deps.events?.ledger({

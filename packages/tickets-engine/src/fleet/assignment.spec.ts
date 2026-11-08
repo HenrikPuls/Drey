@@ -53,6 +53,22 @@ describe('composeInstruction — the persona memory section (E3)', () => {
   });
 });
 
+describe('composeInstruction — the persona line (D-60)', () => {
+  it("names the persona and its folder so the prompt's Friction paragraph can run", () => {
+    const composed = composeInstruction(base({ personaId: 'ben', personaRole: 'builder', prompt: 'You are Ben.' }));
+    expect(composed.text).toContain('Your persona: ben (builder) — its folder is tickets/_meta/personas/ben/ in the tickets repo');
+    expect(composed.text.indexOf('You are working ticket')).toBeLessThan(composed.text.indexOf('Your persona: ben'));
+    // the persona is stable for its runs: it is part of the digest, not of the resume continuation
+    expect(composed.stable).toContain('ben');
+    expect(composed.continuation).not.toContain('Your persona:');
+  });
+
+  it('a ring run (no persona) carries no persona line — byte-identical to before', () => {
+    expect(composeInstruction(base({})).text).not.toContain('Your persona:');
+    expect(composeInstruction(base({ personaId: null })).text).not.toContain('Your persona:');
+  });
+});
+
 describe('composeScoutInstruction (E8, concept §5.6)', () => {
   function scoutBase(over: Partial<Parameters<typeof composeScoutInstruction>[0]> = {}): Parameters<typeof composeScoutInstruction>[0] {
     return {
@@ -104,6 +120,7 @@ describe('composeScoutInstruction (E8, concept §5.6)', () => {
       scoutBase({ personaId: 'pia', prompt: 'You are Pia.', memorySection: '## Memory\n\n- one lesson' }),
     );
     expect(composed.text).toContain('Written on <UTC stamp, YYYY-MM-DDTHH:mm:ssZ> by pia.');
+    expect(composed.text).toContain('Your persona: pia — its folder is tickets/_meta/personas/pia/'); // D-60: the scout names it too
     expect(composed.text.indexOf('You are Pia.')).toBeLessThan(composed.text.indexOf('You are scouting ticket'));
     expect(composed.text).toContain('## Memory');
     // The repo's agent instructions stay the verbatim head of the pack.

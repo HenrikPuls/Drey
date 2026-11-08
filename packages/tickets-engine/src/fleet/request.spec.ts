@@ -169,7 +169,7 @@ describe('composeRunRequest — a refusal says what the gate counts (D-31)', () 
 });
 
 describe('composeRunRequest — a persona\'s skills ride along (D-46)', () => {
-  const persona = { id: 'build-default', worker: 'opencode', model: 'm', prompt: 'You build.', memory: '', coaching: '' };
+  const persona = { id: 'build-default', worker: 'opencode', model: 'm', prompt: 'You build.', memory: '' };
   const skills = [
     { name: 'angular-tests', text: 'Run the suite with --include.' },
     { name: 'commits', text: 'One change per commit.' },
@@ -407,7 +407,7 @@ describe('multi-repo runs (req-72)', () => {
 
 
 describe('persona dispatch (E3, ADR-0088)', () => {
-  const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '', coaching: '' };
+  const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '' };
 
   it('a persona beats the assignment ring for provider and model', () => {
     const result = composeRunRequest(
@@ -577,7 +577,7 @@ describe('scout runs (E8, concept §5.6)', () => {
   });
 
   it('a persona scout signs the report and rides provider, model, prompt and memory', () => {
-    const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '# Memory\n\n- lesson\n', coaching: '' };
+    const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '# Memory\n\n- lesson\n' };
     const result = composeRunRequest(base({ card: scoutCard(), ticketText: NO_CRITERIA, promptText: 'Phase template.', persona: PIA }));
     if (!result.ok) {
       throw new Error(result.error);

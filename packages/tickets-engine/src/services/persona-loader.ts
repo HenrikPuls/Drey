@@ -1,4 +1,4 @@
-import { parsePersonaFile, resolvePersona, personaModelFor, type Persona, type PersonaResolution } from '../core/persona';
+import { parsePersonaFile, resolvePersona, personaModelFor, type Persona, type PersonaModelContext, type PersonaResolution } from '../core/persona';
 
 /**
  * The persona loader (ADR-0088, E3): the services read personas from the
@@ -61,10 +61,11 @@ export async function resolvePersonaForTicket(
 
 /**
  * What a dispatch derives from a persona: the worker harness and the
- * model (pool+router applied). The result feeds the existing
- * `composeRunRequest` — the persona is configuration, not identity.
+ * model (pool+router applied against the fleet context, D-62; the default
+ * without one). The result feeds the existing `composeRunRequest` — the
+ * persona is configuration, not identity.
  */
-export function deriveWorkerModel(persona: Persona, contextTokens: number | null): { workerChoice: string; model: string | null } {
-  const { model } = personaModelFor(persona, contextTokens);
-  return { workerChoice: persona.worker, model };
+export function deriveWorkerModel(persona: Persona, context: PersonaModelContext | null): { workerChoice: string; model: string | null } {
+  const { model, provider } = personaModelFor(persona, context);
+  return { workerChoice: provider ?? persona.worker, model };
 }

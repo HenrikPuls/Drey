@@ -470,7 +470,8 @@ speech bubble (**Model**), a rocket (**Mission Control**) and two heads
   The head's list button opens the earlier Mission Control chats, `+`
   starts a new one.
 - **1:1** opens a menu of the crew's agent personas. Your messages go into
-  that persona's thread, which the persona reads before the next run.
+  that persona's thread — a note to the persona; no run reads it until the
+  1:1 becomes a conversation with the persona.
 
 #### Shape a ticket in the editor {#shape-in-editor}
 

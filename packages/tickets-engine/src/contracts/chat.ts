@@ -147,9 +147,9 @@ export interface ChatServicePort {
    * stream → events), appends the reply, and returns the finished
    * session slice. The stream arrives through `onEvent`.
    */
-  send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean; readonly context?: string }): Promise<ChatTurnResult>;
+  send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean; readonly context?: string; readonly signal?: AbortSignal }): Promise<ChatTurnResult>;
   /** Starts a fresh session and sends the first message; `ticket` makes it a shape session for that ticket's plan. */
-  start(input: { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string }): Promise<ChatTurnResult>;
+  start(input: { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string; readonly signal?: AbortSignal }): Promise<ChatTurnResult>;
   /** Where the shared plan of a ticket stands: version, the owner's edits since the model's last turn, the line marks (E10-2). */
   planStatus(ticket: string): Promise<PlanStatus>;
   /**
@@ -209,7 +209,7 @@ export interface ChatSessionMeta {
   readonly ticket?: string;
 }
 
-export type ChatFailureCode = 'not-configured' | 'unsupported' | 'unreachable' | 'refused' | 'timeout';
+export type ChatFailureCode = 'not-configured' | 'unsupported' | 'unreachable' | 'refused' | 'timeout' | 'cancelled';
 
 /**
  * Why a turn had no model (D-1) — the error card's content: provider,
@@ -291,8 +291,14 @@ export interface ChatBridge {
     readonly shape?: ChatShapeContext;
     /** Present on a flow draft (E10-5): the flow Paul reads, replacing the board digest. */
     readonly flow?: { readonly context: string };
-    /** Receives the live stream: thought and text deltas. */
+    /** Receives the live stream: thought and text deltas — the turn's progress signal. */
     emit(event: ChatStreamEvent): void;
+    /**
+     * The client's cancel (D-63, ADR-0014): the bridge has no timeout of its
+     * own — a turn streams until the model ends or this signal aborts it.
+     * Absent = the turn runs to the model's end.
+     */
+    readonly signal?: AbortSignal;
   }): Promise<{
     readonly say: string;
     readonly thought: string | null;

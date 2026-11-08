@@ -1,5 +1,6 @@
 import { parseDocument } from 'yaml';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
+import { isWorkerProvider } from '../fleet/protocol';
 
 /**
  * Personas (ADR-0088, E3 — the concept's §4): a named agent is role +
@@ -221,18 +222,111 @@ export function resolvePersona(input: {
 }
 
 /**
- * The model a persona actually runs on a dispatch: the router only picks
- * INSIDE the pool (concept §4.6) — deterministic without one.
+ * What a dispatch knows when it picks a persona's model (D-62): the
+ * phase, the persona's own harness provider, the free slots of every
+ * provider pool at this point of the pass (`fleet.pool.<provider>.size`
+ * minus the live runs, as the planner counts them), and how many runs of
+ * this ticket failed in this phase in a row (the escalation ladder).
  */
-export function personaModelFor(persona: Persona, contextTokens: number | null): { model: string; viaRouter: boolean } {
-  if (persona.models.router === 'off' || contextTokens === null) {
-    return { model: persona.models.default, viaRouter: false };
+export interface PersonaModelContext {
+  readonly phase: string;
+  /** The persona's worker provider — a pool entry without a provider prefix runs there. */
+  readonly provider: string;
+  /** Free slots per provider right now; a provider not listed is taken as free. */
+  readonly freeSlots: Readonly<Partial<Record<string, number>>>;
+  /** Consecutive failed runs of the ticket in this phase (0 on a first run). */
+  readonly failedRuns: number;
+}
+
+export interface PersonaModelChoice {
+  readonly model: string;
+  /** The provider the chosen pool entry names (`kimi/k2`); null = the persona's own worker. */
+  readonly provider: string | null;
+  readonly viaRouter: boolean;
+  /** Why this model — one short clause for runner.log. */
+  readonly reason: string;
+}
+
+/**
+ * A pool entry is `<model>` or `<provider>/<model>` with one of the fleet's
+ * worker providers (the worker value grammar of `fleet/assignment.ts`); a
+ * slash after anything else is part of the model id (`zai/glm-5.3`).
+ */
+export function splitPoolEntry(entry: string): { readonly provider: string | null; readonly model: string } {
+  const text = entry.trim();
+  const slashAt = text.indexOf('/');
+  if (slashAt > 0 && isWorkerProvider(text.slice(0, slashAt)) && text.slice(slashAt + 1) !== '') {
+    return { provider: text.slice(0, slashAt), model: text.slice(slashAt + 1) };
   }
-  // `budget`: the cheapest pool model that carries the context. Without a
-  // price table the pool order IS the price order (owner-curated), so the
-  // first entry wins; `escalate-on-fail` also starts at the default and
-  // climbs inside the pool on failure — the runner records what ran.
-  return { model: persona.models.pool[0] ?? persona.models.default, viaRouter: true };
+  return { provider: null, model: text };
+}
+
+/**
+ * The model a persona actually runs on a dispatch (D-62): the pool is the
+ * fallback order, the router the policy inside it (concept §4.6).
+ *
+ * - router `off`: the default first, then the pool in order;
+ * - `budget`: the pool in order (the owner curates it cheapest first);
+ * - `escalate-on-fail`: the default, then one pool step further per
+ *   failed run of the ticket in this phase (the pool's end holds).
+ *
+ * An entry whose provider pool has no free slot is skipped; when every
+ * entry is full the first one is named and the provider gate makes the
+ * ticket wait, as before. Without a context (the Crew tab, an estimate)
+ * the default stands. req-170 replaces this with a class request against
+ * the model table and a capacity cap — never a smaller class.
+ */
+export function personaModelFor(persona: Persona, context: PersonaModelContext | null): PersonaModelChoice {
+  const fallback: PersonaModelChoice = { model: persona.models.default, provider: null, viaRouter: false, reason: 'the default' };
+  if (context === null) {
+    return fallback;
+  }
+  const entries = persona.models.pool.map(splitPoolEntry);
+  const router = persona.models.router;
+  const defaultEntry = { provider: null, model: persona.models.default };
+  const defaultAt = entries.findIndex((e) => e.provider === null && e.model === persona.models.default);
+  // The order the dispatch walks: budget = the pool as curated; off = the
+  // default, then the rest of the pool; escalate = the default, then the
+  // pool entries after it (the ones before it are the cheaper ones).
+  const order =
+    router === 'budget'
+      ? entries
+      : router === 'escalate-on-fail'
+        ? [defaultEntry, ...(defaultAt === -1 ? entries : entries.slice(defaultAt + 1))]
+        : [defaultEntry, ...entries.filter((_, i) => i !== defaultAt)];
+  if (order.length === 0) {
+    return fallback;
+  }
+  const step = router === 'escalate-on-fail' ? Math.min(context.failedRuns, order.length - 1) : 0;
+  const candidates = order.slice(step);
+  const policy =
+    router === 'escalate-on-fail' && step > 0
+      ? `escalate-on-fail: step ${step} after ${context.failedRuns} failed run${context.failedRuns === 1 ? '' : 's'} in ${context.phase}`
+      : router === 'budget'
+        ? 'budget router: the pool in order'
+        : router === 'escalate-on-fail'
+          ? 'escalate-on-fail: the default on a first run'
+          : 'the default';
+  // The persona's own provider is the slot gate's business (unknown = free
+  // here); an entry naming another provider needs that provider's pool
+  // configured, else it is skipped with its reason — never a crash.
+  const free = (provider: string | null): number | null =>
+    provider === null ? (context.freeSlots[context.provider] ?? Number.POSITIVE_INFINITY) : (context.freeSlots[provider] ?? null);
+  const skipped: string[] = [];
+  for (const entry of candidates) {
+    const slots = free(entry.provider);
+    if (slots === null) {
+      skipped.push(`${entry.model}: no ${entry.provider} pool is configured`);
+      continue;
+    }
+    if (slots > 0) {
+      const because = skipped.length > 0 ? `${skipped.join(', ')} — pool fallback` : policy;
+      return { model: entry.model, provider: entry.provider, viaRouter: router !== 'off', reason: because };
+    }
+    skipped.push(`${entry.model}: the ${entry.provider ?? context.provider} pool is full`);
+  }
+  const first = candidates[0]!;
+  return { model: first.model, provider: first.provider, viaRouter: router !== 'off', reason: `every pool entry is full or unconfigured (${skipped.join(', ')}) — the ticket waits` };
 }
 
 /**

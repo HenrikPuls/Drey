@@ -100,7 +100,7 @@ export interface PlanDispatchInput {
   /** The provider that would run the card in that column (the assignment
    *  ladder); null = unresolvable — planned without a slot, so the
    *  dispatch refuses it with the reason. */
-  readonly poolOf: (card: TicketCard, phase: PipelinePhase) => WorkerProviderId | null;
+  readonly poolOf: (card: TicketCard, phase: PipelinePhase, free: Readonly<Record<WorkerProviderId, number>>) => WorkerProviderId | null;
   /** Ticket ids that must not be dispatched (a live or detached run
    *  somewhere, or a run stamp without a supervised run). */
   readonly busyTickets: ReadonlySet<string>;
@@ -215,7 +215,7 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
     if (taken.has(candidate.card.id)) {
       continue;
     }
-    const pool = input.poolOf(candidate.card, candidate.phase);
+    const pool = input.poolOf(candidate.card, candidate.phase, free);
     if (pool !== null) {
       if (free[pool] <= 0) {
         continue;

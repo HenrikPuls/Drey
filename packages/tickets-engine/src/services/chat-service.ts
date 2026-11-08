@@ -278,7 +278,7 @@ export class ChatService implements ChatServicePort {
     return model === undefined || model === '' ? session : { ...session, model };
   }
 
-  async send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean; readonly context?: string }): Promise<ChatTurnResult> {
+  async send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean; readonly context?: string; readonly signal?: AbortSignal }): Promise<ChatTurnResult> {
     if (input.text.trim() === '') {
       return { ok: false, error: 'the message is empty' };
     }
@@ -287,13 +287,13 @@ export class ChatService implements ChatServicePort {
     }
     this.inFlight.add(input.file);
     try {
-      return await this.turn(input.file, input.text, input.planEdits !== false, input.context);
+      return await this.turn(input.file, input.text, input.planEdits !== false, input.context, input.signal);
     } finally {
       this.inFlight.delete(input.file);
     }
   }
 
-  async start(input: { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string }): Promise<ChatTurnResult> {
+  async start(input: { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string; readonly signal?: AbortSignal }): Promise<ChatTurnResult> {
     if (input.text.trim() === '') {
       return { ok: false, error: 'the message is empty' };
     }
@@ -310,7 +310,7 @@ export class ChatService implements ChatServicePort {
     await this.deps.host.write(vault.id, file, newSessionText(title, stamp, input.ticket));
     await this.commit(vault, [file], `tickets: chat started ${file}`);
     this.deps.host.announceChanges(vault.id, [file]);
-    return this.turn(file, input.text, true, input.context);
+    return this.turn(file, input.text, true, input.context, input.signal);
   }
 
   async confirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {
@@ -330,7 +330,7 @@ export class ChatService implements ChatServicePort {
    * as one write and one commit. A crashed bridge leaves the owner line
    * as the honest record and reports the error through the stream.
    */
-  private async turn(file: string, text: string, planEdits = true, reference?: string): Promise<ChatTurnResult> {
+  private async turn(file: string, text: string, planEdits = true, reference?: string, signal?: AbortSignal): Promise<ChatTurnResult> {
     const found = await this.boardAndVault();
     if (found === null) {
       return { ok: false, error: 'no tickets vault detected', file };
@@ -388,6 +388,7 @@ export class ChatService implements ChatServicePort {
         ...(delta === null ? {} : { planDelta: planDeltaForModel(delta) }),
         ...(reference === undefined || reference.trim() === '' ? {} : { reference }),
         ...(shape === undefined ? {} : { shape }),
+        ...(signal === undefined ? {} : { signal }),
         emit: (event) => this.deps.onEvent(file, event),
       });
       if (reply.failure !== undefined) {

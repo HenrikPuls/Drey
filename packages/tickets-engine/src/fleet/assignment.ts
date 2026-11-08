@@ -186,12 +186,30 @@ export interface InstructionInput {
    */
   readonly memorySection?: string | null;
   /**
-   * The resolved persona's coaching, already sliced by `context-pack`'s
-   * `personaCoachingSection` (U4, concept §4.5): rides directly after the
-   * memory in the variable parts — the owner's corrections reach the next
-   * run. Null/absent = no section.
+   * The resolved persona's id and role (D-60): the brief names them so
+   * the step prompt's persona-bound asks (the Friction line) can run —
+   * the scout brief always did, the ship brief never. Null/absent = a
+   * ring run, no line.
    */
-  readonly coachingSection?: string | null;
+  readonly personaId?: string | null;
+  readonly personaRole?: string | null;
+}
+
+// `core/persona.ts`'s PERSONAS_DIR, repeated: this module is bundled into the
+// plugin renderer, which may not pull a runtime `yaml` import (ADR-0044 rule 1).
+const PERSONAS_DIR = 'tickets/_meta/personas';
+
+/** The brief's persona line (D-60), or null for a ring run. */
+export function personaLine(personaId: string | null | undefined, role: string | null | undefined): string | null {
+  const id = personaId?.trim() ?? '';
+  if (id === '') {
+    return null;
+  }
+  const roleText = role?.trim() ?? '';
+  return (
+    `Your persona: ${id}${roleText !== '' ? ` (${roleText})` : ''} — its folder is ${PERSONAS_DIR}/${id}/ in the tickets repo; ` +
+    'the persona-bound files the prompt names (the friction file) live there.'
+  );
 }
 
 /** One capped section of the instruction — the caller logs each application. */
@@ -318,6 +336,10 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   }
 
   parts.push(`You are working ticket ${input.ticketId} — ${input.title}.`);
+  const persona = personaLine(input.personaId, input.personaRole);
+  if (persona !== null) {
+    parts.push(persona);
+  }
   parts.push(
     `Work checkout: ${input.worktreePath} (branch ${input.branch}` +
       (input.repo !== null ? `, repo ${input.repo}` : '') +
@@ -373,10 +395,6 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   const memorySection = input.memorySection != null && input.memorySection.trim() !== '' ? input.memorySection : null;
   if (memorySection !== null) {
     changing.push(memorySection);
-  }
-  const coachingSection = input.coachingSection != null && input.coachingSection.trim() !== '' ? input.coachingSection : null;
-  if (coachingSection !== null) {
-    changing.push(coachingSection);
   }
   const handover = input.handover?.trim();
   if (handover != null && handover !== '') {
@@ -444,6 +462,7 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
     input.worktreePath,
     input.branch,
     ...(skills != null && skills !== '' ? [skills] : []),
+    ...(persona !== null ? [persona] : []),
   ]);
   return { text: parts.join('\n\n'), truncations, continuation, stable };
 }
@@ -513,10 +532,10 @@ export interface ScoutInstructionInput {
   readonly skillsSection?: string | null;
   /** The resolved persona's `## Memory` slice (E3); absent = no section. */
   readonly memorySection?: string | null;
-  /** The resolved persona's `## Coaching` slice (U4); absent = no section. */
-  readonly coachingSection?: string | null;
   /** The persona id the Written-on line signs with; null/'' = `scout`. */
   readonly personaId?: string | null;
+  /** The persona's role for the brief's persona line (D-60). */
+  readonly personaRole?: string | null;
   /**
    * An interactive dialog on a scout ticket: the dialog discipline
    * replaces the scout discipline, everything else stands.
@@ -557,6 +576,10 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
     `You are scouting ticket ${input.ticketId} — ${input.title}. Exploration only: you change nothing in any repo — ` +
       'no edits, no commits, no branch.',
   );
+  const scoutPersona = personaLine(input.personaId, input.personaRole);
+  if (scoutPersona !== null) {
+    parts.push(scoutPersona);
+  }
   parts.push(
     `Read ground: ${input.readGround}` +
       (input.repoName !== null ? ` (the "${input.repoName}" checkout)` : ' (the tickets vault)') +
@@ -579,10 +602,6 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
   const memorySection = input.memorySection != null && input.memorySection.trim() !== '' ? input.memorySection : null;
   if (memorySection !== null) {
     changing.push(memorySection);
-  }
-  const coachingSection = input.coachingSection != null && input.coachingSection.trim() !== '' ? input.coachingSection : null;
-  if (coachingSection !== null) {
-    changing.push(coachingSection);
   }
   const by = input.personaId !== undefined && input.personaId !== null && input.personaId.trim() !== '' ? input.personaId.trim() : 'scout';
   const discipline = input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : SCOUT_DISCIPLINE;

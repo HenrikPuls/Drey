@@ -60,6 +60,6 @@ describe('deriveWorkerModel', () => {
   it('feeds the worker and the model from the persona', async () => {
     const loader = loaderWith({ 'tickets/_meta/personas/pia/persona.md': PIA });
     const { persona } = await resolvePersonaForTicket(loader, { ticketPersona: 'pia', phasePersona: null, defaultPersona: null });
-    expect(deriveWorkerModel(persona!, 50_000)).toEqual({ workerChoice: 'claude-code', model: 'opus' });
+    expect(deriveWorkerModel(persona!, null)).toEqual({ workerChoice: 'claude-code', model: 'opus' });
   });
 });
