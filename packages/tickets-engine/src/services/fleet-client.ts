@@ -1,16 +1,17 @@
 /**
- * The tickets plugin's side of the fleet (ADR-0075, M84): discover or
- * spawn the standalone runner, then proxy Run/Stop/Steer/Watch to its
- * loopback HTTP surface. The runner is the sibling `fleet/runner.js` of
- * this very bundle, spawned detached under ELECTRON_RUN_AS_NODE — it
- * outlives Drey, and a restart of the app re-adopts it through the
- * descriptor file instead of spawning a second one.
+ * The engine's side of the fleet (ADR-0075, M84): find or wake the Crew
+ * runner, then proxy Run/Stop/Steer/Watch to its loopback HTTP surface.
+ * Since Drey Service (req-164, ADR-0092) the runner is a component of the
+ * same process as the engine: the {@link RunnerLocator} says where it
+ * listens (null while it sleeps) and wakes it — nothing is spawned here,
+ * and a stale build is the service's matter (Drey hands the whole service
+ * over), not this client's.
  *
- * The plugin never touches worker pipes; it sees runs through
+ * The engine never touches worker pipes; it sees runs through
  * `GET /status` (polled onto the board while anything is live) and the
  * stream files via `GET /stream/:id` for the watch view.
  */
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -28,28 +29,31 @@ import type {
   RunRequest,
   RunnerDescriptor,
 } from '../fleet/protocol';
-import { fleetBuildStamp, isStaleDaemon } from '../fleet/build-stamp';
 
 /** The process probes' exec: no shell, no window. */
 const plainExec: ExecFn = async (cmd, args) => (await promisify(execFile)(cmd, [...args], { windowsHide: true })).stdout;
 
+/**
+ * Where the Crew runner listens, and how it is woken (req-164). Drey
+ * Service's runner component implements it; a spec hands a fixed one.
+ */
+export interface RunnerLocator {
+  /** The runner's endpoint while it is awake, null while it sleeps. Never starts it. */
+  current(): Promise<RunnerDescriptor | null>;
+  /** Starts the runner when it sleeps (D-51's on-demand start); a failure says why. */
+  wake(): Promise<{ readonly ok: true; readonly descriptor: RunnerDescriptor } | { readonly ok: false; readonly error: string }>;
+}
+
 export interface FleetClientOpts {
-  /** The fleet root — `<userRoot>/fleet` (descriptor, runs, worktrees). */
+  /** The fleet root — `<engine home>/fleet` (runs, worktrees, chain state). */
   readonly root: string;
-  /** The bundled runner entry (`dist-electron/packages/tickets-engine/src/fleet/runner.js`, exported by the engine as `RUNNER_SCRIPT_PATH`). */
-  readonly runnerScript: string;
+  /** The runner component (req-164): its endpoint and its wake. */
+  readonly runner: RunnerLocator;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Pushed whenever the polled run list or chain state differs — the board re-renders. */
   readonly onFleetChanged: (fleet: FleetSnapshot) => void;
-  /** Whether the board lives in a dricket store; the runner hears it at its start (D-42). */
-  readonly storeBacked?: () => Promise<boolean>;
   /** Test seam over the process probes of a detached record (D-34). */
   readonly exec?: ExecFn;
-}
-
-/** The runner's command line. */
-export function runnerSpawnArgs(runnerScript: string, root: string, storeBacked: boolean): string[] {
-  return [runnerScript, '--root', root, ...(storeBacked ? ['--store-backed'] : [])];
 }
 
 /** What the plugin pushes to the renderer: the runs plus the chain's control state. */
@@ -69,10 +73,6 @@ export type RetireReply =
 export class FleetClient {
   private descriptor: RunnerDescriptor | null = null;
   private spawning: Promise<boolean> | null = null;
-  private retiring: Promise<boolean> | null = null;
-  private stampCache: { readonly mtimeMs: number; readonly stamp: string } | null = null;
-  /** The last "handover deferred" reason logged — logged once, not every poll. */
-  private deferNote: string | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnapshotJson = '';
   private readonly detachedProbes = new Map<string, { at: number; gone: boolean }>();
@@ -420,8 +420,8 @@ export class FleetClient {
     return { Authorization: `Bearer ${this.descriptor?.token ?? ''}` };
   }
 
-  /** Descriptor file → health check → build check → spawn the sibling
-   *  when all fail. Spawn-capable: only `start` may bring the runner up. */
+  /** The runner's endpoint, or a wake when it sleeps (D-51). Spawn-capable
+   *  in the old sense: only writes and starts may bring the runner up. */
   private async ensureRunner(): Promise<boolean> {
     if (this.descriptor === null || !(await this.alive(this.descriptor))) {
       this.descriptor = await this.readDescriptor();
@@ -429,116 +429,16 @@ export class FleetClient {
         return this.spawnRunner();
       }
     }
-    if (await this.isStale(this.descriptor)) {
-      // A deferred handover leaves the old runner serving for now.
-      return (await this.retireStale(this.descriptor)) ? this.spawnRunner() : true;
-    }
     return true;
   }
 
-  /** Read-only adoption: talk to a runner that is already alive, never
-   *  spawn one from nothing. Replacing a retired one is the exception:
-   *  its handed-over runs wait for a successor to take them back. */
+  /** Read-only adoption: talk to a runner that is awake, never wake one. */
   private async withRunner(): Promise<boolean> {
     if (this.descriptor !== null && (await this.alive(this.descriptor))) {
-      if (await this.isStale(this.descriptor)) {
-        return (await this.retireStale(this.descriptor)) ? this.spawnRunner() : true;
-      }
       return true;
     }
     this.descriptor = await this.readDescriptor();
     return this.descriptor !== null && (await this.alive(this.descriptor));
-  }
-
-  /**
-   * True when a healthy runner serves other fleet code than this build
-   * and is older (`isStaleDaemon`, req-51): the stamp is a hash of the
-   * compiled fleet code, so a rebuild that changed none of it keeps the
-   * runner and its workers. Ordered on purpose: two Drey checkouts can
-   * share one fleet root — only a daemon OLDER than this build is
-   * stale; a newer one serves this instance too.
-   */
-  private async isStale(peer: RunnerDescriptor): Promise<boolean> {
-    return isStaleDaemon(peer.build, await this.ownBuild());
-  }
-
-  /** This build's stamp, re-hashed only when the entry file was rewritten
-   *  (every build rewrites it) — the poll asks every few seconds. */
-  private async ownBuild(): Promise<string | null> {
-    const stat = await fsp.stat(this.opts.runnerScript).catch(() => null);
-    if (stat === null) {
-      return null;
-    }
-    if (this.stampCache?.mtimeMs !== stat.mtimeMs) {
-      const stamp = await fleetBuildStamp(this.opts.runnerScript).catch(() => null);
-      if (stamp === null) {
-        return null;
-      }
-      this.stampCache = { mtimeMs: stat.mtimeMs, stamp };
-    }
-    return this.stampCache.stamp;
-  }
-
-  /**
-   * Asks a stale runner to hand its runs over and exit (req-51): its
-   * workers are not stopped — the successor re-attaches or resumes them.
-   * A runner with a run in its gate (or being stopped) refuses: false,
-   * and it serves on until a later poll finds it free. Otherwise waits
-   * until the old runner is actually gone and clears the descriptor so a
-   * successor can come up — the runner's boot guard bounces a successor
-   * while the old peer still answers, and the old one answers until its
-   * handover records are written.
-   */
-  private retireStale(peer: RunnerDescriptor): Promise<boolean> {
-    // The poll and an explicit interaction can both find the stale peer:
-    // one handover, both wait for it.
-    this.retiring ??= this.handOver(peer).finally(() => {
-      this.retiring = null;
-    });
-    return this.retiring;
-  }
-
-  private async handOver(peer: RunnerDescriptor): Promise<boolean> {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1_500);
-      const res = await fetch(`${this.base()}/shutdown`, {
-        method: 'POST',
-        headers: { ...this.headers(), 'content-type': 'application/json' },
-        body: JSON.stringify({ handover: true }),
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (res.status === 409) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        const note = body.error ?? 'the runner is busy';
-        if (note !== this.deferNote) {
-          this.deferNote = note;
-          this.opts.log(`the fleet runner predates this build — handover deferred: ${note}`, 'warn');
-        }
-        return false;
-      }
-    } catch {
-      // a daemon that will not take the call is dead to us either way —
-      // the next spawn takes over the stale descriptor
-    }
-    this.deferNote = null;
-    this.opts.log(`the fleet runner predates this build — it hands its runs over to a new one (pid ${peer.pid})`, 'warn');
-    const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 500);
-      const alive = await fetch(`${this.base()}/health`, { headers: this.headers(), signal: controller.signal })
-        .then((r) => r.ok)
-        .catch(() => false);
-      clearTimeout(timer);
-      if (!alive) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    this.descriptor = null;
-    return true;
   }
 
   /** A run start's or a message's refusal without a runner: the last start failure, else the plain fact. */
@@ -553,8 +453,8 @@ export class FleetClient {
 
   /**
    * A write that brings the runner up when it is down (D-51). A runner that
-   * answers "leaving" (req-110: it exits after an Off with nothing live) is
-   * waited out and a fresh one started, once; a request the runner died
+   * answers "leaving" (req-110: it goes to sleep after an Off with nothing
+   * live) is waited out and woken again, once; a request the runner died
    * under is retried the same way. Never null: a failure says why.
    */
   private async postToRunner<T>(
@@ -599,44 +499,23 @@ export class FleetClient {
     this.descriptor = null;
   }
 
+  /** Wakes the runner component (req-164: in the service's own process, no spawn). One wake at a time. */
   private async spawnRunner(): Promise<boolean> {
     if (this.spawning !== null) {
       return this.spawning;
     }
     this.spawning = (async (): Promise<boolean> => {
       try {
-        await fsp.mkdir(this.opts.root, { recursive: true });
-        const storeBacked = (await this.opts.storeBacked?.().catch(() => false)) ?? false;
-        const child = spawn(process.execPath, runnerSpawnArgs(this.opts.runnerScript, this.opts.root, storeBacked), {
-          // ELECTRON_RUN_AS_NODE: the Electron binary runs the plain
-          // Node entry; detached so the runner outlives Drey.
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true,
-        });
-        let spawnError: string | null = null;
-        child.once('error', (error) => {
-          spawnError = error.message;
-          this.opts.log(`fleet runner spawn failed: ${String(error)}`, 'warn');
-        });
-        child.unref();
-        const deadline = Date.now() + 10_000;
-        for (;;) {
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          this.descriptor = await this.readDescriptor();
-          if (this.descriptor !== null && (await this.alive(this.descriptor))) {
-            this.opts.log(`fleet runner adopted (pid ${this.descriptor.pid}, port ${this.descriptor.port})`);
-            this.lastRunnerFailure = null;
-            return true;
-          }
-          if (spawnError !== null || Date.now() > deadline) {
-            this.lastRunnerFailure =
-              spawnError ?? `it did not come up within 10 s (see ${path.join(this.opts.root, 'runner.log')})`;
-            this.opts.log(`the fleet runner could not be started: ${this.lastRunnerFailure}`, 'warn');
-            return false;
-          }
+        const woke = await this.opts.runner.wake();
+        if (woke.ok) {
+          this.descriptor = woke.descriptor;
+          this.opts.log(`Crew runner awake (port ${woke.descriptor.port})`);
+          this.lastRunnerFailure = null;
+          return true;
         }
+        this.lastRunnerFailure = woke.error;
+        this.opts.log(`the fleet runner could not be started: ${woke.error}`, 'warn');
+        return false;
       } catch (error) {
         this.lastRunnerFailure = error instanceof Error ? error.message : String(error);
         this.opts.log(`the fleet runner could not be started: ${this.lastRunnerFailure}`, 'warn');
@@ -649,13 +528,7 @@ export class FleetClient {
   }
 
   private async readDescriptor(): Promise<RunnerDescriptor | null> {
-    try {
-      const raw = await fsp.readFile(path.join(this.opts.root, 'runner.json'), 'utf8');
-      const parsed = JSON.parse(raw) as RunnerDescriptor;
-      return typeof parsed.port === 'number' && typeof parsed.token === 'string' ? parsed : null;
-    } catch {
-      return null;
-    }
+    return this.opts.runner.current().catch(() => null);
   }
 
   private async alive(peer: RunnerDescriptor): Promise<boolean> {

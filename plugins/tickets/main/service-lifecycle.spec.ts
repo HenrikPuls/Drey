@@ -1,9 +1,14 @@
 import { promises as fsp } from 'node:fs';
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createEngine, writeEngineLock, type Engine } from '../../../packages/tickets-engine/src/server/engine';
-import { ensureEngine, mirrorConfig, syncChatConfig, syncConfig, syncNotesVault } from './engine-lifecycle';
+import { formatStamp } from '../../../packages/tickets-engine/src/fleet/build-stamp';
+import { ServiceHost } from '../../../packages/tickets-engine/src/service/service-host';
+import { writeServiceLock, type ServiceLock } from '../../../packages/tickets-engine/src/service/service-lock';
+import { EngineClient } from './engine-client';
+import { ensureService, mirrorConfig, syncChatConfig, syncConfig, syncNotesVault } from './service-lifecycle';
 
 /**
  * The activation/adoption config sync (E5a): the assistant LLM settings
@@ -12,7 +17,7 @@ import { ensureEngine, mirrorConfig, syncChatConfig, syncConfig, syncNotesVault 
  * base URL, api key and model pushed on every sync (a cleared value
  * travels as null so nothing stale stays behind, D-1), the api key never
  * logged. The heavy
- * ensureEngine path (lockfile, spawn) stays untested here; the sync is
+ * ensureService path (lockfile, spawn) is covered further down; the sync is
  * the unit under test, against a recording invoke stand-in.
  */
 
@@ -185,16 +190,18 @@ describe('mirrorConfig (E14-7a)', () => {
 
 /**
  * The rehearsal's finding, end to end minus the process boundary: the real
- * `ensureEngine` over a real engine, started in-process where it would be spawned.
+ * `ensureService` over a real Drey Service, started in-process where it would be spawned.
  * The first start after `dk.store` changed must report the NEW store, with no second start.
  */
-describe('ensureEngine: the first start reads the new settings (E14-7a)', () => {
+describe('ensureService: the first start reads the new settings (E14-7a)', () => {
   const PIPELINE = ['---', 'phases:', '  - { id: inbox, title: Inbox, handover: manual }', '  - { id: done, title: Done, handover: none }', '---', ''].join('\n');
   let root = '';
-  let engine: Engine | null = null;
+  let service: ServiceHost | null = null;
+  let engine: EngineClient | null = null;
 
   afterEach(async () => {
-    await engine?.close();
+    await service?.shutdown({ handover: false });
+    service = null;
     engine = null;
     await fsp.rm(root, { recursive: true, force: true });
   });
@@ -212,7 +219,7 @@ describe('ensureEngine: the first start reads the new settings (E14-7a)', () => 
 
   async function start(vault: string, home: string, pluginKeys: Record<string, unknown>): Promise<void> {
     const base = ctxWith(pluginKeys, { baseUrl: 'http://h/v1', apiKey: null, model: 'm' });
-    await ensureEngine(
+    const endpoints = await ensureService(
       {
         ...base,
         vault: {
@@ -223,12 +230,19 @@ describe('ensureEngine: the first start reads the new settings (E14-7a)', () => 
       () => undefined,
       {
         home,
-        spawn: async (vaultPath, engineHome) => {
-          engine = await createEngine({ vaultPath, home: engineHome, clientDir: path.join(root, 'client'), log: () => undefined });
-          await writeEngineLock(engineHome, { pid: process.pid, invokePort: Number(new URL(engine.invokeUrl).port), token: engine.token, vaultPath });
+        spawn: async (vaultPath, serviceHome) => {
+          service = await ServiceHost.start({
+            home: serviceHome,
+            vaultPath,
+            clientDir: path.join(root, 'client'),
+            build: 'spec',
+            idleMs: 3_600_000,
+            exit: () => undefined,
+          });
         },
       },
     );
+    engine = new EngineClient(endpoints);
   }
 
   it('the shadow report of the very first start describes the store the settings name', async () => {
@@ -245,11 +259,141 @@ describe('ensureEngine: the first start reads the new settings (E14-7a)', () => 
     await fsp.writeFile(path.join(home, 'config.json'), JSON.stringify({ backend: 'shadow', 'dk.store': oldStore }), 'utf8');
 
     await start(vault, home, { backend: 'shadow', 'dk.store': newStore });
-    // The startup scan builds the board inside createEngine; close waits for its report.
+    // The startup scan builds the board inside createEngine; the shutdown waits for its report.
     await engine!.invoke('snapshot');
-    await engine!.close();
+    await service!.shutdown({ handover: false });
+    service = null;
 
     const report = JSON.parse(await fsp.readFile(path.join(home, 'shadow', 'board-diff.json'), 'utf8')) as { diff: { rightCount: number } };
     expect(report.diff.rightCount).toBe(3);
+  });
+});
+
+/**
+ * Adoption and the stale-build handover (req-164; req-51's rule, now for the
+ * whole service): a fake service on loopback stands behind a `service.lock`.
+ * Only a service OLDER than this build is asked to hand over; one that
+ * refuses (a run in its gate) keeps serving, and Drey adopts it.
+ */
+describe('ensureService: adopt, or hand an older build over', () => {
+  let root = '';
+  let server: http.Server;
+  let shutdownStatus = 409;
+  const shutdowns: unknown[] = [];
+  const spawned: string[] = [];
+
+  const ctx = {
+    ...ctxWith({}, { baseUrl: 'http://h/v1', apiKey: null, model: 'm' }),
+    vault: {
+      listVaults: async () => [{ id: 'v', name: 'vault', path: 'V:/vault', exists: true }],
+      read: async () => 'pipeline',
+    },
+  };
+
+  async function lockFor(build: string): Promise<ServiceLock> {
+    const port = (server.address() as AddressInfo).port;
+    const lock: ServiceLock = {
+      version: 1,
+      pid: 4242,
+      build,
+      startedAt: '',
+      home: root,
+      vaultPath: 'V:/vault',
+      port,
+      token: 'tok',
+      components: {
+        engine: { state: 'running', detail: null, port },
+        runner: { state: 'sleeping', detail: null },
+        gateway: { state: 'stopped', detail: null },
+        mcp: { state: 'external', detail: 'served by Drey (until req-167)' },
+      },
+    };
+    await writeServiceLock(root, lock);
+    return lock;
+  }
+
+  afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await fsp.rm(root, { recursive: true, force: true });
+  });
+
+  async function setUp(): Promise<void> {
+    root = await fsp.mkdtemp(path.join(tmpdir(), 'service-adopt-'));
+    shutdowns.length = 0;
+    spawned.length = 0;
+    shutdownStatus = 409;
+    let gone = false;
+    server = http.createServer((req, res) => {
+      const send = (status: number, body: unknown): void => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(body));
+      };
+      if (gone) {
+        send(503, { ok: false });
+      } else if (req.url === '/health' || req.url === '/api/health') {
+        send(200, { ok: true });
+      } else if (req.url === '/shutdown') {
+        let text = '';
+        req.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
+        req.on('end', () => {
+          shutdowns.push(JSON.parse(text) as unknown);
+          if (shutdownStatus === 200) {
+            gone = true;
+          }
+          send(shutdownStatus, shutdownStatus === 200 ? { ok: true } : { ok: false, error: 'run R-1 (T-0001) is in its machine gate' });
+        });
+      } else {
+        send(200, { ok: true, value: null });
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  }
+
+  const ensure = (own: string, logs: string[] = []): Promise<unknown> =>
+    ensureService(ctx, (message) => logs.push(message), {
+      home: root,
+      ownBuild: async () => own,
+      spawn: (vaultPath) => {
+        spawned.push(vaultPath);
+        throw new Error('spawned');
+      },
+    });
+
+  it('adopts a running service of the same build: nothing spawned, nothing asked', async () => {
+    await setUp();
+    const lock = await lockFor(formatStamp('2026-11-08T00:00:00.000Z', 'same'));
+    await expect(ensure(formatStamp('2026-11-08T01:00:00.000Z', 'same'))).resolves.toEqual({
+      invokeUrl: `http://127.0.0.1:${lock.port}`,
+      token: 'tok',
+    });
+    expect(shutdowns).toEqual([]);
+    expect(spawned).toEqual([]);
+  });
+
+  it('adopts a NEWER build without asking it to leave (two checkouts share one home)', async () => {
+    await setUp();
+    await lockFor(formatStamp('2999-01-01T00:00:00.000Z', 'newer'));
+    await ensure(formatStamp('2026-11-08T00:00:00.000Z', 'mine'));
+    expect(shutdowns).toEqual([]);
+  });
+
+  it('asks an older build for the handover and, refused, keeps using it', async () => {
+    await setUp();
+    await lockFor(formatStamp('2000-01-01T00:00:00.000Z', 'old0'));
+    const logs: string[] = [];
+    await ensure(formatStamp('2026-11-08T00:00:00.000Z', 'mine'), logs);
+    expect(shutdowns).toEqual([{ handover: true }]);
+    expect(spawned).toEqual([]);
+    expect(logs.some((line) => line.includes('handover deferred'))).toBe(true);
+  });
+
+  it('an older build that hands over is waited out, then a new service is started', async () => {
+    await setUp();
+    shutdownStatus = 200;
+    await lockFor(formatStamp('2000-01-01T00:00:00.000Z', 'old0'));
+    await expect(ensure(formatStamp('2026-11-08T00:00:00.000Z', 'mine'))).rejects.toThrow('spawned');
+    expect(shutdowns).toEqual([{ handover: true }]);
+    expect(spawned).toEqual(['V:/vault']);
   });
 });

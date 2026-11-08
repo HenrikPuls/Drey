@@ -1,14 +1,16 @@
-# The fleet runner — operations guide
+# The fleet runner (Crew runner) — operations guide
 
 The tool-neutral guide to operating and diagnosing Drey's fleet runner —
-the standalone agent-runner process behind the tickets board (ADR-0075).
+the agent runner behind the tickets board (ADR-0075), since req-164 the
+**Crew runner component of Drey Service** ([SERVICE.md](SERVICE.md): the
+process, its discovery, its lifecycle).
 It is aimed at any coding agent (referenced from `AGENTS.md`) and at the
 owner working from a terminal. Skill-capable harnesses may carry a thin
 shim pointing here; this file is the single source of truth.
 
-The fleet runner is Drey's standalone agent-runner process (ADR-0075,
-M84): a plain Node process spawned detached by the tickets plugin, so it
-outlives the app. It owns the worker process table (OpenCode / Claude
+The fleet runner (ADR-0075, M84) runs inside Drey Service (req-164,
+ADR-0092), the one background process that outlives the app; before
+milestone 209 it was a detached process of its own. It owns the worker process table (OpenCode / Claude
 Code CLIs), the per-run stream files, the ticket worktrees and the
 machine gate. Drey talks to it over a loopback HTTP endpoint with a
 bearer token — and so can a terminal, which the owner explicitly wanted.
@@ -25,13 +27,12 @@ rebuilt.
 
 ## Where everything lives
 
-The fleet root is `<userRoot>/fleet`, where `userRoot` =
-`<userData>/plugins` (on Windows: `%APPDATA%\drey\plugins\fleet`; the app
-id is `drey`).
+The fleet root is `~/.drey-engine/fleet` (the service home's `fleet/`).
+The runner's port and token are in the service home's `service.lock`, under
+`components.runner` (SERVICE.md) — there is no `runner.json` any more.
 
 ```
 <fleet root>/                 (machine state; runner owned)
-├── runner.json     descriptor: {port, token, pid, startedAt, version, build?}
 ├── runner.log      the daemon log (every dispatch decision; ring-capped ~512 KB)
 ├── chain.json      persisted chain state (only on daemon builds)
 ├── runs/<run-id>/
@@ -47,12 +48,11 @@ id is `drey`).
                     the base
 ```
 
-`runner.json` missing means the runner is **down** (it exits cleanly when
-the Autopilot is switched Off with nothing live, when Drey quits with
-nothing live and no On/Paused Autopilot, and after ~15 min without a write
-— req-110, "Lifecycle gotchas"; the engine respawns it on demand). A present
-descriptor with an unreachable port means it died hard — the stale
-descriptor gets taken over by the next spawn.
+`components.runner.state` `sleeping` means the runner is **down** (it goes
+to sleep when the Autopilot is switched Off with nothing live, when Drey
+quits with nothing live and no On/Paused Autopilot, and after ~15 min
+without a write — req-110, "Lifecycle gotchas"; it wakes on demand, in the
+service's process). `failed` names why it could not start.
 
 ### Cleanup surfaces (T-0044, ADR-0080)
 
@@ -85,12 +85,15 @@ folder at the path would poison the next prepare.
 
 ## Talking to the runner
 
-Every route needs `Authorization: Bearer <token>` from `runner.json`.
+Every route needs `Authorization: Bearer <token>` from `service.lock`'s
+`components.runner` (present while the runner is awake; wake it with
+`POST /components/runner/start` on the service's control port, SERVICE.md).
 PowerShell:
 
 ```powershell
-$root = "$env:APPDATA\drey\plugins\fleet"
-$d = Get-Content "$root\runner.json" -Raw | ConvertFrom-Json
+$root = "$env:USERPROFILE\.drey-engine\fleet"
+$l = Get-Content "$env:USERPROFILE\.drey-engine\service.lock" -Raw | ConvertFrom-Json
+$d = $l.components.runner
 $h = @{ Authorization = "Bearer $($d.token)" }
 Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 ```
@@ -114,8 +117,8 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /chain/autopilot` `{state: "on"\|"paused"\|"off", resumeAt?}` | the Autopilot (req-95a): `resumeAt` a zoned ISO instant in the future, only on `paused`; answers the chain status, or 422 `{ok: false, error, code}`. Paired devices reach it as `POST /api/chain/autopilot` (a refusal there is a 200; a read-only device gets 403 with `code: "read_only"`, on every `/api/chain/` write) |
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
-| `POST /shutdown` | graceful retire: stops live runs (bounded), exits. With `{handover: true}` (what Drey sends for a newer build, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
-| `POST /retire-if-idle` | leave if nothing needs the runner (req-110; what the engine sends once Drey is gone): `{ok, exiting: true}` and the process ends, or `{ok, exiting: false, reason: "live runs" \| "autopilot"}` and it stays — the decision is the runner's, so no run that starts in between dies. No body. A runner from before req-110 answers 404 |
+| `POST /shutdown` | graceful retire: stops live runs (bounded), the runner goes to sleep. With `{handover: true}` (what the service passes on when a newer build asks it, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
+| `POST /retire-if-idle` | sleep if nothing needs the runner (req-110; what the engine sends once Drey is gone): `{ok, exiting: true}` and the runner goes to sleep, or `{ok, exiting: false, reason: "live runs" \| "autopilot"}` and it stays — the decision is the runner's, so no run that starts in between dies. No body. A runner from before req-110 answers 404 |
 | `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `packages/tickets-engine/src/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher. A start without an `origin` is refused (D-41) |
 
 Writes change real state (worker processes, the board, the tickets repo).
@@ -123,8 +126,8 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 
 ## Checking status — the usual recipe
 
-1. Descriptor: read `runner.json` (down if missing; note `startedAt`, `pid`,
-   `build`).
+1. Descriptor: `service.lock`'s `components.runner` (`sleeping` = down; note
+   `pid` — the service's — and `build`), or `service-main.js --status`.
 2. `GET /health` — alive, how many live runs, which build.
 3. `GET /status` — the runs: id, ticketId, provider, **state**, pid,
    tokensIn/Out (`tokensIn` counts cache reads; `cacheReadTokens` is
@@ -436,9 +439,14 @@ by themselves** (On), only finish what runs (Paused), or wait for the owner
   live run and uses `withRunner`.
 - **The runner's own lifecycle stays (req-110).** A runner started for a
   chat-run boots with the Autopilot Off (the boot rule); every POST resets
-  its idle clock and a live run keeps it, so it never leaves mid-run, and
-  once the run settles it leaves after the idle span. Only an explicit Off
-  ends it at once.
+  its idle clock and a live run keeps it, so it never sleeps mid-run, and
+  once the run settles it sleeps after the idle span. Only an explicit Off
+  puts it to sleep at once. Since req-164 "start" is a wake of the Crew
+  runner component inside Drey Service, and "leave" is its sleep; the
+  service process itself has a second, outer sleep (SERVICE.md). With the
+  background service **off** (the default) the runner's runs end with Drey:
+  closing Drey with a live run asks *Stop the runs and quit* / *Keep running
+  (enable the service)* / *Cancel*, and the service follows Drey out.
 - **A down runner reads as Off (D-51).** No runner means `chain: null` in
   the fleet snapshot; every client shows that as Off and the switch turns
   it On from there. A start that fails is refused with its cause
@@ -448,22 +456,25 @@ by themselves** (On), only finish what runs (Paused), or wait for the owner
 
 ## Lifecycle gotchas
 
-- **Which checkout runs it**: the runner was spawned by some Drey instance.
-  `Get-CimInstance Win32_Process -Filter "ProcessId=<pid>"`
-  shows the command line — `electron.exe <checkout>\dist-electron\plugins\tickets\main\fleet\runner.js --root <fleetRoot>`.
+- **Which checkout runs it**: the runner lives in the Drey Service some Drey
+  instance started. `Get-CimInstance Win32_Process -Filter "ProcessId=<pid>"`
+  shows the command line — `electron.exe <checkout>\dist-electron\packages\tickets-engine\src\service\service-main.js --home <home> --vault <vault>`.
   A worktree checkout (e.g. `Drey-t0007` on its ticket branch) may run
   newer fleet code than `main` — feature parity questions go there first.
-- **Restart**: `POST /shutdown` (graceful, stops live runs) — Drey respawns
-  the runner on the next run start. Daemon builds are also retired when the
-  plugin finds newer fleet code on disk (a different content hash in the
-  descriptor's build stamp — a rebuild of unchanged code keeps the runner);
-  that retirement is a handover, so live workers carry on under the new
-  runner (`handover` in a `run.json` marks a run in transit).
-- **Single instance**: a second runner finding a healthy peer exits quietly;
-  a stale descriptor (dead peer) is taken over.
-- **Exit when deactivated or when Drey quits (req-110)**: the Autopilot
-  switched **Off** (the popover, Settings → Tickets, the Notaus) ends the
-  runner at once when nothing is live — a live run keeps it, and the idle
+- **Restart**: `POST /components/runner/stop` on the service (graceful,
+  stops live runs) — the next run start wakes it again. The whole service
+  is retired when a Drey start finds an older build running (a different
+  content hash in `service.lock`'s build stamp — a rebuild of unchanged
+  code keeps it); that retirement is a handover, so live workers carry on
+  under the new service's runner (`handover` in a `run.json` marks a run in
+  transit; the new service wakes its runner at boot to take them back).
+- **Single instance**: one service per home (SERVICE.md); the runner inside
+  it writes no descriptor of its own. `runner.js --root` by hand still runs
+  a standalone runner with `runner.json` — a debugging tool only; never
+  beside a running service on the same root.
+- **Sleep when deactivated or when Drey quits (req-110)**: the Autopilot
+  switched **Off** (the popover, Settings → Tickets, the Notaus) puts the
+  runner to sleep at once when nothing is live — a live run keeps it, and the idle
   span takes over once the run ends. When **Drey quits** the engine, which
   outlives Drey, notices its last Drey event stream closing (5 s grace, so
   a reconnect is not a quit; a second `DREY_MULTI_INSTANCE` Drey still
@@ -471,23 +482,23 @@ by themselves** (On), only finish what runs (Paused), or wait for the owner
   deactivate asks the same, best-effort. The runner leaves only with no
   live run and no On/Paused Autopilot — a running chain keeps draining
   the board with Drey closed (ADR-0075/0077), and the phone's runs are
-  untouched. The engine respawns the runner on the next start.
-- **Idle shutdown**: no live runs, no On/Paused Autopilot and ~15 min
-  without a **write** (a POST) → the runner exits itself. Not a
+  untouched. The next start wakes the runner again.
+- **Idle sleep**: no live runs, no On/Paused Autopilot and ~15 min
+  without a **write** (a POST) → the runner goes to sleep. Not a
   malfunction. Reads (`/health`, `/status`, `/chain`, …) do not count:
   before req-110 they did, and the engine's 2.5 s poll kept the runner
   alive for as long as the engine lived — the leftover processes the
   owner found.
-- **No global Node**: the runner is Electron-as-Node. To start one by hand
-  (rarely needed), use the spawning checkout's electron binary with
+- **No global Node**: the service is Electron-as-Node. To start it by hand
+  (rarely needed), use the checkout's electron binary with
   `ELECTRON_RUN_AS_NODE=1`, or the repo's vendored Node (`. .\env.ps1`, then
-  `.tools\node\node.exe runner.js --root <fleetRoot>`).
+  `.tools\node\node.exe service-main.js --vault <vault>`; SERVICE.md).
 
 ## Diagnosing common symptoms
 
-- **Runner unreachable** → `runner.json` there? pid alive? If the pid is
-  dead but the file is there, it died hard: check the tail of `runner.log`,
-  then just let Drey respawn it (or POST `/shutdown` to clear the descriptor).
+- **Runner unreachable** → `service-main.js --status`: is the service up,
+  and the runner row `sleeping` (wakes on demand), `running` or `failed`
+  (the reason)? Then the tail of `runner.log` and `service.log`.
 - **Ticket not being dispatched** (daemon) → `GET /chain` + `/log`:
   master `halted`? column `held`? cooldown active? token budget exhausted
   (`tokensUsed` vs day)? ticket claimed, carries a `run` stamp, has
@@ -541,8 +552,9 @@ by themselves** (On), only finish what runs (Paused), or wait for the owner
 
 ## Pointers
 
-- Code: `packages/tickets-engine/src/fleet/` (`runner.ts`, `runner-lifecycle.ts`
-  — when the runner may leave, req-110; `runs.ts`, `chain.ts`,
+- Code: `packages/tickets-engine/src/service/runner-component.ts` (the runner
+  as a service component, req-164), `packages/tickets-engine/src/fleet/`
+  (`runner.ts`, `runner-lifecycle.ts` — when the runner may sleep, req-110; `runs.ts`, `chain.ts`,
   `orchestrator.ts`, `providers.ts`, `protocol.ts`), client side
   `packages/tickets-engine/src/services/fleet-client.ts`; the Drey-gone
   signal `packages/tickets-engine/src/server/drey-presence.ts`

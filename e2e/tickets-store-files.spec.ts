@@ -37,7 +37,7 @@ process.env['GIT_COMMITTER_EMAIL'] = 'store@test.invalid';
 
 function stopEngine(): void {
   try {
-    const lock = JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', 'engine.lock'), 'utf8')) as { pid?: number };
+    const lock = JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', 'service.lock'), 'utf8')) as { pid?: number };
     if (typeof lock.pid === 'number') {
       process.kill(lock.pid);
     }

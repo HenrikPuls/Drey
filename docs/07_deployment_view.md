@@ -205,6 +205,37 @@ stays in place as belt-and-braces; `verify:pack` asserts the absence.
   `plugins.disabled` in `app-config.json` (Settings → Panels & plugins);
   an `apiVersion` mismatch marks the plugin `incompatible` and skips it.
 
+## Drey Service in the package (req-164, [ADR-0092](09_architecture_decisions/0092-drey-service-the-shipped-background-process.md))
+
+The background process ships inside the app, no second runtime: its entry
+is `dist-electron/packages/tickets-engine/src/service/service-main.js`
+(compiled by the plugin main tsc program with the rest of
+`packages/tickets-engine`), inside `app.asar` like the plugins. The tickets
+plugin starts it with the app's own executable as Node
+(`Drey.exe <app.asar>/…/service-main.js --home ~/.drey-engine --vault <tickets vault>`
+under `ELECTRON_RUN_AS_NODE=1`; Electron's Node mode reads the asar), detached,
+so it can outlive the window. Whether it does is the owner's setting: the
+background service is optional (`service.enabled`, off by default — then
+the service follows Drey and leaves with it; on — it outlives Drey). It
+serves Mission Control from `dist/mission-control/browser` beside it (the
+legacy remote client when that folder is missing). The launch is built in
+one place (`service/launch.ts`); the process mode is Node, not a headless
+Electron, so the background process carries no Chromium.
+
+What it writes lives outside the install, in `%USERPROFILE%\.drey-engine`:
+`service.lock` (discovery), `service.log`, `service-start.log`,
+`config.json`, `fleet/` (the Crew runner's runs and chain state). An
+uninstall leaves that folder, like the vault. **Start with Windows** is
+opt-in and only with the background service on (Settings → Tickets →
+Background service, or `service-main.js --autostart on`): the per-user
+`HKCU\…\CurrentVersion\Run` value `DreyService` runs
+`wscript.exe ~/.drey-engine/start-service.vbs`, which sets
+`ELECTRON_RUN_AS_NODE` and starts the entry with no window. The service
+rewrites the launcher at every start and whenever the setting changes, so
+after an update that moves the install the first service of the new build
+points it at the new path. An uninstall should remove the `Run` value (not
+yet in the installer).
+
 ## asar and `asarUnpack`
 
 `asar: true`. Three paths are **unpacked** to `resources/app.asar.unpacked/`:

@@ -1,44 +1,73 @@
-import { spawn } from 'node:child_process';
-import { closeSync, openSync, promises as fsp } from 'node:fs';
+import { promises as fsp } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { NOTES_VAULT_KEY } from '../../../packages/tickets-engine/src/contracts/notes';
+import { fleetBuildStamp, isStaleDaemon } from '../../../packages/tickets-engine/src/fleet/build-stamp';
 import { WORKER_PROVIDERS } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { FileConfigStore } from '../../../packages/tickets-engine/src/server/file-config';
+import { SERVICE_ENTRY_NAME, serviceLaunchCommand, spawnService } from '../../../packages/tickets-engine/src/service/launch';
+import {
+  engineEndpointsOf,
+  readServiceLock,
+  serviceAlive,
+  type ServiceLock,
+} from '../../../packages/tickets-engine/src/service/service-lock';
 import { STORE_SETTING_KEYS } from '../../../packages/tickets-engine/src/store/store-settings';
 import { EngineClient, type EngineEndpoints } from './engine-client';
 
 /**
- * The engine's lifecycle from the plugin's side (ADR-0088, E2b): adopt a
- * live engine through the lockfile in the engine home, or spawn one
- * (`ELECTRON_RUN_AS_NODE`, the same pattern the fleet runner uses). Drey
- * starts the engine after; it never stops it — the phone may still need
- * it after Drey quits.
+ * Drey Service from the plugin's side (req-164, ADR-0092): Drey is a client
+ * of the service, like the phones. It adopts a running service through
+ * `service.lock` in the service home, hands an older build over (the
+ * req-51 handover, now for the whole service), or starts one (`launch.ts`,
+ * the one spawn path — it replaces the engine's and the fleet runner's).
+ * Drey never stops the service: it sleeps on its own once no Drey, no live
+ * run, no Autopilot and no paired device holds it (`service/sleep.ts`).
  */
 
-const ENGINE_HOME = (): string => path.join(homedir(), '.drey-engine');
-const LOCK_FILE = (home: string): string => path.join(home, 'engine.lock');
-const ENGINE_ENTRY = (): string =>
-  path.join(__dirname, '..', '..', '..', 'packages', 'tickets-engine', 'src', 'server', 'engine-main.js');
+const SERVICE_HOME = (): string => path.join(homedir(), '.drey-engine');
+const SERVICE_ENTRY = (): string =>
+  path.join(__dirname, '..', '..', '..', 'packages', 'tickets-engine', 'src', 'service', SERVICE_ENTRY_NAME);
 
-interface EngineLock {
-  readonly pid: number;
-  readonly invokePort: number;
-  readonly token: string;
-  readonly vaultPath: string;
+/** A live service's lock, or null. */
+async function liveLock(home: string): Promise<ServiceLock | null> {
+  const lock = await readServiceLock(home);
+  return lock !== null && (await serviceAlive(lock)) ? lock : null;
 }
 
-async function readLock(home: string): Promise<EngineLock | null> {
+/** The engine endpoints of a live service whose engine already answers. */
+async function engineOf(lock: ServiceLock): Promise<EngineEndpoints | null> {
+  const endpoints = engineEndpointsOf(lock);
+  return endpoints !== null && (await new EngineClient(endpoints).health()) ? endpoints : null;
+}
+
+/**
+ * Asks an older service to hand over and leave (req-51 for the whole
+ * service): its runner hands the live runs over, the engine closes, the
+ * process exits. A run in its gate refuses (409) — the old service serves
+ * on, and the next Drey start asks again.
+ */
+export async function handOverStaleService(lock: ServiceLock, log: (message: string, level?: 'info' | 'warn' | 'error') => void): Promise<boolean> {
   try {
-    return JSON.parse(await fsp.readFile(LOCK_FILE(home), 'utf8')) as EngineLock;
+    const res = await fetch(`http://127.0.0.1:${lock.port}/shutdown`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${lock.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ handover: true }),
+    });
+    if (res.status === 409) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      log(`Drey Service (pid ${lock.pid}) predates this build — handover deferred: ${body.error ?? 'busy'}`, 'warn');
+      return false;
+    }
   } catch {
-    return null;
+    // a service that will not take the call: waited out below
   }
-}
-
-async function alive(lock: EngineLock): Promise<boolean> {
-  const client = new EngineClient({ invokeUrl: `http://127.0.0.1:${lock.invokePort}`, token: lock.token });
-  return client.health();
+  log(`Drey Service (pid ${lock.pid}) predates this build — it hands over to a new one`, 'warn');
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline && (await serviceAlive(lock, 500))) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return true;
 }
 
 /** The tickets vault the engine should host: the detector's probe, plugin-side. */
@@ -96,6 +125,9 @@ const SYNCED_KEYS = (providers: readonly string[]): readonly string[] => [
   'remote.publicUrl',
   'remote.allowBypass',
   'remote.devices',
+  // req-164: the background service is optional; it reads its mode from the engine's config.
+  'service.enabled',
+  'service.autostart',
 ];
 
 /** The assistant LLM slice the chat bridge needs, out of the base app config. */
@@ -134,7 +166,7 @@ function chatEntries(llm: ChatLlmSettings): [string, unknown][] {
 
 /**
  * The same keys {@link syncConfig} pushes, written into the engine's `config.json`
- * BEFORE the engine is spawned (E14-7a). The engine builds its first board while it
+ * BEFORE the service is started (E14-7a). The engine builds its first board while it
  * starts, before anything can reach its invoke channel, and in `shadow` mode that board
  * writes the report: without this the first start after a change of `backend` or
  * `dk.store` described the previous store. Only called with no engine alive, so the
@@ -214,58 +246,66 @@ export async function syncChatConfig(client: ConfigSyncClient, llm: ChatLlmSetti
   }
 }
 
-/** The real process start; the spec's seam starts an engine in-process instead. */
-function spawnEngine(vaultPath: string, home: string, log: (message: string) => void): void {
-  // The last start's output, so a start that dies says why (`engine.log`).
-  const output = openSync(path.join(home, 'engine.log'), 'w');
-  const child = spawn(process.execPath, [ENGINE_ENTRY(), '--vault', vaultPath, '--home', home], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    detached: true,
-    stdio: ['ignore', output, output],
-  });
-  closeSync(output);
-  child.unref();
-  log(`tickets engine spawned (pid ${child.pid ?? '?'}) for ${vaultPath}`);
+/** The real process start (the one spawn path, `launch.ts`); the spec's seam starts a service in-process instead. */
+function startService(vaultPath: string, home: string, log: (message: string) => void): void {
+  const pid = spawnService(serviceLaunchCommand({ entry: SERVICE_ENTRY(), home, vaultPath }), home);
+  log(`Drey Service started (pid ${pid ?? '?'}) for ${vaultPath}`);
 }
 
-export async function ensureEngine(
+/**
+ * Adopt a running Drey Service, hand an older build over, or start one;
+ * then sync Drey's settings into its engine. Resolves with the engine's
+ * invoke endpoints — what the plugin talks to.
+ */
+export async function ensureService(
   ctx: Parameters<typeof locateTicketsVault>[0] & Parameters<typeof syncConfig>[1],
   log: (message: string, level?: 'info' | 'warn' | 'error') => void,
   deps: {
     readonly home?: string;
     readonly spawn?: (vaultPath: string, home: string) => void | Promise<void>;
+    /** This build's stamp; the built service entry's by default. */
+    readonly ownBuild?: () => Promise<string | null>;
   } = {},
 ): Promise<EngineEndpoints> {
-  const home = deps.home ?? ENGINE_HOME();
-  const lock = await readLock(home);
-  if (lock !== null && (await alive(lock))) {
-    const endpoints = { invokeUrl: `http://127.0.0.1:${lock.invokePort}`, token: lock.token };
-    const client = new EngineClient(endpoints);
-    await syncConfig(client, ctx).catch((error: unknown) => log(`engine config sync failed: ${messageOf(error)}`, 'warn'));
+  const home = deps.home ?? SERVICE_HOME();
+  const adopt = async (endpoints: EngineEndpoints): Promise<EngineEndpoints> => {
+    await syncConfig(new EngineClient(endpoints), ctx).catch((error: unknown) => log(`engine config sync failed: ${messageOf(error)}`, 'warn'));
     return endpoints;
+  };
+
+  const running = await liveLock(home);
+  if (running !== null) {
+    const own = await (deps.ownBuild ?? (() => fleetBuildStamp(SERVICE_ENTRY())))().catch(() => null);
+    const stale = isStaleDaemon(running.build, own);
+    if (!stale || !(await handOverStaleService(running, log))) {
+      const endpoints = await engineOf(running);
+      if (endpoints !== null) {
+        return adopt(endpoints);
+      }
+    }
   }
 
   const vault = await locateTicketsVault(ctx);
   if (vault === null) {
-    throw new Error('no tickets vault detected — the engine has nothing to host');
+    throw new Error('no tickets vault detected — Drey Service has nothing to host');
   }
   await fsp.mkdir(home, { recursive: true });
   // A failed mirror costs what it always cost (the adoption's sync below still runs), not the start.
   await mirrorConfig(home, ctx).catch((error: unknown) => log(`engine config mirror failed: ${messageOf(error)}`, 'warn'));
-  await (deps.spawn ?? ((vaultPath: string, engineHome: string) => spawnEngine(vaultPath, engineHome, log)))(vault.path, home);
+  await (deps.spawn ?? ((vaultPath: string, serviceHome: string) => startService(vaultPath, serviceHome, log)))(vault.path, home);
 
-  // Adopt it through the lockfile: health-checked, up to 20 s.
-  const deadline = Date.now() + 20_000;
+  // Adopt it through service.lock: health-checked, its engine answering. The
+  // first start after an update retires the old engine and runner (up to
+  // ~25 s for a runner's handover), so the wait is generous.
+  const deadline = Date.now() + 60_000;
   for (;;) {
-    const candidate = await readLock(home);
-    if (candidate !== null && (await alive(candidate))) {
-      const endpoints = { invokeUrl: `http://127.0.0.1:${candidate.invokePort}`, token: candidate.token };
-      const client = new EngineClient(endpoints);
-      await syncConfig(client, ctx).catch((error: unknown) => log(`engine config sync failed: ${messageOf(error)}`, 'warn'));
-      return endpoints;
+    const candidate = await liveLock(home);
+    const endpoints = candidate === null ? null : await engineOf(candidate);
+    if (endpoints !== null) {
+      return adopt(endpoints);
     }
     if (Date.now() > deadline) {
-      throw new Error(`the tickets engine did not come up within 20 s — see ${path.join(home, 'engine.log')}`);
+      throw new Error(`Drey Service did not come up within 60 s — see ${path.join(home, 'service.log')} and service-start.log`);
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }

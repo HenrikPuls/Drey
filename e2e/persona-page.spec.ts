@@ -17,7 +17,7 @@ process.env['HOME'] = engineHome;
 
 test.afterAll(() => {
   try {
-    const lock = JSON.parse(fs.readFileSync(path.join(engineHome, '.drey-engine', 'engine.lock'), 'utf8')) as { pid?: number };
+    const lock = JSON.parse(fs.readFileSync(path.join(engineHome, '.drey-engine', 'service.lock'), 'utf8')) as { pid?: number };
     if (typeof lock.pid === 'number') {
       process.kill(lock.pid);
     }

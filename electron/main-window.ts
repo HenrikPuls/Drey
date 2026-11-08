@@ -14,6 +14,8 @@ export interface MainWindowHostDeps {
   readonly exitBridge: ExitBridge;
   /** A window exists now -- plugins activated before it get it handed over. */
   readonly onCreated: (window: BrowserWindow) => void;
+  /** The plugins' quit guards (SDK 1.53): false cancels the close. */
+  readonly quitGuards?: () => Promise<boolean>;
 }
 
 /**
@@ -207,8 +209,15 @@ export class MainWindowHost {
       if (this.deps.exitBridge.hasPending()) {
         return; // a second X while the dialog is up -- keep waiting
       }
-      void this.deps.exitBridge.requestDecision().then((decision) => {
+      void this.deps.exitBridge.requestDecision().then(async (decision) => {
         if (decision === 'cancel') {
+          this.quitIntent = false;
+          return;
+        }
+        // Then the plugins (SDK 1.53): the tickets plugin asks about live runs
+        // that would end with Drey when the background service is off (req-164).
+        const mayQuit = await (this.deps.quitGuards?.() ?? Promise.resolve(true)).catch(() => true);
+        if (!mayQuit) {
           this.quitIntent = false;
           return;
         }

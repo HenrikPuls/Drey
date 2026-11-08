@@ -89,6 +89,16 @@ export interface RunnerDeps {
   readonly exit?: (code: number) => void;
   /** Mirrors every log line; `console.log` by default. */
   readonly stdout?: (line: string) => void;
+  /**
+   * Where the runner is found (req-164). `file` (the standalone entry, a
+   * debugging tool since Drey Service): `<root>/runner.json` plus the
+   * single-instance guard on it. `none` (the Crew runner component of Drey
+   * Service): no file and no guard — `service.lock` records the endpoint and
+   * the service is the single instance.
+   */
+  readonly descriptor?: 'file' | 'none';
+  /** Whether the runner installs its own SIGINT/SIGTERM/exit handlers; the service handles signals itself. */
+  readonly signals?: boolean;
 }
 
 /** What `startRunner` hands back: the spec reads the descriptor and ends the runner through it. */
@@ -96,6 +106,8 @@ export interface RunnerHandle {
   readonly port: number;
   readonly token: string;
   readonly descriptorPath: string;
+  /** The endpoint record (port, token, pid, build) — the service writes it into `service.lock`. */
+  readonly descriptor: RunnerDescriptor;
   /** The graceful stop: live runs stopped (bounded), the descriptor removed, `exit(0)`. */
   stop(): Promise<void>;
 }
@@ -106,10 +118,12 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
   await fsp.mkdir(args.root, { recursive: true });
   await fsp.mkdir(path.join(args.root, 'runs'), { recursive: true });
   const descriptorPath = path.join(args.root, 'runner.json');
+  const writesDescriptor = (deps.descriptor ?? 'file') === 'file';
 
   // Single instance: a healthy peer keeps this process out; a stale
-  // descriptor (crashed runner) is taken over.
-  const existing = await readDescriptor(descriptorPath);
+  // descriptor (crashed runner) is taken over. Inside Drey Service the
+  // service lock is the single instance (req-164).
+  const existing = writesDescriptor ? await readDescriptor(descriptorPath) : null;
   if (existing !== null && (await peerAlive(existing))) {
     exit(0);
     return null;
@@ -693,7 +707,7 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
       return;
     }
     leaving = true;
-    log(`${why} — exiting (the engine respawns the runner on the next start)`);
+    log(`${why} — ${writesDescriptor ? 'exiting' : 'going to sleep'} (it starts again when it is needed)`);
     setTimeout(() => shutdown(0), 100);
   };
   /**
@@ -723,7 +737,9 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
 
   const listening = new Promise<void>((resolve) => {
     server.listen(port, '127.0.0.1', () => {
-      fsSync.writeFileSync(descriptorPath, `${JSON.stringify(descriptor)}\n`, { mode: 0o600 });
+      if (writesDescriptor) {
+        fsSync.writeFileSync(descriptorPath, `${JSON.stringify(descriptor)}\n`, { mode: 0o600 });
+      }
       log(`listening on 127.0.0.1:${port} (pid ${process.pid})`);
       resolve();
     });
@@ -753,9 +769,14 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
 
   let exited = false;
   const shutdown = (code: number): void => {
-    fsSync.rmSync(descriptorPath, { force: true });
+    if (writesDescriptor) {
+      fsSync.rmSync(descriptorPath, { force: true });
+    }
     clearInterval(idleTimer);
     clearInterval(reapTimer);
+    // In-process (the service's component) nothing ends with the process:
+    // the chain's scan timer must stop with the runner.
+    orchestrator?.dispose();
     const once = (): void => {
       if (!exited) {
         exited = true;
@@ -768,17 +789,22 @@ export async function startRunner(args: Args, deps: RunnerDeps = {}): Promise<Ru
   const onSignal = (): void => {
     void stopLiveRunsForExit().finally(() => shutdown(0));
   };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
-  process.once('exit', () => {
-    fsSync.rmSync(descriptorPath, { force: true });
-  });
+  if (deps.signals ?? true) {
+    process.once('SIGINT', onSignal);
+    process.once('SIGTERM', onSignal);
+    process.once('exit', () => {
+      if (writesDescriptor) {
+        fsSync.rmSync(descriptorPath, { force: true });
+      }
+    });
+  }
 
   await listening;
   return {
     port,
     token,
     descriptorPath,
+    descriptor,
     stop: async () => {
       await stopLiveRunsForExit();
       await new Promise<void>((resolve) => {

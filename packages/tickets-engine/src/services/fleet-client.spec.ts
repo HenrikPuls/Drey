@@ -4,14 +4,33 @@ import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FleetClient, runnerSpawnArgs } from './fleet-client';
+import { FleetClient, type RunnerLocator } from './fleet-client';
 import { formatStamp } from '../fleet/build-stamp';
+import type { RunnerDescriptor } from '../fleet/protocol';
+import { RunnerComponent } from '../service/runner-component';
 
 /**
- * The client's retirement of a runner from an older build (req-51)
- * against a fake runner on loopback: the handover is asked for, and a
- * runner that refuses (a run in its gate) keeps serving.
+ * A locator over a fake runner's `runner.json` in the spec's temp root —
+ * the shape the service's runner component hands the client (req-164).
+ * Its wake re-reads the file: the "fresh runner" after a leaving one.
  */
+function fileLocator(root: string): RunnerLocator {
+  const read = async (): Promise<RunnerDescriptor | null> => {
+    try {
+      return JSON.parse(await fsp.readFile(path.join(root, 'runner.json'), 'utf8')) as RunnerDescriptor;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    current: read,
+    wake: async () => {
+      const descriptor = await read();
+      return descriptor === null ? { ok: false, error: 'no runner' } : { ok: true, descriptor };
+    },
+  };
+}
+
 describe('FleetClient without a runner (D-34)', () => {
   let root = '';
 
@@ -29,7 +48,7 @@ describe('FleetClient without a runner (D-34)', () => {
   });
 
   const client = (exec: (cmd: string, args: readonly string[]) => Promise<string>): FleetClient =>
-    new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: () => undefined, onFleetChanged: () => undefined, exec });
+    new FleetClient({ root, runner: fileLocator(root), log: () => undefined, onFleetChanged: () => undefined, exec });
 
   it('a detached record whose worker is gone reads as stopped: no client counts it as active', async () => {
     const runs = await client(async () => 'INFO: No tasks').runs();
@@ -39,72 +58,6 @@ describe('FleetClient without a runner (D-34)', () => {
   it('a worker still alive stays detached', async () => {
     const runs = await client(async (cmd) => (cmd === 'powershell.exe' ? String(Date.parse('2026-11-04T13:12:00Z')) : '"70832"')).runs();
     expect(runs.map((r) => r.state)).toEqual(['detached']);
-  });
-});
-
-describe('runnerSpawnArgs (D-42)', () => {
-  it('tells a runner on a store board so at its start, before any chain config reaches it', () => {
-    expect(runnerSpawnArgs('r.js', 'F:/root', true)).toEqual(['r.js', '--root', 'F:/root', '--store-backed']);
-    expect(runnerSpawnArgs('r.js', 'F:/root', false)).toEqual(['r.js', '--root', 'F:/root']);
-  });
-});
-
-describe('FleetClient handover', () => {
-  let root = '';
-  let server: http.Server;
-  const shutdowns: unknown[] = [];
-
-  beforeEach(async () => {
-    root = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-client-'));
-    shutdowns.length = 0;
-    server = http.createServer((req, res) => {
-      const send = (status: number, body: unknown): void => {
-        res.writeHead(status, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(body));
-      };
-      if (req.url === '/health') {
-        send(200, { ok: true, build: formatStamp('2000-01-01T00:00:00.000Z', 'old0'), live: 1 });
-      } else if (req.url === '/shutdown') {
-        let text = '';
-        req.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
-        req.on('end', () => {
-          shutdowns.push(JSON.parse(text) as unknown);
-          send(409, { ok: false, error: 'run R-1 (T-0001) is in its machine gate' });
-        });
-      } else if (req.url === '/status') {
-        send(200, { runs: [{ id: 'R-1', startedAt: '2026-10-19T10:00:00Z' }] });
-      } else {
-        send(200, {});
-      }
-    });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as AddressInfo).port;
-    await fsp.writeFile(path.join(root, 'runner.json'), JSON.stringify({ port, token: 't', pid: 1, startedAt: '', version: 1 }));
-    await fsp.writeFile(path.join(root, 'runner.js'), 'exports.newer = true;\n');
-  });
-
-  afterEach(async () => {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await fsp.rm(root, { recursive: true, force: true });
-  });
-
-  it('asks for a handover and, refused, keeps using the old runner — logged once', async () => {
-    const logs: string[] = [];
-    const client = new FleetClient({
-      root,
-      runnerScript: path.join(root, 'runner.js'),
-      log: (message) => logs.push(message),
-      onFleetChanged: () => undefined,
-    });
-    try {
-      expect(await client.runs()).toHaveLength(1);
-      expect(await client.runs()).toHaveLength(1);
-    } finally {
-      client.dispose();
-    }
-    expect(shutdowns.length).toBeGreaterThanOrEqual(1);
-    expect(shutdowns.every((body) => (body as { handover?: unknown }).handover === true)).toBe(true);
-    expect(logs.filter((line) => line.includes('handover deferred'))).toHaveLength(1);
   });
 });
 
@@ -171,7 +124,6 @@ describe('FleetClient Autopilot', () => {
     // A build newer than this one: never retired, it just serves.
     const build = formatStamp('2999-01-01T00:00:00.000Z', 'new0');
     await fsp.writeFile(path.join(root, 'runner.json'), JSON.stringify({ port, token: 't', pid: 1, startedAt: '', version: 1, build }));
-    await fsp.writeFile(path.join(root, 'runner.js'), 'exports.older = true;\n');
   });
 
   afterEach(async () => {
@@ -183,7 +135,7 @@ describe('FleetClient Autopilot', () => {
     const states: unknown[] = [];
     const client = new FleetClient({
       root,
-      runnerScript: path.join(root, 'runner.js'),
+      runner: fileLocator(root),
       log: () => undefined,
       onFleetChanged: (fleet) => states.push(fleet.chain?.autopilot),
     });
@@ -205,7 +157,7 @@ describe('FleetClient Autopilot', () => {
 
   it('D-51: a runner on its way out is waited out and the write lands on the next one', async () => {
     leaveOnce = true;
-    const client = new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: () => undefined, onFleetChanged: () => undefined });
+    const client = new FleetClient({ root, runner: fileLocator(root), log: () => undefined, onFleetChanged: () => undefined });
     try {
       expect(await client.setAutopilot({ state: 'on' })).toMatchObject({ autopilot: { state: 'on' } });
       expect(posted).toEqual([{ state: 'on' }]);
@@ -215,7 +167,7 @@ describe('FleetClient Autopilot', () => {
   });
 
   it('hands a refusal back with its code', async () => {
-    const client = new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: () => undefined, onFleetChanged: () => undefined });
+    const client = new FleetClient({ root, runner: fileLocator(root), log: () => undefined, onFleetChanged: () => undefined });
     try {
       expect(await client.setAutopilot({ state: 'bad' as 'on' })).toEqual({ ok: false, error: 'bad_state', code: 'bad_state' });
     } finally {
@@ -261,9 +213,7 @@ describe('FleetClient retireIfIdle', () => {
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as AddressInfo).port;
-    // An OLDER build than this one: a stale runner must still not be retired by handover on this path.
     await fsp.writeFile(path.join(root, 'runner.json'), JSON.stringify({ port, token: 't', pid: 7, startedAt: '', version: 1, build: formatStamp('2000-01-01T00:00:00.000Z', 'old0') }));
-    await fsp.writeFile(path.join(root, 'runner.js'), 'exports.newer = true;\n');
   });
 
   afterEach(async () => {
@@ -272,7 +222,7 @@ describe('FleetClient retireIfIdle', () => {
   });
 
   const client = (): FleetClient =>
-    new FleetClient({ root, runnerScript: path.join(root, 'runner.js'), log: (message) => logs.push(message), onFleetChanged: () => undefined });
+    new FleetClient({ root, runner: fileLocator(root), log: (message) => logs.push(message), onFleetChanged: () => undefined });
 
   it('asks the runner with the bearer token and reports it gone', async () => {
     expect(await client().retireIfIdle()).toEqual({ ok: true, exiting: true });
@@ -315,7 +265,8 @@ describe('FleetClient runner start failure', () => {
     const root = path.join(dir, 'fleet');
     await fsp.writeFile(root, 'not a folder');
     const logs: string[] = [];
-    const client = new FleetClient({ root, runnerScript: path.join(dir, 'runner.js'), log: (m) => logs.push(m), onFleetChanged: () => undefined });
+    const runner = new RunnerComponent({ root, storeBacked: async () => false, log: () => undefined, onChange: () => undefined });
+    const client = new FleetClient({ root, runner, log: (m) => logs.push(m), onFleetChanged: () => undefined });
     try {
       const reply = await client.setAutopilot({ state: 'on' });
       expect(reply).toMatchObject({ ok: false, code: 'runner_down' });

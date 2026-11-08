@@ -266,10 +266,11 @@ describe('Drey gone → the runner is asked to retire (req-110)', () => {
     });
     await new Promise<void>((resolve) => runner.listen(0, '127.0.0.1', resolve));
     const port = (runner.address() as AddressInfo).port;
-    await fsp.mkdir(path.join(home, 'fleet'), { recursive: true });
-    await fsp.writeFile(path.join(home, 'fleet', 'runner.json'), JSON.stringify({ port, token: 'rt', pid: 1, startedAt: '', version: 1 }));
+    // The runner component's endpoint (req-164: the service hands its locator in).
+    const descriptor = { port, token: 'rt', pid: 1, startedAt: '', version: 1 };
+    const runnerLocator = { current: async () => descriptor, wake: async () => ({ ok: true as const, descriptor }) };
     await engine.close();
-    engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined, dreyGoneGraceMs: 150 });
+    engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined, dreyGoneGraceMs: 150, runner: runnerLocator });
   });
 
   afterEach(async () => {

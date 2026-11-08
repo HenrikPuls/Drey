@@ -12,11 +12,11 @@ import { NOTES_VAULT_KEY } from '../contracts/notes';
 import { remoteActorOf, type ChatChangePayload } from '../contracts/remote-protocol';
 import type { VerifyHarness } from '../contracts/verify';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
-import { RUNNER_SCRIPT_PATH } from '../fleet/runner-path';
 import { EngineBoardService } from '../services/board-service';
 import { ChatService } from '../services/chat-service';
 import { AGGREGATOR_SYSTEM_PROMPT, createChatBridge } from '../services/chat-llm';
-import { FleetClient } from '../services/fleet-client';
+import { FleetClient, type RunnerLocator } from '../services/fleet-client';
+import { RunnerComponent } from '../service/runner-component';
 import { ImprovementsService } from '../services/improvements-service';
 import { NotesService } from '../services/notes-service';
 import { VerifyService } from '../services/verify-service';
@@ -27,18 +27,18 @@ import type { FleetEvents } from '../fleet/orchestrator';
 import { ChangeHub, DreyTicketsPort, type PathsChange } from './drey-port';
 import { DreyPresence } from './drey-presence';
 import { FileConfigStore } from './file-config';
-import { RemoteService } from './service';
+import { RemoteService, type RemoteStatus } from './service';
 import { parseSettingsPatch } from './settings';
 import { FsEngineHost } from './standalone-host';
 import { createPlaywrightVerifyHarness } from './verify-harness';
 
 /**
- * The standalone tickets engine (ADR-0088, E2b): the whole board service,
- * the fleet client and the remote gateway composed over one tickets vault
- * on disk — no Drey. The Drey plugin either starts this process
- * (engine-main.ts, ELECTRON_RUN_AS_NODE) or adopts a live one through the
- * lockfile; both then talk to it over the invoke channel, and phones talk
- * to the same engine through the gateway's pairing as before.
+ * The tickets engine (ADR-0088, E2b): the whole board service, the fleet
+ * client and the remote gateway composed over one tickets vault on disk —
+ * no Drey. Since req-164 it is the always-on component of Drey Service
+ * (`../service/`, ADR-0092): the Drey plugin starts the service or adopts a
+ * live one through `service.lock`; both then talk to the engine over the
+ * invoke channel, and phones talk to it through the gateway's pairing.
  */
 
 export interface EngineOptions {
@@ -55,6 +55,12 @@ export interface EngineOptions {
   readonly verifyHarness?: VerifyHarness;
   /** The Mission Control chat's LLM bridge; `createChatBridge` by default (the specs' seam). */
   readonly chatBridge?: ChatBridge;
+  /**
+   * The Crew runner (req-164): Drey Service hands its runner component; a
+   * spec may hand a fixed locator. Absent, the engine makes its own
+   * in-process runner component over `<home>/fleet`.
+   */
+  readonly runner?: RunnerLocator;
   /**
    * How long after the last Drey event stream closed the engine asks the
    * runner to retire if idle (req-110); 5 s by default, longer than the
@@ -73,6 +79,10 @@ export interface Engine {
   onEvent(listener: (what: 'board' | 'fleet' | 'remote' | 'chat', payload?: ChatChangePayload) => void): () => void;
   /** The files engine writes touched (D-3): the plugin-only paths channel. */
   onPaths(listener: (change: PathsChange) => void): () => void;
+  /** Drey instances holding the event stream now (req-164: the service's "is a Drey here"). */
+  dreyClients(): number;
+  /** The remote gateway's state (the service's gateway row and its sleep verdict). */
+  remoteStatus(): RemoteStatus;
   /** Settles once the startup housekeeping that runs behind `createEngine` (the videos folder, the retired config key) has finished. */
   readonly ready: Promise<void>;
   /** Stops the engine; resolves only after the startup housekeeping ended, so no file is written after it. */
@@ -123,12 +133,19 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   const host = new FsEngineHost(opts.vaultPath, config, hub, log, opts.home);
   const git = new TicketsGit(() => 'git');
   const fleetRoot = path.join(opts.home, 'fleet');
+  const runner =
+    opts.runner ??
+    new RunnerComponent({
+      root: fleetRoot,
+      storeBacked: async () => (await config.get<string>('backend')) === 'dricket',
+      log: (line) => log(line),
+      onChange: () => undefined,
+    });
   const fleet = new FleetClient({
     root: fleetRoot,
-    runnerScript: RUNNER_SCRIPT_PATH,
+    runner,
     log,
     onFleetChanged: () => hub.emit('fleet'),
-    storeBacked: async () => (await config.get<string>('backend')) === 'dricket',
   });
   // req-110: when the last Drey instance's event stream has been closed for
   // the grace span, the runner is asked to retire if idle — the runner keeps
@@ -481,12 +498,15 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     },
     onEvent: (listener) => hub.subscribe((what, payload) => listener(what, payload)),
     onPaths: (listener) => hub.subscribePaths(listener),
+    dreyClients: () => presence.connected,
+    remoteStatus: () => remoteService.status(),
     close: async () => {
       if (closed) {
         return;
       }
       closed = true;
       presence.dispose();
+      fleet.dispose();
       stopSettling();
       improvements.dispose();
       verify.dispose();
@@ -527,16 +547,4 @@ function readBody(req: http.IncomingMessage, cap: number): Promise<string> {
     req.on('end', () => resolve(text));
     req.on('error', reject);
   });
-}
-
-/** Write (or refresh) the lockfile the lifecycle adopts the engine through. */
-export async function writeEngineLock(home: string, lock: { pid: number; invokePort: number; token: string; vaultPath: string }): Promise<void> {
-  const file = path.join(home, 'engine.lock');
-  const tmp = `${file}.tmp`;
-  await fsp.writeFile(tmp, JSON.stringify(lock, null, 2), 'utf8');
-  await fsp.rename(tmp, file);
-}
-
-export async function removeEngineLock(home: string): Promise<void> {
-  await fsp.rm(path.join(home, 'engine.lock'), { force: true });
 }

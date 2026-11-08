@@ -168,3 +168,13 @@ top of this decision:
   cannot establish never fails the run: the supervisor respawns fresh
   under the same run id. `handoverMode` and `resumedFrom` are recorded
   per run.
+
+## Later change — the runner inside Drey Service (req-164, milestone 209)
+
+The fleet runner is no longer a detached process of its own. It is the
+**Crew runner component** of Drey Service ([ADR-0092](0092-drey-service-the-shipped-background-process.md)):
+it runs in the service's process, its "exit" under req-110's verdict is a
+sleep and the next demand wakes it; its loopback routes and token are
+unchanged and recorded in `~/.drey-engine/service.lock` instead of
+`fleet/runner.json`. The stale-build handover (req-51) is now the whole
+service's. Operations: `plugins/tickets/SERVICE.md` and `FLEET.md`.

@@ -1126,6 +1126,12 @@ run and halts the chain; it asks twice. A device paired read-only sees the
 state but cannot change it. After a restart the state is Off. The same switch
 is in Settings → Tickets → *Budget and runners*.
 
+The Autopilot only decides whether tickets move on and start by themselves.
+Talking to the crew does not need it: Mission Control, *Shape with Paul* and a
+1:1 with a crew member work with the Autopilot Off. A message to an agent's
+run starts the runner when it is not running. If the runner cannot be started,
+the switch says why (*The runner could not be started: …*).
+
 ### Running agents on tickets (the fleet)
 
 A ticket can be worked by an **external agent CLI** — OpenCode or
@@ -1392,7 +1398,10 @@ Each column's dialog prompt is a prompt file like any other: a phase's
 default applies (`plan-interactive-default` — editable in Settings → Tickets,
 re-added by "Add Drey's prompts").
 
-Runs survive closing Drey — the runner is its own small process — and,
+With the **background service** switched on (Settings → *Tickets* →
+*Background service*, off by default), runs survive closing Drey — the runner
+then lives in **Drey Service**, the background process that comes with Drey
+(it also holds the tickets board and the phone gateway) — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
 still-running worker back. (A Claude Code worker cannot be taken back; its run
 reads *Running* with a *not connected* note and can be stopped — or its
@@ -1408,14 +1417,25 @@ Open ticket threads come back after the restart and pick their run up
 again. A run
 that is checking its acceptance criteria finishes first; the handover waits for
 it. You
-can reach it from a terminal, too: its address and token live in
-`<user data>/plugins/fleet/runner.json`.
+can reach it from a terminal, too: `service-main.js --status` lists Drey
+Service's parts, and the addresses and tokens live in
+`~/.drey-engine/service.lock`.
 
 The runner does not stand around, either: switching the Autopilot **Off**
-ends it as soon as nothing is running, and closing Drey ends it when no run
-is live and the Autopilot is Off. A live run keeps it, and so does an On or
-Paused Autopilot — the chain keeps working with Drey closed. It comes back by
-itself the next time a run starts.
+puts it to sleep as soon as nothing is running, and closing Drey does the
+same when no run is live and the Autopilot is Off. A live run keeps it, and
+so does an On or Paused Autopilot — the chain keeps working with Drey
+closed. It wakes by itself the next time a run starts or the Autopilot is
+switched On. Drey Service itself leaves a while after that (15 minutes by
+default) once no Drey is open — unless remote access is on with a paired
+phone or tablet, which keeps it there for them. *Start with Windows* (in the
+same section) starts it when you sign in.
+
+With the background service **off**, everything stops with Drey. Closing
+Drey while an agent run is still running asks first: *Stop the runs and
+quit*, *Keep running (enable the service)* — which switches the background
+service on and lets the runs finish — or *Cancel*. Phones and tablets reach
+the board only while Drey is open.
 
 ### The chain runs itself (milestone 85)
 
@@ -2167,7 +2187,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.8.1; manual content last changed
-2026-11-07. Screenshots were captured automatically from
+2026-11-08. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

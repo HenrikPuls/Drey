@@ -4084,6 +4084,87 @@ still sends the `board` signal at once, and the board's refresh repaints only fo
 board that differs (D-40), so the second round this causes on a store costs a read,
 not a rebuild.
 
+## 6.100 Drey Service: start, adopt, hand over, sleep (req-164, milestone 209, [ADR-0092](09_architecture_decisions/0092-drey-service-the-shipped-background-process.md))
+
+```mermaid
+sequenceDiagram
+    participant D as Drey (tickets plugin main)
+    participant L as ~/.drey-engine/service.lock
+    participant O as Older service (or pre-service engine/runner)
+    participant S as Drey Service
+    participant E as engine component
+    participant R as Crew runner component
+
+    D->>L: read
+    alt a live service of this or a newer build
+        D->>S: GET /health (token from the lock)
+        D->>E: configSet ... (the settings sync) — adopted
+    else an older build
+        D->>O: POST /shutdown {handover: true}
+        alt a run in its gate
+            O-->>D: 409 — Drey adopts the old one, asks again on its next start
+        else
+            O->>O: runner hands its runs over, engine closes, lock removed, exit
+            D->>S: spawn (launch.ts) — as below
+        end
+    else no service
+        D->>S: spawn detached (launch.ts: Electron-as-Node, --home, --vault)
+        S->>S: boot claim (service.starting)
+        S->>O: pre-service engine.lock: health with its token, then kill pid
+        S->>O: pre-service fleet/runner.json: POST /shutdown {handover: true}
+        S->>E: createEngine (runner locator = R)
+        S->>L: write (engine running, runner sleeping, gateway, mcp external)
+        opt handed-over runs on disk
+            S->>R: wake — adopts the runs
+        end
+        D->>L: poll until the engine answers — adopted
+    end
+    Note over D,E: Drey holds GET /api/events: DreyPresence counts it
+    D->>E: setAutopilot / start / send
+    E->>R: FleetClient.ensureRunner → RunnerLocator.wake (in-process startRunner)
+    R-->>L: runner record (port, token) rewritten
+    D--xE: Drey quits — the event stream closes
+    E->>R: after 5 s: POST /retire-if-idle → sleeps unless a live run / Autopilot
+    loop every tick
+        S->>S: sleep verdict: no Drey, runner asleep, no gateway with a paired device
+    end
+    S->>S: held by nothing for service.idleMinutes (15): engine closes, lock removed, exit
+```
+
+The sleep above is the **background** mode (`service.enabled` on). The
+background service is optional (the owner's ruling on Q3) and **off by
+default**: then the service follows Drey —
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant M as Drey main (main-window.ts)
+    participant G as Tickets quit guard (SDK 1.53)
+    participant S as Drey Service (with Drey)
+    O->>M: closes the window
+    M->>M: save-before-exit prompt (renderer) — save / discard
+    M->>G: runQuitGuards()
+    alt service off and a run is live
+        G->>O: N agent runs are still running — Stop the runs and quit / Keep running (enable the service) / Cancel
+        alt Stop
+            G->>S: abortAll (the Notaus)
+        else Keep running
+            G->>S: configSet service.enabled = true — next tick: background mode
+        else Cancel
+            G-->>M: false — the window stays
+        end
+    end
+    M->>M: the window closes, Drey quits
+    S->>S: no Drey on the event stream for 10 s (with Drey): stop live runs, leave
+```
+
+Two levels of sleep in background mode: the runner component keeps req-110's verdict (a live
+run or an On/Paused Autopilot keeps it; Off, Drey gone or its own idle span
+let it sleep), and wakes inside the process on the next write that needs it
+(D-51, req-154). The service leaves only when nothing holds it for its own
+span — and an enabled remote gateway with a paired device holds it, because
+a phone cannot wake a service that is gone.
+
 ## 6.84 Talking to a conversation target in the Assistant (E13-5, milestone 138)
 
 ```mermaid
