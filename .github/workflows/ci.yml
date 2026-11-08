@@ -234,3 +234,15 @@ jobs:
             release/drey_*.deb
           if-no-files-found: error
           retention-days: 3
+
+      # latest-linux.yml is what the AppImage updater (ADR-0074, Linux
+      # later change) reads; the .deb only notifies and opens this page.
+      - name: Attach packages to GitHub Release (v* tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            release/drey-*.AppImage
+            release/drey_*.deb
+            release/latest-linux.yml
+          generate_release_notes: true

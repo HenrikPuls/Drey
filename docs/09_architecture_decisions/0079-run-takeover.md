@@ -1,6 +1,6 @@
 # 0079 — Run takeover: the owner holds a live run, interrupts it and drives it by prompt
 
-- Status: accepted (2026-10-19, milestone 87; owner request, outside the list)
+- Status: superseded 2026-11-08 (the tickets plugin was removed; kept as history) — was: accepted (2026-10-19, milestone 87; owner request, outside the list)
 - Amends: [ADR-0077](0077-continuous-orchestration.md) (agent-decided completion: a finished turn ends the run — not
   while the owner holds it)
 - Companion: [ADR-0078](0078-markdown-view-for-plugins.md) (the tab's transcript and prompt box)

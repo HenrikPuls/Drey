@@ -13,6 +13,9 @@ non-mac window chrome, win32-only updater and `taskkill`); added
 `linux` targets in `electron-builder.yml` (AppImage + deb, md/txt
 associations), `pack:linux` / `pack:dir:linux`, a platform-aware
 `verify:pack`, `dev.sh`, and a `linux` CI job (xvfb e2e, pack, smoke).
+The update flow (ADR-0074 later change): AppImage updates in place via
+`AppImageUpdater`, a .deb is notify-only ("Open releases page"); CI
+attaches `latest-linux.yml`. Spec: notify-only mode in `update-service.spec.ts`.
 
 ### req-94 — CI green again: the e2e suite runs, and is typechecked
 

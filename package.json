@@ -12,7 +12,7 @@
     "test": "node scripts/test.mjs",
     "test:plugins": "vitest run --config vitest.plugins.config.mts",
     "test:plugin": "node scripts/test-plugin.mjs",
-    "test:app": "ng test --watch=false",
+    "test:app": "cross-env NODE_OPTIONS=--no-experimental-webstorage ng test --watch=false",
     "test:all": "npm run lint && npm run typecheck && npm run cycles && npm run test:app && npm run test:plugins",
     "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\"",
     "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.plugins.json --noEmit && tsc -p plugins/tsconfig.main.json --noEmit && tsc -p plugins/tsconfig.renderer.json && tsc -p electron/tsconfig.spec.json && tsc -p tsconfig.e2e.json",

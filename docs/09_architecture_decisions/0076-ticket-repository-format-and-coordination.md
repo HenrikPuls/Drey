@@ -2,6 +2,8 @@
 
 ## Status
 
+Superseded 2026-11-08 (the tickets plugin was removed; kept as history). Was:
+
 Accepted (2026-10-17, owner plan review; milestone 83 implements the
 foundation). The full machine-facing format specification lives in
 [`specs/ticket-schema.md`](../../specs/ticket-schema.md) — this ADR

@@ -47,6 +47,8 @@ unless you explicitly switch on a hosted AI provider.
   with" program for `.md` / `.markdown` / `.mdx` / `.txt` files.
 - **Portable** (`drey-<version>-portable.exe`): single file, no
   installation, registers nothing.
+- **Linux**: `drey-<version>.AppImage` (make it executable and run it)
+  or `drey_<version>_amd64.deb` (`sudo apt install ./drey_*.deb`).
 
 ### Your vault is just a folder
 
@@ -956,6 +958,10 @@ and the personal word list.
 - The **portable exe** cannot update itself (there is no install to
   update) — it offers the releases page on GitHub instead. The same
   fallback appears when a network blocks the check.
+- On Linux, an **AppImage** updates itself like the Windows setup
+  (download, then install on restart). A **.deb** only tells you that a
+  new version exists and opens the releases page — install the new
+  package with your package manager.
 
 ### Plugin-contributed pages
 

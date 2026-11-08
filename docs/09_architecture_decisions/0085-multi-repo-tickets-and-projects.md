@@ -1,6 +1,6 @@
 # 0085 — Multi-repo tickets and named projects
 
-Status: Accepted (req-72, owner request, signed off 2026-10-30)
+Status: Superseded 2026-11-08 (the tickets plugin was removed; kept as history). Was: Accepted (req-72, owner request, signed off 2026-10-30)
 
 ## Context
 
