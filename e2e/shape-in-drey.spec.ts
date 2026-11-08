@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test, expect } from './fixtures/drey';
 
-// The tickets engine is one process per user (`~/.drey-engine/engine.lock`):
+// Drey Service is one process per user (`~/.drey-engine/service.lock`):
 // a home of its own makes the plugin spawn an engine for the seeded vault
 // instead of adopting the owner's live one (see assistant-targets.spec.ts).
 const engineHome = fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-home-'));
@@ -120,7 +120,7 @@ test.beforeAll(async () => {
 
 function stopEngine(): void {
   try {
-    const lock = JSON.parse(fs.readFileSync(path.join(engineHome, '.drey-engine', 'engine.lock'), 'utf8')) as { pid?: number };
+    const lock = JSON.parse(fs.readFileSync(path.join(engineHome, '.drey-engine', 'service.lock'), 'utf8')) as { pid?: number };
     if (typeof lock.pid === 'number') {
       process.kill(lock.pid);
     }

@@ -19,8 +19,8 @@ const electronMain = path.join(repoRoot, 'dist-electron', 'electron', 'main.js')
 const SUITE_HOME = process.env['USERPROFILE'] ?? process.env['HOME'] ?? '';
 
 /**
- * The home a launch runs under. The tickets engine is one process per user
- * (`~/.drey-engine/engine.lock`, adopted by every Drey that starts), so a
+ * The home a launch runs under. Drey Service is one process per user
+ * (`~/.drey-engine/service.lock`, adopted by every Drey that starts), so a
  * shared home would hand a test the owner's live engine and board, or the
  * engine an earlier test left behind with another vault. A spec that sets
  * `process.env.USERPROFILE` keeps its home for its whole file (it removes
@@ -35,15 +35,21 @@ function launchHome(): { readonly home: string; readonly ownedByFixture: boolean
   return { home: fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-home-')), ownedByFixture: true };
 }
 
-/** Stops the engine a launch under `home` spawned; it outlives Drey by design. */
+/**
+ * Stops the Drey Service a launch under `home` started (req-164: engine and
+ * Crew runner in one process); it outlives Drey by design. `engine.lock` is
+ * the pre-service name, read for a home an older build left.
+ */
 function stopEngineOf(home: string): void {
-  try {
-    const lock = JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', 'engine.lock'), 'utf8')) as { pid?: number };
-    if (typeof lock.pid === 'number') {
-      process.kill(lock.pid);
+  for (const name of ['service.lock', 'engine.lock']) {
+    try {
+      const lock = JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', name), 'utf8')) as { pid?: number };
+      if (typeof lock.pid === 'number') {
+        process.kill(lock.pid);
+      }
+    } catch {
+      // no service was started, or it is already gone
     }
-  } catch {
-    // no engine was started, or it is already gone
   }
 }
 

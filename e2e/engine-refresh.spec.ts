@@ -4,21 +4,22 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures/drey';
 
-// The engine is one process per user (`~/.drey-engine/engine.lock`): a home
+// Drey Service is one process per user (`~/.drey-engine/service.lock`): a home
 // of its own keeps this test off the owner's live engine and board.
 const engineHome = fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-home-'));
 process.env['USERPROFILE'] = engineHome;
 process.env['HOME'] = engineHome;
 
+/** The fields of `service.lock` this spec reads (req-164). */
 interface Lock {
   pid: number;
-  invokePort: number;
   token: string;
+  components: { engine: { port?: number } };
 }
 
 function readLock(): Lock | null {
   try {
-    return JSON.parse(fs.readFileSync(path.join(engineHome, '.drey-engine', 'engine.lock'), 'utf8')) as Lock;
+    return JSON.parse(fs.readFileSync(path.join(engineHome, '.drey-engine', 'service.lock'), 'utf8')) as Lock;
   } catch {
     return null;
   }
@@ -30,7 +31,7 @@ async function invokeEngine(method: string, payload: unknown): Promise<{ ok: boo
   if (lock === null) {
     throw new Error('no engine lock');
   }
-  const response = await fetch(`http://127.0.0.1:${lock.invokePort}/api/invoke`, {
+  const response = await fetch(`http://127.0.0.1:${lock.components.engine.port ?? 0}/api/invoke`, {
     method: 'POST',
     headers: { authorization: `Bearer ${lock.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ method, payload }),

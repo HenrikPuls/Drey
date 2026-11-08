@@ -4,10 +4,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 /**
- * The sweep for engines an earlier e2e run left behind (D-43).
+ * The sweep for services (formerly engines) an earlier e2e run left behind (D-43).
  *
  * Every launch under a fixture-owned home (`drey-e2e-home-*` in the temp
- * dir, `fixtures/drey.ts`) starts the tickets engine the way the app does:
+ * dir, `fixtures/drey.ts`) starts Drey Service (req-164) the way the app does:
  * detached and unref'd, because in production it outlives Drey (one engine
  * per user, ADR-0075). In the suite only the fixture's teardown ends it, and
  * that teardown never runs when the worker dies first -- a run aborted with
@@ -16,10 +16,11 @@ import * as path from 'node:path';
  * notices (five of them did, 2026-11-06).
  *
  * `globalSetup` and `globalTeardown` run this: read every leftover home's
- * `engine.lock`, end the engine when it is provably ours, remove the home.
- * The decision is in `classifyLock`, pure, so it has a spec; the process
- * work around it is deliberately paranoid -- a pid can be reused, so a live
- * pid is ended only when its command line names `engine-main` too.
+ * `service.lock` (or a pre-service `engine.lock`), end the process when it
+ * is provably ours, remove the home. The decision is in `classifyLock`,
+ * pure, so it has a spec; the process work around it is deliberately
+ * paranoid -- a pid can be reused, so a live pid is ended only when its
+ * command line names `service-main` (or the old `engine-main`) too.
  */
 
 export const HOME_PREFIX = 'drey-e2e-home-';
@@ -58,17 +59,21 @@ export function classifyLock(lock: EngineLock | null): LockVerdict {
   return { kind: 'ours', pid: lock.pid };
 }
 
-/** Whether the command line of a live process names the engine entry. */
+/** Whether the command line of a live process names the service entry (or the pre-service engine entry). */
 export function isEngineCommandLine(commandLine: string | null): boolean {
-  return commandLine !== null && /engine-main\.(js|ts)\b/.test(commandLine);
+  return commandLine !== null && /(service|engine)-main\.(js|ts)\b/.test(commandLine);
 }
 
+/** The home's service lock, else a pre-service engine lock; both carry `pid` and `vaultPath`. */
 function readLock(home: string): EngineLock | null {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', 'engine.lock'), 'utf8')) as EngineLock;
-  } catch {
-    return null;
+  for (const name of ['service.lock', 'engine.lock']) {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', name), 'utf8')) as EngineLock;
+    } catch {
+      // try the next name
+    }
   }
+  return null;
 }
 
 function alive(pid: number): boolean {

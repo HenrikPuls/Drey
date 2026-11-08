@@ -27,11 +27,20 @@ function stopPid(file: string): void {
   }
 }
 
-// Both outlive Drey by design; kill them before the app's own teardown or that waits a minute for them.
+// Drey Service (engine and Crew runner, req-164) outlives Drey by design; kill it before the app's own teardown or that waits a minute for it.
 test.afterEach(() => {
-  stopPid(path.join(home, '.drey-engine', 'fleet', 'runner.json'));
-  stopPid(path.join(home, '.drey-engine', 'engine.lock'));
+  stopPid(path.join(home, '.drey-engine', 'service.lock'));
 });
+
+/** The Crew runner row of `service.lock`: `running` while awake, `sleeping` after req-110 let it go. */
+function runnerState(): string | null {
+  try {
+    const lock = JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', 'service.lock'), 'utf8')) as { components?: { runner?: { state?: string } } };
+    return lock.components?.runner?.state ?? null;
+  } catch {
+    return null;
+  }
+}
 
 test.afterAll(() => {
   try {
@@ -92,16 +101,16 @@ test('D-51: the Autopilot switches on with the runner down, from the popover and
   const status = page.locator('app-status-bar');
   const popover = page.locator('.tickets-autopilot-pop');
 
-  // From the popover: the runner is spawned by the switch itself.
+  // From the popover: the runner is woken by the switch itself.
   await status.getByText('Autopilot · Off').click();
   await popover.locator('[data-state="on"]').click();
   await expect(status.getByText('Autopilot · On')).toBeVisible({ timeout: 20_000 });
   await expect(popover.locator('[data-state="on"]')).toHaveAttribute('aria-checked', 'true');
 
-  // Off: the runner leaves (nothing is live) and the open popover keeps its switch.
+  // Off: the runner goes to sleep (nothing is live) and the open popover keeps its switch.
   await popover.locator('[data-state="off"]').click();
   await expect(status.getByText('Autopilot · Off')).toBeVisible({ timeout: 10_000 });
-  await expect.poll(() => fs.existsSync(path.join(home, '.drey-engine', 'fleet', 'runner.json')), { timeout: 15_000 }).toBe(false);
+  await expect.poll(() => runnerState(), { timeout: 15_000 }).toBe('sleeping');
   await expect(popover.locator('[data-state="off"]')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   await expect(popover).toHaveCount(0);

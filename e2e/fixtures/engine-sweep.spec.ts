@@ -29,7 +29,8 @@ describe('classifyLock (D-43)', () => {
 });
 
 describe('isEngineCommandLine', () => {
-  it('accepts only the engine entry', () => {
+  it('accepts only the service entry (and the pre-service engine entry)', () => {
+    expect(isEngineCommandLine('C:\\x\\electron.exe E:\\r\\dist-electron\\packages\\tickets-engine\\src\\service\\service-main.js --home h --vault v')).toBe(true);
     expect(isEngineCommandLine('C:\\x\\electron.exe E:\\r\\dist-electron\\packages\\tickets-engine\\src\\server\\engine-main.js --vault v')).toBe(true);
     expect(isEngineCommandLine('node fleet/runner.js --root r')).toBe(false);
     expect(isEngineCommandLine(null)).toBe(false);
