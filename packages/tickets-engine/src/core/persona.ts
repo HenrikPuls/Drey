@@ -307,17 +307,26 @@ export function personaModelFor(persona: Persona, context: PersonaModelContext |
         : router === 'escalate-on-fail'
           ? 'escalate-on-fail: the default on a first run'
           : 'the default';
-  const free = (provider: string | null): number => context.freeSlots[provider ?? context.provider] ?? Number.POSITIVE_INFINITY;
+  // The persona's own provider is the slot gate's business (unknown = free
+  // here); an entry naming another provider needs that provider's pool
+  // configured, else it is skipped with its reason — never a crash.
+  const free = (provider: string | null): number | null =>
+    provider === null ? (context.freeSlots[context.provider] ?? Number.POSITIVE_INFINITY) : (context.freeSlots[provider] ?? null);
   const skipped: string[] = [];
   for (const entry of candidates) {
-    if (free(entry.provider) > 0) {
+    const slots = free(entry.provider);
+    if (slots === null) {
+      skipped.push(`${entry.model}: no ${entry.provider} pool is configured`);
+      continue;
+    }
+    if (slots > 0) {
       const because = skipped.length > 0 ? `${skipped.join(', ')} — pool fallback` : policy;
       return { model: entry.model, provider: entry.provider, viaRouter: router !== 'off', reason: because };
     }
     skipped.push(`${entry.model}: the ${entry.provider ?? context.provider} pool is full`);
   }
   const first = candidates[0]!;
-  return { model: first.model, provider: first.provider, viaRouter: router !== 'off', reason: 'every pool entry is full — the ticket waits' };
+  return { model: first.model, provider: first.provider, viaRouter: router !== 'off', reason: `every pool entry is full or unconfigured (${skipped.join(', ')}) — the ticket waits` };
 }
 
 /**

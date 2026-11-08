@@ -151,6 +151,13 @@ describe('personaModelFor (D-62: the pool and the router act at dispatch)', () =
     expect(personaModelFor(mixed, ctx({ freeSlots: { 'claude-code': 0, kimi: 0, opencode: 0 } }))).toMatchObject({ model: 'opus', provider: null });
   });
 
+  it('an entry whose provider has no configured pool is skipped with a reason, never a crash', () => {
+    const mixed = { ...pia, models: { ...pia.models, pool: ['kimi/k2', 'sonnet'], router: 'budget' as const } };
+    const choice = personaModelFor(mixed, ctx({ freeSlots: { 'claude-code': 1 } })); // no kimi pool at all
+    expect(choice).toMatchObject({ model: 'sonnet', provider: null });
+    expect(choice.reason).toContain('k2: no kimi pool is configured');
+  });
+
   it('a slash that names no worker provider is part of the model id (zai/glm-5.3)', () => {
     const glm = { ...pia, models: { default: 'zai/glm-5.3', pool: ['zai/glm-5.3'], router: 'off' as const } };
     expect(personaModelFor(glm, ctx())).toMatchObject({ model: 'zai/glm-5.3', provider: null });
