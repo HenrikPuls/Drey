@@ -11,7 +11,6 @@
 import { isWorkerProvider, BLOCKED_MARKER, QUESTION_MARKER, type FleetCaps, type InteractiveMode, type WorkerProviderId } from './protocol';
 import { parseHandover } from '../contracts/tickets';
 import { capHead, capTail } from './capping';
-import { PERSONAS_DIR } from '../core/persona';
 
 export type AssignmentSource = 'ticket' | 'column' | 'handover' | 'repo' | 'default';
 
@@ -195,6 +194,10 @@ export interface InstructionInput {
   readonly personaId?: string | null;
   readonly personaRole?: string | null;
 }
+
+// `core/persona.ts`'s PERSONAS_DIR, repeated: this module is bundled into the
+// plugin renderer, which may not pull a runtime `yaml` import (ADR-0044 rule 1).
+const PERSONAS_DIR = 'tickets/_meta/personas';
 
 /** The brief's persona line (D-60), or null for a ring run. */
 export function personaLine(personaId: string | null | undefined, role: string | null | undefined): string | null {
