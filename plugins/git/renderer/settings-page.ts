@@ -7,12 +7,12 @@ import type { RepoSession } from './repo-session.js';
 export function createGitSettingsPage(api: DreyPluginApi, session: RepoSession): PluginSettingsPageContrib {
   return {
     id: 'git',
-    label: 'Git',
-    hint: 'Git executable',
-    description: 'Which git program Drey runs for vaults that are Git repositories.',
+    label: api.i18n.t('git.settings.label'),
+    hint: api.i18n.t('git.settings.hint'),
+    description: api.i18n.t('git.settings.description'),
     mount: (body) => {
       const field = el('div', 'field');
-      const label = el('label', undefined, 'Git executable');
+      const label = el('label', undefined, api.i18n.t('git.settings.executable'));
       const input = el('input', 'mono-input');
       input.type = 'text';
       input.spellcheck = false;
@@ -21,11 +21,7 @@ export function createGitSettingsPage(api: DreyPluginApi, session: RepoSession):
       field.append(
         label,
         input,
-        el(
-          'p',
-          'field-hint',
-          'Leave empty to use the git found on PATH. Set the full path to git.exe when it is installed elsewhere.',
-        ),
+        el('p', 'field-hint', api.i18n.t('git.settings.executable_hint')),
       );
       body.appendChild(field);
 

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect, refreshFiles } from './fixtures/drey';
+import { test, expect, refreshFiles, type Locator, type Page } from './fixtures/drey';
 
 /**
  * Git vaults (plugins/git, milestone 65, ADR-0065): the seeded vault is
@@ -17,6 +17,12 @@ function hasGit(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Refresh the status lives in the panel's More Git actions menu (board 9d). */
+async function refreshStatus(page: Page, panel: Locator): Promise<void> {
+  await panel.locator('button[aria-label="More Git actions"]').click();
+  await page.getByRole('menuitem', { name: 'Refresh the status' }).click();
 }
 
 test.use({ seedVault: { 'docs/index.md': '# Index\n', 'docs/old.md': 'old\n', 'readme.md': 'readme\n' } });
@@ -43,7 +49,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     // the repository that did not exist when the app started.
     await page.locator('app-dock-strip button[aria-label="Show Source control"]').click();
     const panel = page.locator('app-panel-frame', { has: page.locator('.git-panel') });
-    await panel.locator('button[aria-label="Refresh the status"]').click();
+    await refreshStatus(page, panel);
 
     await expect(panel.locator('.git-branch-btn .name')).toHaveText('main');
     const changes = panel.locator('.git-change');
@@ -74,6 +80,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await expect(diff).toBeHidden();
 
     // Stage everything, commit with Ctrl+Enter.
+    await panel.locator('.git-group', { hasText: /^Changes/ }).hover(); // the bulk action shows on the head's hover (board 9d)
     await panel.locator('button[aria-label="Stage all changes"]').click();
     await expect(panel.locator('.git-group', { hasText: 'Staged changes' }).locator('.count')).toHaveText('3');
     await panel.locator('.git-message').fill('Update the docs');
@@ -83,9 +90,9 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await expect(modified).not.toHaveAttribute('data-status');
 
     // History lists the commits.
-    await panel.locator('.git-history').click();
-    await expect(panel.locator('.git-commit .subject').first()).toHaveText('Update the docs');
-    await expect(panel.locator('.git-commit')).toHaveCount(2);
+    await panel.locator('.git-history .fold').click();
+    await expect(panel.locator('.git-log-row .subject').first()).toHaveText('Update the docs');
+    await expect(panel.locator('.git-log-row')).toHaveCount(2);
 
     // A new branch through the picker.
     await panel.locator('.git-branch-btn').click();
@@ -115,7 +122,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
 
     await page.locator('app-dock-strip button[aria-label="Show Source control"]').click();
     const panel = page.locator('app-panel-frame', { has: page.locator('.git-panel') });
-    await panel.locator('button[aria-label="Refresh the status"]').click();
+    await refreshStatus(page, panel);
     await expect(panel.locator('.git-branch-btn .name')).toHaveText('main');
     const more = panel.locator('button[aria-label="More Git actions"]');
     const dialog = page.locator('.git-dialog');
@@ -123,7 +130,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     // Merge: the picker leaves out the current branch; both sides changed
     // the same line, so the merge stops.
     await more.click();
-    await page.locator('.git-branch', { hasText: 'Merge a branch…' }).click();
+    await page.getByRole('menuitem', { name: 'Merge a branch…' }).click();
     await expect(page.locator('.git-branch-filter')).toBeVisible();
     await expect(page.locator('.git-branch-list .git-branch')).toHaveCount(1);
     await page.locator('.git-branch', { hasText: 'feature' }).click();
@@ -149,7 +156,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
 
     // Amend: the box takes the last message; the commit is rewritten.
     await more.click();
-    await page.locator('.git-branch', { hasText: 'Amend the last commit' }).click();
+    await page.getByRole('menuitem', { name: 'Amend the last commit' }).click();
     await expect(banner).toContainText('Amending the last commit');
     await expect(panel.locator('.git-message')).toHaveValue(/Merge branch 'feature'/);
     await panel.locator('.git-message').fill('Merged the feature');
@@ -159,15 +166,15 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
 
     // Stash puts a change away, the stash list brings it back.
     fs.writeFileSync(readme, 'draft\n');
-    await panel.locator('button[aria-label="Refresh the status"]').click();
+    await refreshStatus(page, panel);
     await expect(panel.locator('.git-change')).toHaveCount(1);
     await more.click();
-    await page.locator('.git-branch', { hasText: 'Stash changes' }).click();
+    await page.getByRole('menuitem', { name: 'Stash changes' }).click();
     await dialog.getByRole('button', { name: 'Stash', exact: true }).click();
     await expect(panel.locator('.git-list .git-empty').first()).toHaveText('No changes.');
     expect(fs.readFileSync(readme, 'utf8')).toBe('feature\n');
     await more.click();
-    await page.locator('.git-branch', { hasText: 'Stashes…' }).click();
+    await page.getByRole('menuitem', { name: 'Stashes…' }).click();
     await expect(page.locator('.git-stash')).toHaveCount(1);
     await page.locator('.git-stash button[aria-label="Apply and remove this stash"]').click();
     await expect(panel.locator('.git-change')).toHaveCount(1);
@@ -176,7 +183,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     // The history of the open file: its commits, the first one's changes.
     await page.locator('app-files-panel .node.file', { hasText: 'readme.md' }).click();
     await more.click();
-    await page.locator('.git-branch', { hasText: 'Git history of this file…' }).click();
+    await page.getByRole('menuitem', { name: 'Git history of this file…' }).click();
     await expect(dialog.locator('.git-dialog-title')).toHaveText('Git history');
     await expect(dialog.locator('.git-dialog-sub')).toContainText('readme.md');
     await expect(dialog.locator('.git-history-list .git-commit').first()).toHaveClass(/on/);
@@ -207,7 +214,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await page.locator('app-dock-strip button[aria-label="Show Source control"]').click();
     const panel = page.locator('app-panel-frame', { has: page.locator('.git-panel') });
     // Refresh relocates: the parent is no repository, so the scan runs.
-    await panel.locator('button[aria-label="Refresh the status"]').click();
+    await refreshStatus(page, panel);
 
     // The found repository: its branch line, the read-only hint, the
     // Register button — and no commit box, no group actions.
@@ -217,7 +224,9 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await expect(panel.locator('.git-found button', { hasText: 'Register as vault' })).toBeVisible();
     await expect(panel.locator('.git-message')).toBeHidden();
     await expect(panel.locator('button[aria-label="Stage all changes"]')).toHaveCount(0);
-    await expect(panel.locator('button[aria-label="Fetch from the remote"]')).toBeDisabled();
+    await panel.locator('button[aria-label="More Git actions"]').click();
+    await expect(page.getByRole('menuitem', { name: 'Fetch from the remote' })).toBeDisabled();
+    await page.keyboard.press('Escape');
 
     // The changes are the child's, addressed vault-relative.
     await expect(panel.locator('.git-change')).toHaveCount(2);
@@ -239,6 +248,7 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await expect(panel.locator('.git-found')).toHaveCount(0);
     await expect(panel.locator('.git-message')).toBeVisible();
     await expect(panel.locator('.git-branch-btn .name')).toHaveText('main');
+    await panel.locator('.git-group', { hasText: /^Changes/ }).hover(); // the bulk action shows on the head's hover (board 9d)
     await expect(panel.locator('button[aria-label="Stage all changes"]')).toBeVisible();
   });
 });

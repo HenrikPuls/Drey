@@ -1,7 +1,7 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { parsePatch, type GitLogEntry } from '../shared/status.js';
 import { el, formatWhen, messageOf, textButton } from './dom.js';
-import { counted, patchLineText } from './repo-model.js';
+import { patchLineText } from './repo-model.js';
 import type { RepoSession } from './repo-session.js';
 
 /** Patch lines drawn per commit; the rest is counted in a last line. */
@@ -18,7 +18,7 @@ export async function openFileHistory(api: DreyPluginApi, session: RepoSession, 
   const active = api.documents.active();
   const path = requested ?? active?.path ?? '';
   if (vault === null || active === null || path === '' || active.vaultId !== vault.vaultId) {
-    await api.ui.showMessage('Open a file of a Git vault first.', 'Git history');
+    await api.ui.showMessage(api.i18n.t('git.file_history.open_first'), api.i18n.t('git.file_history.title'));
     return;
   }
   const vaultId = vault.vaultId;
@@ -26,11 +26,11 @@ export async function openFileHistory(api: DreyPluginApi, session: RepoSession, 
   try {
     entries = (await api.backend.invoke('fileLog', { vaultId, path })) as GitLogEntry[];
   } catch (error) {
-    await api.ui.showMessage(messageOf(error), 'Git history');
+    await api.ui.showMessage(messageOf(error), api.i18n.t('git.file_history.title'));
     return;
   }
   if (entries.length === 0) {
-    await api.ui.showMessage(`"${path}" is not in any commit yet.`, 'Git history');
+    await api.ui.showMessage(api.i18n.t('git.file_history.not_committed', { path }), api.i18n.t('git.file_history.title'));
     return;
   }
   const metaOf = (entry: GitLogEntry): string => `${entry.author} · ${formatWhen(entry.date)} · ${entry.hash}`;
@@ -38,13 +38,13 @@ export async function openFileHistory(api: DreyPluginApi, session: RepoSession, 
   const close = api.ui.showModal((box) => {
     box.classList.add('git-dialog', 'wide');
     box.append(
-      el('h2', 'git-dialog-title', 'Git history'),
-      el('p', 'git-dialog-sub', `${path} · ${counted(entries.length, 'commit')}`),
+      el('h2', 'git-dialog-title', api.i18n.t('git.file_history.title')),
+      el('p', 'git-dialog-sub', api.i18n.t('git.file_history.sub', { path, count: entries.length })),
     );
     const body = el('div', 'git-history-body');
     const listNode = el('div', 'git-history-list');
     listNode.setAttribute('role', 'listbox');
-    listNode.setAttribute('aria-label', 'Commits that changed this file');
+    listNode.setAttribute('aria-label', api.i18n.t('git.file_history.commits_label'));
     const detail = el('div', 'git-history-detail');
     body.append(listNode, detail);
 
@@ -63,9 +63,9 @@ export async function openFileHistory(api: DreyPluginApi, session: RepoSession, 
       const head = el('div', 'head');
       head.append(el('div', 'subject', entry.subject), el('div', 'meta', metaOf(entry)));
       const diff = el('div', 'git-diff');
-      diff.setAttribute('aria-label', 'Changes in this commit');
+      diff.setAttribute('aria-label', api.i18n.t('git.file_history.changes_label'));
       detail.append(head, diff);
-      diff.appendChild(el('div', 'hunk', 'Loading…'));
+      diff.appendChild(el('div', 'hunk', api.i18n.t('git.file_history.loading')));
       try {
         const patch = (await api.backend.invoke('filePatch', { vaultId, path, hash: entry.hash })) as string;
         if (mine !== token) {
@@ -74,13 +74,13 @@ export async function openFileHistory(api: DreyPluginApi, session: RepoSession, 
         diff.textContent = '';
         const lines = parsePatch(patch);
         if (lines.length === 0) {
-          diff.appendChild(el('div', 'hunk', 'No text changes to show (binary file or a rename).'));
+          diff.appendChild(el('div', 'hunk', api.i18n.t('git.file_history.no_changes')));
         }
         for (const line of lines.slice(0, MAX_LINES)) {
           diff.appendChild(el('div', line.kind === 'context' ? undefined : line.kind, patchLineText(line)));
         }
         if (lines.length > MAX_LINES) {
-          diff.appendChild(el('div', 'hunk', `… ${lines.length - MAX_LINES} more lines`));
+          diff.appendChild(el('div', 'hunk', api.i18n.t('git.file_history.more_lines', { count: lines.length - MAX_LINES })));
         }
       } catch (error) {
         if (mine === token) {
@@ -99,27 +99,29 @@ export async function openFileHistory(api: DreyPluginApi, session: RepoSession, 
         };
         if (side.binary || side.content === null) {
           await api.ui.showMessage(
-            side.binary ? `"${path}" is not a text file.` : `"${path}" does not exist in that commit.`,
-            'Git history',
+            side.binary
+              ? api.i18n.t('git.file_history.not_text', { path })
+              : api.i18n.t('git.file_history.not_in_commit', { path }),
+            api.i18n.t('git.file_history.title'),
           );
           return;
         }
         close();
         await api.documents.open(path, undefined, { vaultId });
         if (!api.documents.setBuffer(path, side.content)) {
-          await api.ui.showMessage('The version could not be put into the editor.', 'Git history');
+          await api.ui.showMessage(api.i18n.t('git.file_history.put_failed'), api.i18n.t('git.file_history.title'));
         }
       } catch (error) {
-        await api.ui.showMessage(messageOf(error), 'Git history');
+        await api.ui.showMessage(messageOf(error), api.i18n.t('git.file_history.title'));
       }
     };
 
     const actions = el('div', 'git-dialog-actions');
-    const restore = textButton('git-btn', 'Restore this version', () => void restoreSelected());
-    restore.title = 'Puts this version into the editor. Save to keep it.';
+    const restore = textButton('git-btn', api.i18n.t('git.file_history.restore'), () => void restoreSelected());
+    restore.title = api.i18n.t('git.file_history.restore_hint');
     actions.append(
       restore,
-      textButton('git-btn primary', 'Close', () => close()),
+      textButton('git-btn primary', api.i18n.t('git.dialog.close'), () => close()),
     );
     box.append(body, actions);
 

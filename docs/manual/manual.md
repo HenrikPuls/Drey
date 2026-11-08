@@ -751,19 +751,30 @@ A vault can be a Git repository (its root or a folder inside one). The
 **git plugin** runs your installed `git` — no bundled reimplementation.
 The panel shows the repository of the focused document's vault:
 
-- **Branch button** â†’ switch, track a remote branch, create.
-- **Commit** box — `Ctrl+Enter`, or *Commit and push*
-  (`Ctrl+Shift+Enter`). Drey asks before committing with unsaved tabs,
-  and refuses checkout/pull while the vault has unsaved tabs.
-- **Merge conflicts / Staged changes / Changes** lists — row click
-  compares through the diff view; stage, unstage, discard, open from
-  each row.
-- **History** (collapsible) — commits not on the upstream carry a
-  "â†‘ not pushed" marker.
-- Header icons: Fetch · Pull · Push · More (merge a branch, stash,
-  stashes, amend — never of a pushed commit — file history) · Refresh.
+- **Header** — the number of changes, then (while you hover the header or
+  work in the panel) *Pull*, *Push* — their tooltips say how many commits
+  wait — and **More Git actions**: Fetch from the remote · Commit and push
+  (`Ctrl+Shift+Enter`) · Merge a branch… · Stash changes · Stashes… ·
+  Amend the last commit (never of a pushed commit) · Git history of this
+  file… · Refresh the status.
+- **Branch line** — the repository (only when there are several; a click
+  switches), the **branch button** → switch, track a remote branch,
+  create; at the right end `↑2 ↓1` (commits not pushed / to pull) or
+  *Not published* for a branch without upstream. While a command runs, a
+  line under it says what runs, with *Cancel* where it can stop.
+- **Commit field** — one line that grows with your message; the check
+  button or `Ctrl+Enter` commits the staged changes. Drey asks before
+  committing with unsaved tabs, and refuses checkout/pull while the vault
+  has unsaved tabs.
+- **Merge conflicts / Staged changes / Changes** — each group folds by its
+  head, whose bulk action (*Stage all changes*, *Unstage all*) shows on
+  hover. A file's name is in its status colour; a row click compares
+  through the diff view; open, discard, stage or unstage from the row.
+- **History** (folds like the groups) — commits not on the upstream carry
+  "↑ not pushed".
 - A merge shows a banner with an abort button; the conflict surface is
-  keep mine / keep theirs / mark resolved.
+  keep mine / keep theirs / mark resolved. Amend mode shows a banner with
+  *Stop amending*.
 - A **plugin-managed** repository (the tickets vault) is **read-only
   here**: a "Managed by Tickets" banner sits above the commit box and
   staging, discarding, committing (and amending), pulling and pushing
@@ -786,8 +797,8 @@ is no commit box, and stage/discard, fetch/pull/push, merge, stash and
 amend are all disabled or refused — clicking a row still compares, and
 history and file history still work. When a focused document lies
 inside one of several found repositories, the panel shows exactly that
-one; the selector at the top switches between them (its tooltip shows
-each repository's absolute path).
+one; the repository button on the branch line switches between them
+(its tooltip shows the repository's absolute path).
 
 **Register as vault** (the button in the hint row) turns a found
 repository into a vault of its own with one click — after that you can
@@ -798,7 +809,7 @@ belong to another registered vault are never listed twice.
 ![Git decorations in the Files panel](img/git-files-badges.png)
 
 Changed files carry status badges (`M` modified, `U` untracked) and
-tones in the Files panel. The `git.path` is configurable in Settings â†’
+tones in the Files panel. The `git.path` is configurable in Settings →
 *Git*.
 
 ![The diff dialog](img/dialog-diff.png)
@@ -1875,8 +1886,11 @@ automatically.
 
 ![The Open windows panel](img/panel-windows.png)
 
-Other panels: **Outline** shows the open note's heading tree (click to
-jump, fold levels) …
+Other panels: **Outline** shows the open note's heading tree — click a
+heading to jump to it; every heading with headings below it has its own
+fold chevron, and the header's *Collapse all levels* folds the whole tree
+(pressed again: *Expand all levels*). The heading the caret is in is
+marked grey (inside a folded section: its nearest visible parent) …
 
 ![The Outline panel](img/panel-outline.png)
 

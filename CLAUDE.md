@@ -212,12 +212,15 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `TagVocabularyService` over `search:vocabulary` + `search:changed`) and
   a shared tag chip field (`TagField`, also handed to plugins as
   `api.ui.createTagField`; its free-text mode lifts typed `#tag` words
-  into chips, ADR-0057). Its **search** panel: an icon scope switch
-  (document | vault | all vaults), **one** field for tag chips AND free
-  text with case/whole-word/regex toggles, per-file grouped hits, replace
-  (buffer patch in file scope; one bundled confirmation vault-wide), the
-  Export scratch tab and an LLM **Summarize** digest of the hits
-  (milestone 37, editable `builtin:search-summary` prompt).
+  into chips, ADR-0057). It hosts the **Find** panel (milestone 210,
+  req-161, board 9c): **one** panel for Search and Tasks — the tags plugin
+  draws the frame, the shared field (tag chips AND free text) and the
+  Search mode; the tasks plugin offers its Tasks mode through the base
+  find-mode registry (`api.ui.registerFindMode`, SDK 1.54). The Search
+  mode keeps scope (This note | This vault | All vaults), case/whole-word/
+  regex and replace (buffer patch in file scope; one bundled confirmation
+  vault-wide) in its `⋯` menu, plus Export and the LLM **Summarize**
+  digest (milestone 37, editable `builtin:search-summary` prompt).
   The MCP server reads the index through the registered
   `SectionSearchProvider` (which also serves vocabulary + prefix styles)
   and degrades with a clear error when the tags plugin is disabled.
@@ -535,7 +538,7 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 
 - `tags/` — tag data owner: section index, prefix colors, rename/merge,
   the Search panel (ADR-0017, M33/37/53)
-- `tasks/` — Tasks panel + per-vault task index, inline metadata
+- `tasks/` — the Tasks mode of the Find panel + per-vault task index, inline metadata
   (ADR-0033)
 - `templates/` — Templates panel, slash-menu template entries, snippets
   (M46)
@@ -607,10 +610,11 @@ introduced silently.
   **bottom dock** band — then a 29px **status bar** (word/char count ·
   context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the ten panels — **Calendar, Files, Templates, Search, Tasks, Open
+    the nine panels — **Calendar, Files, Templates, Find, Open
     windows, Outline, Backlinks, Source control, Assistant** (the core
-    ones registered by the base; Templates/Search/Tasks/Assistant/
-    Outline/Backlinks/Source control are provided by plugins, ADR-0044). A
+    ones registered by the base; Templates/Find/Assistant/
+    Outline/Backlinks/Source control are provided by plugins, ADR-0044;
+    Find replaced the Search and Tasks panels in milestone 210). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and **opened or closed from the dock's icon
     strip** — a 37px row at the top of each dock with one icon toggle
@@ -624,9 +628,9 @@ introduced silently.
     stays on; a click on a header does nothing, a drag moves, a
     right-click offers Move to left / right / bottom dock and Close. What
     a panel inherits and may draw: the frame rule in ADR-0019. Default:
-    Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks/
+    Calendar/Files/Templates/Find/Open windows/Outline/Backlinks/
     Source control left, Assistant right, nothing in the bottom band,
-    Templates + Search + Tasks + Outline + Backlinks + Source control
+    Templates + Find + Outline + Backlinks + Source control
     closed. Calendar takes its content height, not a
     flex share; its title is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily

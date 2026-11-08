@@ -198,3 +198,32 @@ force-push, a graph view, committing to a different author.
 - The status colours are overridden for the Anthrazit theme only (see
   ADR-0057, later change); Drey and the published themes keep the shared
   mid-tones.
+
+## Later change — the panel drawn to board 9d (milestone 211, req-162)
+
+The owner accepted board 9d `DeskSourceControl` on 2026-11-08 and the panel
+follows it. No action was added or removed; three moved:
+
+- **Fetch from the remote** and **Refresh the status** leave the header,
+  which keeps Pull · Push · More Git actions. **Commit and push**
+  (`Ctrl+Shift+Enter`, unchanged) leaves the commit field, which keeps
+  only the check button. All three are rows of the More Git actions menu,
+  in the board's order: Fetch · Commit and push | Merge a branch · Stash
+  changes · Stashes · Amend the last commit | Git history of this file ·
+  Refresh the status.
+- The menu is a dropdown under its button (a plugin-drawn list, the
+  tickets Work panel's tokens), not a modal. It is appended inside the
+  panel's frame, so a press in it keeps the panel the active one. It opens
+  with no repository too, then holding Refresh alone, because a repository
+  created after the start is found only by a refresh.
+- The repository `<select>` is a text button on the branch line that
+  opens the same kind of dropdown; it shows only with several
+  repositories.
+
+Every group head now folds (History did before), and the folds are kept
+per repository in the renderer's storage; the commit field is one
+line that grows, and a branch without upstream reads *Not published* on
+the branch line. The base icon set gains `lock` (the managed banner asked
+for it and got nothing). The renderer's strings moved into the i18n
+catalog (`git.` keys, ADR-0091) and `plugins/git/renderer` joined the
+guarded paths.

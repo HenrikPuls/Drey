@@ -6,7 +6,10 @@
 import type { DreyPluginApi, OpenDocumentInfo } from '../../../shared/plugin-api/renderer';
 import { decorationsFor, type ChangeDecoration, type GitLogEntry, type VaultGitState } from '../shared/status.js';
 import { messageOf } from './dom.js';
-import { keyOf, okVaults, pickCurrentRepo, unsavedSubject, type OkVault } from './repo-model.js';
+import { keyOf, okVaults, pickCurrentRepo, type OkVault } from './repo-model.js';
+
+/** What is about to rewrite files, for the unsaved-tabs refusal. */
+export type CleanTabsReason = 'merge' | 'abort_merge' | 'stash' | 'pull' | 'switch_branch' | 'apply_stash';
 
 export interface RepoState {
   vaults: VaultGitState[];
@@ -49,7 +52,7 @@ export interface RepoSession {
   /** Runs one backend command with the busy line, the error dialog and the new state. */
   run(label: string, method: string, payload: Record<string, unknown>, cancellable?: boolean): Promise<boolean>;
   /** Refuses a command that rewrites files while the vault has unsaved tabs. */
-  cleanTabsOrExplain(vaultId: string, what: string): Promise<boolean>;
+  cleanTabsOrExplain(vaultId: string, what: CleanTabsReason): Promise<boolean>;
   /** Follows main's pushes, the focused document, saves and the window focus; returns the undo. */
   watch(): () => void;
 }
@@ -133,7 +136,7 @@ export function createRepoSession(api: DreyPluginApi): RepoSession {
         })) as VaultGitState[],
       );
     } catch (error) {
-      api.ui.showMessage(messageOf(error), 'Git').catch(() => undefined);
+      api.ui.showMessage(messageOf(error), api.i18n.t('git.dialog.git')).catch(() => undefined);
     }
   };
 
@@ -183,8 +186,11 @@ export function createRepoSession(api: DreyPluginApi): RepoSession {
       return true;
     } catch (error) {
       const message = messageOf(error);
-      if (message !== 'Cancelled.') {
-        await api.ui.showMessage(message, 'Git');
+      // A cancelled run says nothing more. Over IPC the error arrives as
+      // "GitError: Cancelled." (the class name rides along), so the check
+      // reads the end of the message.
+      if (!/(^|: )Cancelled\.$/.test(message)) {
+        await api.ui.showMessage(message, api.i18n.t('git.dialog.git'));
       }
       return false;
     } finally {
@@ -195,14 +201,14 @@ export function createRepoSession(api: DreyPluginApi): RepoSession {
     }
   };
 
-  const cleanTabsOrExplain = async (vaultId: string, what: string): Promise<boolean> => {
+  const cleanTabsOrExplain = async (vaultId: string, what: CleanTabsReason): Promise<boolean> => {
     const dirty = dirtyDocs(vaultId);
     if (dirty.length === 0) {
       return true;
     }
     await api.ui.showMessage(
-      `${what} can rewrite files of this vault, and ${unsavedSubject(dirty)} unsaved changes. Save or close them first.`,
-      'Unsaved changes',
+      api.i18n.t('git.cmd.clean_tabs', { what, count: dirty.length, name: dirty[0].name }),
+      api.i18n.t('git.dialog.unsaved_title'),
     );
     return false;
   };

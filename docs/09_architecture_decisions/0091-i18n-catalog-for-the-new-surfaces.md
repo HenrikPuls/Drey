@@ -132,7 +132,9 @@ existing strings do not move in this step.
    `plugins/tickets/renderer/autopilot/`,
    `plugins/tickets/renderer/decision/`, `plugins/tickets/renderer/cost/`,
    `packages/tickets-engine/src/autopilot/`,
-   `packages/tickets-engine/src/notes/`. The spec also checks that this
+   `packages/tickets-engine/src/notes/`; migrated areas (req-106):
+   `plugins/git/renderer/`, `plugins/outline/renderer/` (milestone 211,
+   req-162). The spec also checks that this
    list and the JSON agree. Nothing outside the list is scanned, so the
    existing UI does not fail.
 
