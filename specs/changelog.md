@@ -16,6 +16,10 @@ associations), `pack:linux` / `pack:dir:linux`, a platform-aware
 The update flow (ADR-0074 later change): AppImage updates in place via
 `AppImageUpdater`, a .deb is notify-only ("Open releases page"); CI
 attaches `latest-linux.yml`. Spec: notify-only mode in `update-service.spec.ts`.
+Linux fixes found by the e2e run: the window icon is the `.png` twin on
+non-Windows (an `.ico` made `config:set` throw on every theme change);
+`pack:linux` builds AppImage + deb + `latest-linux.yml`; plugin/app tests
+run with `--no-experimental-webstorage` (Node 25+).
 
 ### req-94 — CI green again: the e2e suite runs, and is typechecked
 

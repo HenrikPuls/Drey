@@ -29,12 +29,14 @@ export const rendererOrigin = rendererDevServerUrl
 /**
  * The BrowserWindow / taskbar icon. Packaged, it is an `extraResources`
  * copy under `process.resourcesPath`; in dev it is `build/icon.ico` at the
- * repo root. `.ico` is what Windows wants for a window icon.
+ * repo root. `.ico` is what Windows wants for a window icon; Linux (and
+ * macOS) cannot load one, so they use the `.png` twins.
  */
+const windowIconExt = process.platform === 'win32' ? 'ico' : 'png';
 const windowIconDir = app.isPackaged
   ? process.resourcesPath
   : path.join(__dirname, '..', '..', 'build');
-export const windowIconPath = path.join(windowIconDir, 'icon.ico');
+export const windowIconPath = path.join(windowIconDir, `icon.${windowIconExt}`);
 
 /**
  * The icon that goes with a theme (req-42): a theme with its own mark gets
@@ -42,7 +44,7 @@ export const windowIconPath = path.join(windowIconDir, 'icon.ico');
  * Null when not even the default exists (a checkout without `build/`).
  */
 export function windowIconFor(themeId: string): string | null {
-  const themed = path.join(windowIconDir, `${appIconStem(appIconVariant(themeId))}.ico`);
+  const themed = path.join(windowIconDir, `${appIconStem(appIconVariant(themeId))}.${windowIconExt}`);
   if (fs.existsSync(themed)) {
     return themed;
   }
