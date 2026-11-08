@@ -84,6 +84,7 @@
   - background mode: the service came up with all four rows, the Autopilot On woke the runner in the same pid, Off put it to sleep, a second Drey adopted the same service, and after both closed it left after its 15 s test span;
   - with-Drey mode: the same steps, and the service followed Drey out once both had closed.
   - Not exercised live: the quit prompt with a real agent run (no worker CLI in the test home; spec-covered), the migration against a real pre-service engine and runner (spec-covered with stand-ins), and start with Windows in the real registry.
+  - Integration note (2026-11-08, after the merge): the migration ran live on the owner's machine — the first service start found the pre-service engine (pid 46596) and retired it after its health check; `engine.lock` is gone, `service.lock` reads mode with-drey with all four components. The quit prompt with a real run and a packed build remain unexercised.
 - **Fidelity note:** the *Background service* section on Settings → Tickets is not on board 7g. It is a stopgap until req-165 gives it its own category.
 
 ### Milestone 208 -- D-58 header icons stuck after fold or close; req-163 controls show while the panel is active
