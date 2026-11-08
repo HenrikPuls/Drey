@@ -45,17 +45,25 @@ async function openSearchPanel(page: Page): Promise<void> {
   await page.locator('app-dock-strip button[aria-label="Hide Calendar"]').click();
   // The chord needs the plugin's renderer module activated (it registers
   // the `search.open` command) — wait for the widget's strip icon first.
-  await expect(page.locator('app-dock-strip button[aria-label="Show Search"]')).toBeVisible();
+  await expect(page.locator('app-dock-strip button[aria-label="Show Find"]')).toBeVisible();
   await page.keyboard.press('Control+Shift+f');
-  await expect(page.locator('app-panel-frame .tag-search')).toBeVisible();
+  await expect(page.locator('app-panel-frame .find')).toBeVisible();
 }
 
 async function runSearch(page: Page, text: string): Promise<void> {
-  const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
+  const panel = page.locator('app-panel-frame', { has: page.locator('.find') });
   // One field for text and #tags (milestone 43): the shared tag field's input.
-  const field = panel.locator('.tag-search-field .tag-field-input').first();
+  const field = panel.locator('.find-field .tag-field-input').first();
   await field.fill(text);
   await field.press('Enter');
+}
+
+/** Picks a row of the Find panel's ⋯ menu (board 9c). */
+async function pickMenu(page: Page, label: string): Promise<void> {
+  const frame = page.locator('app-panel-frame', { has: page.locator('.find') });
+  await frame.locator('.head').hover();
+  await frame.locator('button[aria-label="More"]').click();
+  await page.locator('.find-menu-item', { hasText: label }).click();
 }
 
 test.describe('Search panel (Tags plugin, milestone 33)', () => {
@@ -65,46 +73,46 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
     await openSearchPanel(page);
 
     await runSearch(page, 'flat water');
-    const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
+    const panel = page.locator('app-panel-frame', { has: page.locator('.find') });
 
     // Terms AND within one section: only the sailing Morning section has
     // both "flat" and "water".
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
+    await expect(panel.locator('.status')).toHaveText(/1 in 1 file/);
 
     // THE FIX under test: the untagged note is searchable at all — its only
     // section carries no inline #tag.
     await runSearch(page, 'peaches');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
-    await expect(panel.locator('.tag-search-file')).toHaveCount(1);
+    await expect(panel.locator('.status')).toHaveText(/1 in 1 file/);
+    await expect(panel.locator('.find-group')).toHaveCount(1);
 
     // Opening a hit lands in the file at the section's line.
-    await panel.locator('.tag-search-hit').first().click();
+    await panel.locator('.find-hit').first().click();
     await expect(page.locator('app-editor .cm-content')).toContainText('flat peaches');
   });
 
   test('a broken regex shows an inline error instead of an empty panel', async ({ page }) => {
     await openSearchPanel(page);
-    const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
+    const panel = page.locator('app-panel-frame', { has: page.locator('.find') });
 
-    await panel.locator('.icon-btn[title="Regular expression"]').click();
+    await pickMenu(page, 'Regular expression');
     await runSearch(page, 'flat(');
 
-    await expect(panel.locator('.tag-search-error')).toBeVisible();
-    await expect(panel.locator('.tag-search-error')).not.toBeEmpty();
+    await expect(panel.locator('.find-error')).toBeVisible();
+    await expect(panel.locator('.find-error')).not.toBeEmpty();
   });
 
   test('whole word narrows the match', async ({ page }) => {
     await openSearchPanel(page);
-    const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
+    const panel = page.locator('app-panel-frame', { has: page.locator('.find') });
 
     // As a substring, "at" lives inside "flat"/"watch" — both files match.
     await runSearch(page, 'at');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/3 sections in 2 files/);
+    await expect(panel.locator('.status')).toHaveText(/3 in 2 files/);
 
     // As a whole word, "at" occurs nowhere.
-    await panel.locator('.icon-btn[title="Whole word"]').click();
+    await pickMenu(page, 'Whole word');
     await runSearch(page, 'at');
-    await expect(panel.locator('.tag-search-empty')).toHaveText('No matches.');
+    await expect(panel.locator('.find-empty')).toHaveText('No matches.');
   });
 
   test('file scope replaces inside the open document as an unsaved buffer edit', async ({
@@ -112,19 +120,19 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
     vaultDir,
   }) => {
     await openSearchPanel(page);
-    const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
+    const panel = page.locator('app-panel-frame', { has: page.locator('.find') });
 
     // Open the file the replace should touch.
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'sailing.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toContainText('flat water');
 
-    await panel.locator('.seg [aria-label="Search the open document"]').click();
+    await pickMenu(page, 'This note');
     await runSearch(page, 'flat');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
+    await expect(panel.locator('.status')).toHaveText(/1 in this note/);
 
-    await panel.locator('.tag-search-summary [aria-label="Replace"]').click();
-    await panel.locator('.tag-search-replace input').fill('smooth');
-    await panel.locator('.tag-search-replace [aria-label="Replace all"]').click();
+    await panel.locator('.find-field button[aria-label="Replace"]').click();
+    await panel.locator('.find-replace input').fill('smooth');
+    await panel.locator('.find-replace [aria-label="Replace all"]').click();
 
     // The replace patches the live buffer (like any typed edit): the tab
     // turns dirty and nothing reaches disk until the user saves.
@@ -140,14 +148,14 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
     vaultDir,
   }) => {
     await openSearchPanel(page);
-    const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
+    const panel = page.locator('app-panel-frame', { has: page.locator('.find') });
 
     await runSearch(page, 'sunset');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
+    await expect(panel.locator('.status')).toHaveText(/1 in 1 file/);
 
-    await panel.locator('.tag-search-summary [aria-label="Replace"]').click();
-    await panel.locator('.tag-search-replace input').fill('sunrise');
-    await panel.locator('.tag-search-replace [aria-label="Replace all"]').click();
+    await panel.locator('.find-field button[aria-label="Replace"]').click();
+    await panel.locator('.find-replace input').fill('sunrise');
+    await panel.locator('.find-replace [aria-label="Replace all"]').click();
 
     // The bundled confirmation lists the affected file before anything lands.
     // (The host's modal box carries both classes — `plugin-modal` + the

@@ -240,10 +240,10 @@ async function openFile(page: Page, name: string): Promise<void> {
 }
 
 const WORK_DOCKS = {
-  left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tasks', 'Tickets'],
-  right: ['Search', 'Assistant'],
+  left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tickets'],
+  right: ['Find', 'Assistant'],
   bottom: ['Capacity'],
-  folded: ['Search'],
+  folded: ['Find'],
   rightW: 380,
   bottomH: 103,
 };
@@ -265,7 +265,7 @@ test('boards 7a 7e 7f 7h 7i: the desk screens', async ({ page, electronApp }) =>
   // 7h: the Notes view, Files and the Assistant, the Layout menu open.
   await page.keyboard.press('Control+1');
   await page.waitForTimeout(500);
-  await arrangeDocks(page, { left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tasks', 'Tickets', 'Open windows'], right: ['Search', 'Assistant'], bottom: [], shown: ['Files', 'Assistant'], folded: ['Search'], rightW: 380 });
+  await arrangeDocks(page, { left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tickets', 'Open windows'], right: ['Find', 'Assistant'], bottom: [], shown: ['Files', 'Assistant'], folded: ['Find'], rightW: 380 });
   await reloadSized(page, electronApp);
   await openFile(page, 'Outline ideas');
   await openFile(page, '2026-11-04');
@@ -315,7 +315,7 @@ test('boards 7a 7e 7f 7h 7i: the desk screens', async ({ page, electronApp }) =>
   await page.keyboard.press('Control+Alt+B');
   await page.keyboard.press('Control+1');
   await page.waitForTimeout(500);
-  await arrangeDocks(page, { left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tasks', 'Tickets', 'Open windows'], right: ['Search', 'Assistant'], bottom: [], shown: ['Open windows', 'Assistant'], folded: ['Search'], rightW: 380 });
+  await arrangeDocks(page, { left: ['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tickets', 'Open windows'], right: ['Find', 'Assistant'], bottom: [], shown: ['Open windows', 'Assistant'], folded: ['Find'], rightW: 380 });
   await reloadSized(page, electronApp);
   await shoot(page, 'DeskTabs');
   // 7i's tab menu: a note of the Notes view only.

@@ -197,10 +197,10 @@ describe('Tasks plugin persisted prefs', () => {
     localStorage.removeItem('drey.tasks');
   });
 
-  it('defaults to document scope, everything shown, no filter', () => {
+  it('defaults to done tasks hidden (board 9c), both kinds, no filter', () => {
     expect(readPrefs()).toEqual({
       scope: 'document',
-      hideDone: false,
+      hideDone: true,
       kinds: ['checkbox', 'tag'],
       queryTags: [],
       queryText: '',

@@ -344,3 +344,23 @@ that contains the target, and a target outside every panel (the editor, the
 titlebar, a strip) clears it. `PanelFrame` sets `.active` on its host, and
 `panel-frame.css` raises `--head-actions` for it, so the calendar's title-replacing
 row follows and the opacity fades out when another surface takes over.
+
+## Later change -- a plugin may draw the title; the frame stays the base's (milestone 210, req-161)
+
+Board 9c puts the Find panel's mode switch, `Search | Tasks`, into the title
+position of the 28 px header. A string title cannot be that, and the controls
+row is hover-only and right-aligned. SDK 1.53 adds
+`PluginWidgetContrib.headerTitle(el)`: the frame mounts the plugin's element
+inside the title slot (`.title-slot`, 24 px high) and keeps everything else of
+the header its own, the fold chevron, the drag by the header, the right-click
+menu, the status after the title and the hover / keyboard / active controls of
+milestone 208. The contract: the content fits the title's height, a press on a
+`button` inside it stays a click (`PanelFrame.onTitleSlotPress`), any other
+press still drags the panel; `title` stays required for the strip tooltip, the
+panel menu and the collapse label. A plugin whose status changes outside the
+shell's document and vault events calls `ui.refreshStatus()`.
+
+A panel that replaces others carries `aliases` (`['search', 'tasks']`): the
+dock renames those ids in the stored layout of every view once
+(`migrateWidgetAliases`, applied in `merge` and when the panel registers) and
+writes the result back, so no owner loses a layout.

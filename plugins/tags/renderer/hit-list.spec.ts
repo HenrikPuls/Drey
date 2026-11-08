@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { TagSearchHit, TagSearchQuery } from '../../../shared/plugin-api/renderer';
-import { groupHits, mergeOpenBufferHits } from './hit-list.js';
+import { groupHits, mergeOpenBufferHits, snippetParts, splitPath } from './hit-list.js';
 import { DEFAULT_PREFS, parsePrefs } from './search-prefs.js';
 
 function hit(path: string, line: number, vaultId?: string): TagSearchHit {
@@ -94,5 +94,39 @@ describe('parsePrefs', () => {
 
   it('ignores an unknown scope and non-boolean flags', () => {
     expect(parsePrefs('{"scope":"galaxy","matchCase":"yes"}')).toEqual(DEFAULT_PREFS);
+  });
+});
+
+describe('snippetParts', () => {
+  const text = (q: Partial<TagSearchQuery['match']> & { text: string }): TagSearchQuery => ({
+    tags: [],
+    text: q.text,
+    match: { caseSensitive: false, wholeWord: false, regex: false, ...q },
+  });
+
+  it('marks every occurrence of each term, case-insensitive by default', () => {
+    expect(snippetParts('The new Logo and the logo', text({ text: 'logo' }))).toEqual([
+      { text: 'The new ', mark: false },
+      { text: 'Logo', mark: true },
+      { text: ' and the ', mark: false },
+      { text: 'logo', mark: true },
+    ]);
+  });
+
+  it('respects match case and regex, and survives an invalid pattern', () => {
+    expect(snippetParts('Logo logo', text({ text: 'logo', caseSensitive: true })).filter((p) => p.mark)).toHaveLength(1);
+    expect(snippetParts('a1 b22', text({ text: '[0-9]+', regex: true })).filter((p) => p.mark).map((p) => p.text)).toEqual(['1', '22']);
+    expect(snippetParts('x(', text({ text: 'logo(', regex: true }))).toEqual([{ text: 'x(', mark: false }]);
+  });
+
+  it('returns the snippet as one plain run without text', () => {
+    expect(snippetParts('abc', { tags: ['x'], text: '' })).toEqual([{ text: 'abc', mark: false }]);
+  });
+});
+
+describe('splitPath', () => {
+  it('splits the name from its folder', () => {
+    expect(splitPath('projects/website-relaunch.md')).toEqual({ name: 'website-relaunch.md', folder: 'projects' });
+    expect(splitPath('a.md')).toEqual({ name: 'a.md', folder: '' });
   });
 });

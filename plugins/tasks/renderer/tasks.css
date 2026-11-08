@@ -1,230 +1,111 @@
 /*
  * Tasks plugin styles (ADR-0044: plugin CSS is global — every rule is
- * scoped under the plugin's own root classes `.tasks-panel` /
- * `.tasks-hdr`).
+ * scoped under the plugin's own root classes `.find-tasks` / `.find-task*`).
+ * The Tasks mode lives inside the Find panel (req-161, board 9c); the panel's
+ * group heads, empty line and the rest of its frame are the tags plugin's.
  */
 
-/* ---- body: fills the (flush) PanelFrame as a flex column; the filter
-        stays pinned, only the list scrolls -- no second scrollbar. ---- */
+/* ---- the Tasks mode's list: 52 px rows, checkbox 16, title 14/20, meta 13/18 ---- */
 
-.tasks-panel {
-  flex: 1;
-  min-height: 0;
+.find-tasks .find-task {
   display: flex;
-  flex-direction: column;
-  padding: 8px 12px 12px;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--hover-bg);
 }
 
-.tasks-panel .filter {
-  flex: none;
+.find-task-box {
   display: flex;
   align-items: center;
-  gap: 2px;
-  min-height: var(--field-h);
-  margin-bottom: 8px;
-  padding: 3px 4px 3px 8px;
-  background: var(--bg-editor);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-xs);
-}
-
-.tasks-panel .filter:focus-within {
-  border-color: var(--accent);
-}
-
-.tasks-panel .content {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ---- filter: one bordered field (milestone 43) ----
-   The scope switch in the panel header and every icon button use the
-   shell's shared `.seg` / `.icon-btn` (src/styles.css); the tag chips and
-   the input are the shared tag field in free-text mode. */
-
-.tasks-panel .filter-icon {
-  display: inline-flex;
+  justify-content: center;
   flex: none;
-  color: var(--text-5);
-}
-
-.tasks-panel .tag-field {
-  flex: 1;
-}
-
-.tasks-panel .tag-field-input {
-  height: 22px;
-  font-size: 13px;
-}
-
-.tasks-panel .icon-btn[hidden] {
-  display: none;
-}
-
-/* ---- list ---- */
-
-.tasks-panel .empty {
-  flex: none;
-  margin: 6px 2px;
-  font-size: 11.5px;
-  color: var(--text-6);
-}
-
-.tasks-panel .list {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.tasks-panel .group {
-  flex: 0 0 auto;
-  margin: 8px 0 2px;
-  font-family: var(--font-sans);
-  font-size: 10.5px;
-  line-height: 1.4;
-  color: var(--text-6);
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.tasks-panel .group:first-child {
-  margin-top: 0;
-}
-
-/* The All-vaults scope badges each group with its vault's name (the active
-   vault stays unbadged, same convention as the Search panel). */
-.tasks-panel .group .vault {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--bg-search);
-  color: var(--text-3);
-}
-
-.tasks-panel .task {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  padding: 5px 6px;
-  border-radius: var(--radius);
-}
-
-.tasks-panel .task:hover {
-  background: var(--hover-bg);
-}
-
-.tasks-panel .task .box {
-  flex: none;
-  width: 13px;
-  height: 13px;
-  margin: 1px 0 0;
-  accent-color: var(--accent);
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 1.5px solid var(--field-border);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--accent-contrast);
   cursor: pointer;
 }
 
-.tasks-panel .task .rows {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.find-task-box[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
-.tasks-panel .task .body {
-  min-width: 0;
+.find-task-box:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+.find-task-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.find-task-title {
+  padding: 0;
   border: 0;
   background: transparent;
-  padding: 0;
-  text-align: left;
-  color: inherit;
+  color: var(--text-primary);
   font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
-.tasks-panel .task .text {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-2);
-  /* Size to content -- a task that wraps to several lines shows in full and
-     the row grows with it, rather than being clamped and clipped. */
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.tasks-panel .task.done .text {
+.find-task.done .find-task-title {
+  color: var(--text-4);
   text-decoration: line-through;
-  color: var(--text-6);
 }
 
-.tasks-panel .task .meta {
+.find-task-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-  font-family: var(--font-sans);
-  font-size: 9.5px;
-  color: var(--path-muted);
-  overflow: hidden;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 18px;
   white-space: nowrap;
+  overflow: hidden;
 }
 
-.tasks-panel .task .meta .kind {
-  flex: none;
-  color: var(--accent-text);
-}
-
-.tasks-panel .task .meta .heading {
-  min-width: 0;
+.find-task-heading {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tasks-panel .task .meta .loc {
-  flex: none;
-}
-
-/* ---- inline metadata badges (req-37) ----
-   The emoji glyphs carry their own font colours; only the date text is
-   state-styled (overdue red, today accent, future default). The badges
-   are BUTTONS: a plain click re-opens the matching picker at the badge. */
-
-.tasks-panel .task .meta .due,
-.tasks-panel .task .meta .prio {
-  flex: none;
+.find-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0;
   border: 0;
   background: transparent;
-  padding: 0;
+  color: inherit;
   font: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
 
-.tasks-panel .task .meta .due:hover,
-.tasks-panel .task .meta .prio:hover {
-  text-decoration: underline;
+.find-badge.overdue {
+  color: var(--status-deleted);
 }
 
-.tasks-panel .task .meta .due.overdue {
-  color: #e5484d;
-}
-
-.tasks-panel .task .meta .due.today {
-  color: var(--accent-text);
+.find-badge.today {
+  color: var(--accent);
   font-weight: 600;
-}
-
-.tasks-panel .task .meta .prio {
-  font-size: 10.5px;
 }
 
 /* ---- editor token chips (req-37): the same metadata decorated in the

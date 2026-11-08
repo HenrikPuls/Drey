@@ -113,6 +113,18 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.53 (req-161, the Find panel) adds three things. `ui.registerFindMode({ id, label, order, status(q),
+  menu(q), mount(listHost, q) })` offers a mode to a Find panel — the host keeps a registry and attaches no
+  meaning (`ui.findModes()`, `ui.onFindModesChange`); the plugin that draws the panel mounts the mode's list
+  and reads its `status` and `menu` rows; `q` is `{ tags, text, scope }` from the panel's shared field, and
+  `mount` returns `{ update(q), onChange(listener), dispose() }`. `PluginWidgetContrib.headerTitle(el)` lets a
+  plugin draw the panel's title: the base mounts the element inside the 28 px title position and keeps the
+  rest of the header its own (fold chevron, drag by the header, right-click menu, the status after the
+  title, the hover / active controls); the content must fit the title's height, a press on a `button` inside
+  it stays a click and any other press still drags the panel, and `title` stays required (tooltip, strip
+  label, panel menu). `PluginWidgetContrib.aliases` names earlier widget ids a stored layout may still hold
+  (`['search', 'tasks']`); the dock maps them onto the panel once, in every view, and writes it back. The
+  sample plugin registers a tiny third find mode.
   1.52 adds `PluginWidgetContrib.shown?()` (default true, re-read on the `status` tick): `false` means the panel
   draws nothing right now. Only the bottom dock with that one panel reads it -- it then takes no height and
   no splitter until `shown()` is true again; a side dock ignores it (its strip icon and header stay).

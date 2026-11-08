@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DockService } from './dock.service';
+import { WidgetRegistryService } from './widget-registry.service';
 
 describe('DockService views (ADR-0089)', () => {
   beforeEach(() => {
@@ -101,5 +102,39 @@ describe('DockService views (ADR-0089)', () => {
     expect(dock.dockWidth('left')).toBe(248);
     dock.switchView('notes');
     expect(dock.dockWidth('left')).toBe(300);
+  });
+
+  it('maps a replaced panel\'s old ids to the panel that took over, once (SDK 1.53)', () => {
+    const stored = {
+      active: 'notes',
+      views: {
+        notes: {
+          dock: { left: ['files', 'search', 'tasks'], right: ['assistant'], bottom: [] },
+          flexes: { search: 333 },
+          open: { files: true, search: true, tasks: false },
+          collapsed: {},
+        },
+      },
+    };
+    localStorage.setItem('drey.dock', JSON.stringify(stored));
+    const registry = TestBed.inject(WidgetRegistryService);
+    registry.registerPluginWidget({
+      id: 'find',
+      title: 'Find',
+      aliases: ['search', 'tasks'],
+      defaultDock: 'left',
+      defaultOpen: false,
+      defaultFlex: 260,
+      mount: () => () => undefined,
+    });
+    const dock = TestBed.inject(DockService);
+    TestBed.tick();
+    expect(dock.idsFor('left').filter((id) => ['files', 'find', 'search', 'tasks'].includes(id))).toEqual(['files', 'find']);
+    expect(dock.closed('find')).toBe(false);
+
+    const persisted = JSON.parse(localStorage.getItem('drey.dock')!);
+    expect(persisted.views.notes.dock.left).toContain('find');
+    expect(JSON.stringify(persisted)).not.toContain('"search"');
+    expect(JSON.stringify(persisted)).not.toContain('"tasks"');
   });
 });

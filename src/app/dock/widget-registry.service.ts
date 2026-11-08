@@ -86,6 +86,19 @@ export class WidgetRegistryService {
     return this.widgetMap().get(id);
   }
 
+  /** Earlier widget id -> the plugin panel that replaced it (SDK 1.53 `aliases`). */
+  aliasTable(): ReadonlyMap<string, string> {
+    const table = new Map<string, string>();
+    for (const w of this.pluginWidgets()) {
+      for (const alias of w.aliases ?? []) {
+        if (!this.widgetMap().has(alias)) {
+          table.set(alias, w.id);
+        }
+      }
+    }
+    return table;
+  }
+
   /** The plugin contribution behind a plugin-registered widget id, if any. */
   contribFor(id: WidgetId): PluginWidgetContrib | undefined {
     return this.contribs.get(id);
@@ -134,6 +147,10 @@ export class WidgetRegistryService {
         ...(contrib.headerActions !== undefined
           ? { headerActionsMount: (el: HTMLElement) => contrib.headerActions!(el) }
           : {}),
+        ...(contrib.headerTitle !== undefined
+          ? { headerTitleMount: (el: HTMLElement) => contrib.headerTitle!(el) }
+          : {}),
+        ...(contrib.aliases !== undefined ? { aliases: contrib.aliases } : {}),
       },
     ]);
     return () => {

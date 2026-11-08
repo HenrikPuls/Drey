@@ -68,3 +68,64 @@ export function groupHits(hits: readonly TagSearchHit[]): HitGroup[] {
     .map(([key, group]) => ({ key, ...group }))
     .sort((a, b) => a.path.localeCompare(b.path) || (a.key < b.key ? -1 : 1));
 }
+
+/** One run of a snippet: plain text, or a match to mark. */
+export interface SnippetPart {
+  readonly text: string;
+  readonly mark: boolean;
+}
+
+/**
+ * Splits a hit's snippet into plain and matched runs for the panel's mark.
+ * Text mode marks every occurrence of each term (case as the query's match
+ * option says); regex mode marks what the pattern matches. A snippet the
+ * query cannot be applied to comes back as one plain run.
+ */
+export function snippetParts(snippet: string, query: TagSearchQuery): SnippetPart[] {
+  const text = query.text.trim();
+  if (text === '') {
+    return [{ text: snippet, mark: false }];
+  }
+  const flags = `gu${query.match?.caseSensitive === true ? '' : 'i'}`;
+  let pattern: RegExp;
+  try {
+    pattern =
+      query.match?.regex === true
+        ? new RegExp(text, flags)
+        : new RegExp(
+            text
+              .split(/\s+/)
+              .filter((term) => term !== '')
+              .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+              .join('|'),
+            flags,
+          );
+  } catch {
+    return [{ text: snippet, mark: false }];
+  }
+  const parts: SnippetPart[] = [];
+  let last = 0;
+  for (const match of snippet.matchAll(pattern)) {
+    if (match[0] === '') {
+      continue;
+    }
+    const at = match.index ?? 0;
+    if (at > last) {
+      parts.push({ text: snippet.slice(last, at), mark: false });
+    }
+    parts.push({ text: match[0], mark: true });
+    last = at + match[0].length;
+  }
+  if (last < snippet.length) {
+    parts.push({ text: snippet.slice(last), mark: false });
+  }
+  return parts.length > 0 ? parts : [{ text: snippet, mark: false }];
+}
+
+/** A file path split for a group head: the name and the folder around it. */
+export function splitPath(path: string): { name: string; folder: string } {
+  const cut = path.lastIndexOf('/');
+  return cut === -1
+    ? { name: path, folder: '' }
+    : { name: path.slice(cut + 1), folder: path.slice(0, cut) };
+}

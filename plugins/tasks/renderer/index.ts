@@ -1,47 +1,23 @@
 import type {
   DreyPluginApi,
+  FindQuery,
   OpenDocumentInfo,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
 import type { TaskRecord } from '../shared/tasks.js';
 import {
-  dueState,
-  glyphOfPriority,
   resolveTaskLine,
   scanTasks,
   setDoneOnLine,
   setDueOnLine,
   setPriorityOnLine,
-  todayIso,
 } from '../shared/tasks.js';
-import {
-  ALL_KINDS,
-  ALL_SORTS,
-  filterVisibleTasks,
-  readPrefs,
-  writePrefs,
-  type TaskScope,
-  type TaskSort,
-} from './filter.js';
+import { filterVisibleTasks, readPrefs, writePrefs } from './filter.js';
+import { createTasksFindMode } from './find-mode.js';
 import { taskToggleExtension, toggleInFocusedSurface } from './task-toggle.js';
-import { openDuePicker, openPriorityPicker, taskMetaExtension } from './task-meta.js';
+import { taskMetaExtension } from './task-meta.js';
 import { startReminders } from './reminders.js';
 import { createTasksSettingsPage, REMINDERS_ENABLED_KEY } from './settings.js';
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (className !== undefined) {
-    node.className = className;
-  }
-  if (text !== undefined) {
-    node.textContent = text;
-  }
-  return node;
-}
 
 /** Files under here are kept out of the vault list (mirrors the main-side index). */
 const TEMPLATES_PREFIX = 'templates/';
@@ -91,21 +67,19 @@ function withOpenBufferHits(
 
 /**
  * The Tasks plugin's renderer (ADR-0033, converted in ADR-0044 stage 6):
- * the Tasks dock panel (document / vault / all-vaults scope, hide-done and
- * kind filters, tag+text filter) and the `Mod+Enter` checkbox toggle as
- * editor extensions — ported from `src/app/tasks/` to plain DOM. Plus the
- * daily due-date reminder digest (req-65) and the plugin's Settings page.
+ * the task index in the renderer (document / vault / all-vaults scope), the
+ * Tasks mode it offers to the Find panel (req-161, SDK 1.53 find-mode
+ * registry: the list, the kind / done / order choices, the pickers) and the
+ * `Mod+Enter` checkbox toggle as editor extensions. Plus the daily due-date
+ * reminder digest (req-65) and the plugin's Settings page.
  */
 const plugin: PluginRendererModule = {
   activate(api: DreyPluginApi) {
     // -- state ---------------------------------------------------------------
     const prefs = readPrefs();
     const state = {
-      scope: prefs.scope,
       hideDone: prefs.hideDone,
       kinds: [...prefs.kinds],
-      queryTags: [...prefs.queryTags],
-      queryText: prefs.queryText,
       sort: prefs.sort,
       /** The index list from the plugin main (every vault, vaultId-stamped). */
       vaultTasks: [] as TaskRecord[],
@@ -119,12 +93,13 @@ const plugin: PluginRendererModule = {
     let vaultNames = new Map<string, string>();
     let activeVaultId: string | null = null;
     const persist = (): void => {
+      // The scope and the query belong to the Find panel's field now (req-161).
       writePrefs({
-        scope: state.scope,
+        scope: 'vault',
         hideDone: state.hideDone,
         kinds: state.kinds,
-        queryTags: state.queryTags,
-        queryText: state.queryText,
+        queryTags: [],
+        queryText: '',
         sort: state.sort,
       });
     };
@@ -148,7 +123,8 @@ const plugin: PluginRendererModule = {
       lastDay: () => api.settings.get<string>('remindersLastDay'),
       setLastDay: (day) => api.settings.set('remindersLastDay', day),
       notify: (request) => void api.ui.notify(request),
-      onClick: () => api.ui.revealWidget('tasks'),
+      // Find in Tasks mode (the tags plugin's `find.mode` command reveals the panel).
+      onClick: () => api.commands.run('find.mode', { mode: 'tasks' }),
     });
     api.ui.registerSettingsPage(createTasksSettingsPage(api));
 
@@ -203,76 +179,36 @@ const plugin: PluginRendererModule = {
     // boot sweep finishes, even when no vault-change event fired for it.
     api.backend.on('index-updated', () => void refreshVault());
 
-    const visibleTasks = (): TaskRecord[] => {
+    /** The tasks the Find panel's query selects: its scope, field and this mode's choices. */
+    const visibleTasks = (query: FindQuery): TaskRecord[] => {
       let base: TaskRecord[];
-      if (state.scope === 'document') {
+      if (query.scope === 'file') {
         base =
           state.activePath === null
             ? []
             : scanTasks(state.activePath, state.activeBuffer, state.activeVault ?? '');
       } else {
         // Vault scope: exactly the registry's active vault, at pull time.
-        // All scope: every known vault — the panel scopes the main-side
-        // list client-side so the active vault is never stale.
+        // All scope: every known vault — the list is scoped client-side so
+        // the active vault is never stale.
         const disk =
-          state.scope === 'vault'
+          query.scope === 'vault'
             ? state.vaultTasks.filter((t) => t.vaultId === activeVaultId)
             : state.vaultTasks;
         base = withOpenBufferHits(
           disk,
           api.documents.list(),
-          state.scope === 'vault' ? activeVaultId : null,
+          query.scope === 'vault' ? activeVaultId : null,
         );
       }
-      return filterVisibleTasks(base, state);
+      return filterVisibleTasks(base, {
+        kinds: state.kinds,
+        hideDone: state.hideDone,
+        queryTags: query.tags,
+        queryText: query.text,
+        sort: state.sort,
+      });
     };
-
-    const hasFilter = (): boolean => state.queryTags.length > 0 || state.queryText.trim() !== '';
-
-    /** Icon-only control: the words live in `title` + `aria-label`. */
-    const iconButton = (icon: string, label: string, onClick: () => void): HTMLButtonElement => {
-      const node = el('button', 'icon-btn') as HTMLButtonElement;
-      node.type = 'button';
-      node.appendChild(api.ui.icon(icon, 14));
-      node.title = label;
-      node.setAttribute('aria-label', label);
-      node.addEventListener('click', onClick);
-      return node;
-    };
-
-    // -- mutations -------------------------------------------------------------
-    const setScope = (scope: TaskScope): void => {
-      state.scope = scope;
-      notify();
-    };
-    const toggleHideDone = (): void => {
-      state.hideDone = !state.hideDone;
-      notify();
-    };
-    const toggleKind = (kind: (typeof ALL_KINDS)[number]): void => {
-      const next = state.kinds.includes(kind)
-        ? state.kinds.filter((k) => k !== kind)
-        : [...state.kinds, kind];
-      // Never let the selection reach empty -- that would hide everything.
-      if (next.length > 0) {
-        state.kinds = next;
-        notify();
-      }
-    };
-  const setText = (value: string): void => {
-    state.queryText = value;
-    notify();
-  };
-  const cycleSort = (): void => {
-    const next = ALL_SORTS[(ALL_SORTS.indexOf(state.sort) + 1) % ALL_SORTS.length] ?? 'file';
-    state.sort = next;
-    notify();
-  };
-  const clearFilter = (): void => {
-    state.queryTags = [];
-    state.queryText = '';
-    notify();
-  };
 
     // -- mutating a task line ---------------------------------------------------
     /**
@@ -325,15 +261,6 @@ const plugin: PluginRendererModule = {
       }
     };
 
-    const toggleTask = (task: TaskRecord): Promise<void> =>
-      applyToTaskLine(task, (content, line) => setDoneOnLine(content, line, !task.done));
-
-    const changeTaskDue = (task: TaskRecord, due: string | null): Promise<void> =>
-      applyToTaskLine(task, (content, line) => setDueOnLine(content, line, due));
-
-    const changeTaskPriority = (task: TaskRecord, priority: 'highest' | 'high' | 'low' | null): Promise<void> =>
-      applyToTaskLine(task, (content, line) => setPriorityOnLine(content, line, priority));
-
     // -- Mod+Enter toggle + the Selection-menu row -----------------------------
     api.editor.registerExtension('both', () => taskToggleExtension(api.editor.cm));
     // Due/priority completion on task lines (req-37).
@@ -341,7 +268,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerMenuContributions([
       {
         menu: 'selection',
-        label: 'Toggle task done',
+        label: api.i18n.t('tasks.menu.toggle_done'),
         hint: 'Ctrl Enter',
         run: () => {
           toggleInFocusedSurface(api.editor.cm);
@@ -349,241 +276,43 @@ const plugin: PluginRendererModule = {
       },
     ]);
 
-    // -- the Tasks dock panel ---------------------------------------------------
-    api.ui.registerWidget({
-      id: 'tasks',
-      title: 'Tasks',
-      icon: 'check-square',
-      defaultDock: 'left',
-      defaultOpen: false,
-      defaultFlex: 220,
-      flush: true,
-      status: () => {
-        const open = visibleTasks().filter((t) => !t.done).length;
-        return open > 0 ? `${open} open` : null;
-      },
-      headerActions: (host) => {
-        const seg = el('span', 'seg');
-        seg.setAttribute('role', 'tablist');
-        seg.setAttribute('aria-label', 'Task scope');
-        const scopes: Array<[TaskScope, string, string]> = [
-          ['document', 'file-text', 'Tasks in the open document'],
-          ['vault', 'folder', 'Tasks across the whole vault'],
-          ['all', 'layers', 'Tasks across every vault'],
-        ];
-        const buttons = scopes.map(([scope, icon, label]) => {
-          const btn = iconButton(icon, label, () => setScope(scope));
-          btn.setAttribute('role', 'tab');
-          btn.dataset['scope'] = scope;
-          seg.appendChild(btn);
-          return btn;
-        });
-
-        const render = (): void => {
-          for (const btn of buttons) {
-            const on = btn.dataset['scope'] === state.scope;
-            btn.classList.toggle('on', on);
-            btn.setAttribute('aria-selected', String(on));
-          }
-        };
-        render();
-        listeners.add(render);
-        host.appendChild(seg);
-        return () => {
-          listeners.delete(render);
-        };
-      },
-      mount: (body) => {
-        body.classList.add('tasks-panel');
-
-        // -- filter block (pinned; only the list scrolls -- widget is flush) --
-        // ONE field (milestone 43): the shared tag field in free-text mode,
-        // so a typed `#name` becomes a chip and the rest filters by text;
-        // the three view toggles sit at its right edge as icons.
-        const fieldIcon = el('span', 'filter-icon');
-        fieldIcon.appendChild(api.ui.icon('filter', 14));
-        const tagField = api.ui.createTagField({
-          values: state.queryTags,
-          onChange: (values) => {
-            state.queryTags = values;
+    // -- the Tasks mode of the Find panel ----------------------------------------
+    api.ui.registerFindMode(
+      createTasksFindMode(api, {
+        visibleTasks,
+        prefs: () => ({ hideDone: state.hideDone, kinds: state.kinds, sort: state.sort }),
+        setHideDone: (hide) => {
+          state.hideDone = hide;
+          notify();
+        },
+        toggleKind: (kind) => {
+          const next = state.kinds.includes(kind)
+            ? state.kinds.filter((k) => k !== kind)
+            : [...state.kinds, kind];
+          // Never let the selection reach empty -- that would hide everything.
+          if (next.length > 0) {
+            state.kinds = next;
             notify();
-          },
-          ariaLabel: 'Filter tasks by text and #tags',
-          freeText: {
-            value: state.queryText,
-            onInput: (text) => setText(text),
-          },
-        });
-        const clearButton = iconButton('x', 'Clear filter', clearFilter);
-        const doneBtn = iconButton('circle-check', 'Hide completed tasks', toggleHideDone);
-        const boxBtn = iconButton('check-square', 'Show - [ ] checkbox tasks', () =>
-          toggleKind('checkbox'),
-        );
-        const tagBtn = iconButton('hash', 'Show lines tagged #task', () => toggleKind('tag'));
-        const sortBtn = iconButton('list-ordered', 'Sort: file order', cycleSort);
-        for (const btn of [doneBtn, boxBtn, tagBtn, sortBtn]) {
-          btn.setAttribute('aria-pressed', 'false');
-        }
-
-        const filter = el('div', 'filter');
-        const content = el('div', 'content');
-
-        const renderChips = (): void => {
-          tagField.setValues(state.queryTags);
-        };
-
-        const taskRow = (task: TaskRecord, showLoc: boolean): HTMLElement => {
-          const wrap = el('div', 'task');
-          if (task.done) {
-            wrap.classList.add('done');
           }
-          const box = el('input', 'box') as HTMLInputElement;
-          box.type = 'checkbox';
-          box.checked = task.done;
-          box.setAttribute('aria-label', task.done ? 'Mark not done' : 'Mark done');
-          box.addEventListener('change', () => void toggleTask(task));
-
-          // The meta row (with its badge BUTTONS) sits beside the body
-          // button, not inside it -- a button inside a button is invalid
-          // HTML and the click would bubble into the open-file action.
-          const rows = el('div', 'rows');
-          const bodyButton = el('button', 'body') as HTMLButtonElement;
-          bodyButton.type = 'button';
-          bodyButton.appendChild(el('span', 'text', task.text || '(untitled task)'));
-          bodyButton.addEventListener(
-            'click',
-            () => void api.documents.open(task.path, task.line, { vaultId: task.vaultId }),
-          );
-          rows.appendChild(bodyButton);
-          const meta = el('span', 'meta');
-          if (task.kind === 'tag') {
-            meta.appendChild(el('span', 'kind', '#task'));
-          }
-          if (task.due !== null) {
-            // The badge is a button: a plain click re-opens the date picker
-            // at the badge and writes the change back through the task's
-            // routing (req-37).
-            const due = el('button', `due ${dueState(task.due, todayIso())}`) as HTMLButtonElement;
-            due.type = 'button';
-            due.textContent = `📅 ${task.due}`;
-            due.title = `Due ${task.due} — change`;
-            due.setAttribute('aria-label', `Change due date (${task.due})`);
-            due.addEventListener('click', () => {
-              const rect = due.getBoundingClientRect();
-              openDuePicker({ left: rect.left, top: rect.bottom }, task.due, (value) =>
-                void changeTaskDue(task, value),
-              );
-            });
-            meta.appendChild(due);
-          }
-          if (task.priority !== null) {
-            const prio = el('button', `prio prio-${task.priority}`) as HTMLButtonElement;
-            prio.type = 'button';
-            prio.textContent = glyphOfPriority(task.priority);
-            prio.title = `Priority: ${task.priority} — change`;
-            prio.setAttribute('aria-label', `Change priority (${task.priority})`);
-            prio.addEventListener('click', () => {
-              const rect = prio.getBoundingClientRect();
-              openPriorityPicker({ left: rect.left, top: rect.bottom }, (value) =>
-                void changeTaskPriority(task, value),
-              );
-            });
-            meta.appendChild(prio);
-          }
-          if (task.heading !== null) {
-            meta.appendChild(el('span', 'heading', task.heading));
-          }
-          if (showLoc) {
-            meta.appendChild(el('span', 'loc', `:${task.line}`));
-          }
-          rows.appendChild(meta);
-
-          wrap.append(box, rows);
-          return wrap;
-        };
-
-        const renderContent = (): void => {
-          content.textContent = '';
-          const visible = visibleTasks();
-          if (visible.length === 0) {
-            content.appendChild(
-              el(
-                'p',
-                'empty',
-                hasFilter()
-                  ? 'No tasks match the filter.'
-                  : state.scope === 'document'
-                    ? 'No tasks in this document.'
-                    : state.scope === 'vault'
-                      ? 'No tasks in the vault.'
-                      : 'No tasks in any vault.',
-              ),
-            );
-            return;
-          }
-          const list = el('div', 'list');
-          if (state.scope === 'document' || state.sort !== 'file') {
-            // Document scope, and every due/priority sort: a flat list in
-            // the sort order (a grouped view would fight the ordering).
-            for (const task of visible) {
-              list.appendChild(taskRow(task, state.scope !== 'document'));
-            }
-          } else {
-            // Grouped by file; the full path disambiguates same-named
-            // notes, and in the All scope a badge names every group's
-            // vault (the active one stays unbadged, like the Search panel).
-            let lastKey: string | null = null;
-            for (const task of visible) {
-              const key = `${task.vaultId} ${task.path}`;
-              if (key !== lastKey) {
-                lastKey = key;
-                const group = el('p', 'group', task.path);
-                group.title = task.path;
-                if (task.vaultId !== activeVaultId) {
-                  group.appendChild(
-                    el('span', 'vault', vaultNames.get(task.vaultId) ?? task.vaultId),
-                  );
-                }
-                list.appendChild(group);
-              }
-              list.appendChild(taskRow(task, true));
-            }
-          }
-          content.appendChild(list);
-        };
-
-        const render = (): void => {
-          renderChips();
-          if (!filter.contains(document.activeElement)) {
-            tagField.setText(state.queryText);
-          }
-          clearButton.hidden = !hasFilter();
-          for (const [btn, on] of [
-            [doneBtn, state.hideDone],
-            [boxBtn, state.kinds.includes('checkbox')],
-            [tagBtn, state.kinds.includes('tag')],
-          ] as const) {
-            btn.classList.toggle('on', on);
-            btn.setAttribute('aria-pressed', String(on));
-          }
-          const sortLabel = `Sort: ${state.sort === 'file' ? 'file order' : state.sort}`;
-          sortBtn.title = sortLabel;
-          sortBtn.setAttribute('aria-label', sortLabel);
-          sortBtn.classList.toggle('on', state.sort !== 'file');
-          sortBtn.setAttribute('aria-pressed', String(state.sort !== 'file'));
-          renderContent();
-        };
-
-        filter.append(fieldIcon, tagField.element, clearButton, doneBtn, boxBtn, tagBtn, sortBtn);
-        body.append(filter, content);
-        render();
-        listeners.add(render);
-        return () => {
-          listeners.delete(render);
-          tagField.dispose();
-        };
-      },
-    });
+        },
+        setSort: (sort) => {
+          state.sort = sort;
+          notify();
+        },
+        vaultName: (vaultId) => vaultNames.get(vaultId) ?? vaultId,
+        activeVaultId: () => activeVaultId,
+        toggleTask: (task) =>
+          applyToTaskLine(task, (content, line) => setDoneOnLine(content, line, !task.done)),
+        changeTaskDue: (task, due) =>
+          applyToTaskLine(task, (content, line) => setDueOnLine(content, line, due)),
+        changeTaskPriority: (task, priority) =>
+          applyToTaskLine(task, (content, line) => setPriorityOnLine(content, line, priority)),
+        onChange: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      }),
+    );
   },
 
   deactivate() {

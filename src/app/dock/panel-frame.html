@@ -16,7 +16,11 @@
     <app-icon [name]="collapsed() ? 'chevron-right' : 'chevron-down'" [size]="12" [strokeWidth]="2" />
   </button>
   @if (!titleReplaced()) {
-    <span class="title">{{ title() }}</span>
+    @if (headerTitleMount()) {
+      <span class="title-slot" #pluginTitle (mousedown)="onTitleSlotPress($event)"></span>
+    } @else {
+      <span class="title">{{ title() }}</span>
+    }
     @if (status(); as s) {
       <span class="status">{{ s }}</span>
     }

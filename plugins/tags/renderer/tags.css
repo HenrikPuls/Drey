@@ -1,247 +1,421 @@
-/* Tags plugin styles (milestone 33 rewrite).
+/* Tags plugin styles (milestone 33 rewrite; the Find panel, req-161 / board 9c).
  *
- * Every class is prefixed `tag-search-` / `tags-settings-` and the panel
- * rules are additionally rooted at `.tag-search` / `.plugin-settings-body`
- * — plugin CSS loads as a GLOBAL stylesheet, so unprefixed class names
- * would collide across plugins (the old `.chip`/`.hit` collided with the
- * Tasks panel's). Design tokens only; sizes in rem/px as AUTHORING.md allows.
+ * Every class is prefixed `find-` / `tag-search-` / `tags-settings-` and the
+ * panel rules are additionally rooted at `.find` — plugin CSS loads as a
+ * GLOBAL stylesheet, so unprefixed class names would collide across plugins.
+ * Design tokens only; sizes in px as the board gives them (type 13/14).
  */
 
-/* ---- the Search panel (a flush widget: inputs pinned, results scroll) ---- */
+/* ---- the Find panel (a flush widget: the field pinned, the list scrolls) ---- */
 
-.tag-search {
+.find {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px 12px;
 }
 
-/* query block: ONE bordered field carries the search icon, the tag chips,
-   the free text and the three match toggles (milestone 43). The scope
-   switch in the panel header and every icon button use the shell's shared
-   `.seg` / `.icon-btn` (src/styles.css). */
+/* header: the mode as the title (the base mounts it in the 28 px title slot) */
 
-.tag-search-field {
+.find-tabs {
+  display: flex;
+}
+
+.find-tab {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: none;
-  min-height: var(--field-h);
-  padding: 3px 4px 3px 8px;
-  background: var(--bg-editor);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-xs);
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
 }
 
-.tag-search-field:focus-within {
+.find-tab[aria-selected='true'] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.find-tab:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+/* ONE bordered field carries the search icon, the tag chips, the free text,
+   Clear and the Replace switch; a second one below holds the replacement. */
+
+.find-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  box-sizing: border-box;
+  min-height: 32px;
+  margin: 0 8px 8px;
+  padding: 0 4px 0 8px;
+  background: var(--bg-search);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  color: var(--text-4);
+}
+
+.find-field:focus-within {
   border-color: var(--accent);
 }
 
-.tag-search-field-icon {
+.find-field--error {
+  border-color: var(--status-deleted);
+}
+
+.find-field-icon {
   display: inline-flex;
   flex: none;
-  color: var(--text-5);
+  color: var(--text-4);
 }
 
-.tag-search-field .tag-field {
+.find-field .tag-field {
+  position: static;
   flex: 1;
+  min-width: 0;
 }
 
-.tag-search-field .tag-field-input {
+.find-field .tag-field-chips {
+  gap: 6px;
+}
+
+.find-field .tag-field-chip {
   height: 22px;
+  padding: 0 4px 0 6px;
+  border-radius: var(--radius-chip);
   font-size: 13px;
 }
 
-.tag-search-input {
+.find-field .tag-field-x {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-chip);
+  opacity: 1;
+}
+
+.find-field .tag-field-input,
+.find-input {
   flex: 1;
   min-width: 0;
-  height: 22px;
+  height: 30px;
   padding: 0;
   background: transparent;
   border: 0;
   outline: none;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
 }
 
-/* `hidden` must win over the class's display:flex (the author rule
-   otherwise overrides the UA hidden style). */
-.tag-search-replace[hidden],
-.tag-search .icon-btn[hidden] {
+.find-field .tag-field-input {
+  min-width: 40px;
+}
+
+/* the #tag completion: under the field, the field's width */
+
+.find-field .tag-field-menu {
+  left: -1px;
+  right: -1px;
+  top: 100%;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  box-shadow: none;
+}
+
+.find-field .tag-field-option {
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border-radius: var(--radius-chip);
+  gap: 8px;
+}
+
+.find-field .tag-field-option:hover,
+.find-field .tag-field-option.active {
+  background: var(--hover-bg-strong);
+}
+
+.find-field .tag-field-option-tag {
+  font-size: 13px;
+  padding: 0 6px;
+  line-height: 22px;
+  border-radius: var(--radius-chip);
+}
+
+.find-field .tag-field-option-count {
+  font-size: 13px;
+  color: var(--text-4);
+}
+
+.find .icon-btn[hidden],
+.find-field[hidden],
+.find-error[hidden],
+.find-group-rows[hidden] {
   display: none;
 }
 
 /* inline error (regex / provider / scope), never a silent empty panel */
-.tag-search-error {
-  margin: 0;
+
+.find-error {
   flex: none;
-  color: var(--spell-error, #e06c6c);
-  font-size: 0.75rem;
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--status-deleted);
+  font-size: 13px;
+  line-height: 18px;
   overflow-wrap: anywhere;
 }
 
-/* summary row: counts · Replace · Export · Summarize · Clear (icons) */
+/* the list: group heads of 28 px, rows of 52 px */
 
-.tag-search-summary {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-}
-
-.tag-search-summary[hidden] {
-  display: none;
-}
-
-.tag-search-summary-text {
-  flex: 1;
-  color: var(--text-3);
-  font-size: 0.75rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* results: one collapsible group per file, per-hit replace */
-
-.tag-search-results {
+.find-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-bottom: 4px;
 }
 
-.tag-search-empty {
-  margin: 4px 2px;
-  color: var(--text-3);
-  font-size: 0.8125rem;
+.find-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--text-4);
+  font-size: 14px;
+  line-height: 20px;
 }
 
-.tag-search-file {
-  margin-bottom: 2px;
-}
-
-.tag-search-file-head {
+.find-group-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 2px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  margin-top: 4px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  list-style: none;
-  color: var(--text-heading);
-  font-size: 0.8125rem;
 }
 
-.tag-search-file-head::-webkit-details-marker {
-  display: none;
+.find-group:first-child > .find-group-head {
+  margin-top: 0;
 }
 
-.tag-search-file-chevron {
+.find-group-head:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+.find-chevron {
   display: inline-flex;
   flex: none;
-  color: var(--text-5);
   transition: transform 0.12s ease;
 }
 
-.tag-search-file[open] > .tag-search-file-head .tag-search-file-chevron {
-  transform: rotate(90deg);
+.find-group-head[aria-expanded='false'] .find-chevron {
+  transform: rotate(-90deg);
 }
 
-.tag-search-file-path {
-  flex: 1;
+.find-group-name {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl; /* keep the file NAME visible on narrow panels */
-  text-align: left;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.tag-search-file-vault {
-  flex: none;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--bg-search);
-  color: var(--text-3);
-  font-family: var(--font-sans);
-  font-size: var(--fs-mono-tag);
-}
-
-.tag-search-file-count {
-  flex: none;
-  color: var(--text-3);
-  font-family: var(--font-sans);
-  font-size: var(--fs-mono-tag);
-}
-
-.tag-search-hit {
-  display: block;
-  width: 100%;
-  margin: 0 0 2px 12px;
-  padding: 4px 6px;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-xs);
-  color: var(--text-2);
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  cursor: pointer;
-}
-
-.tag-search-hit:hover {
-  background: var(--hover-bg);
-}
-
-.tag-search-hit-head {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  margin-bottom: 1px;
-}
-
-.tag-search-hit-heading {
-  color: var(--text-heading);
-  font-size: 0.8125rem;
+.find-group-folder {
+  flex: 0 1000 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
 }
 
-.tag-search-hit-loc {
-  color: var(--text-5);
-  font-family: var(--font-sans);
-  font-size: var(--fs-mono-tag);
+.find-group-vault {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  font-size: 13px;
 }
 
-.tag-search-hit-unsaved {
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--accent-surface);
-  color: var(--accent-text);
-  font-size: 10px;
+.find-group-count {
+  flex: none;
+  margin-left: auto;
+  font-size: 13px;
 }
 
-.tag-search-hit-snippet {
-  display: block;
-  color: var(--text-3);
+.find-hit-wrap {
+  position: relative;
+}
+
+.find-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 12px 6px 26px;
+  border: 0;
+  border-bottom: 1px solid var(--hover-bg);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.find-hit:hover {
+  background: var(--hover-bg);
+}
+
+.find-hit[aria-current='true'] {
+  background: var(--active-bg);
+}
+
+.find-hit:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+.find-hit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
 }
 
-.tag-search-hit-replace {
-  float: right;
+.find-hit-heading {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.find-hit-loc {
+  flex: none;
+  color: var(--text-4);
+  font-size: 13px;
+}
+
+.find-hit-unsaved {
+  flex: none;
+  color: var(--status-modified);
+  font-size: 13px;
+}
+
+.find-hit-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.find-mark {
+  border-radius: 2px;
+  background: var(--accent-surface);
+  color: var(--text-primary);
+}
+
+.find-hit-replace {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
   opacity: 0;
 }
 
-.tag-search-hit:hover .tag-search-hit-replace,
-.tag-search-hit-replace:focus-visible {
+.find-hit-wrap:hover .find-hit-replace,
+.find-hit-replace:focus-visible {
   opacity: 1;
+}
+
+/* ---- the ⋯ menu (a popover in the document body) ---- */
+
+.find-menu {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+}
+
+.find-menu-label {
+  padding: 4px 8px;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.find-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.find-menu-item:hover:not(:disabled),
+.find-menu-item:focus-visible {
+  background: var(--hover-bg-strong);
+  outline: none;
+}
+
+.find-menu-item:disabled {
+  color: var(--text-4);
+  cursor: default;
+}
+
+.find-menu-check {
+  display: flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.find-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
 }
 
 /* ---- the bundled replace confirmation (api.ui.showModal) ---- */
@@ -522,4 +696,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* an error beats the focus ring: the field stays red while it is typed in */
+.find-field.find-field--error,
+.find-field.find-field--error:focus-within {
+  border-color: var(--status-deleted);
 }

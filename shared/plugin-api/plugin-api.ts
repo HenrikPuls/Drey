@@ -170,8 +170,72 @@ export interface PluginWidgetContrib {
    * the shell; return cleanup.
    */
   headerActions?(el: HTMLElement): () => void;
+  /**
+   * SDK 1.53: the plugin draws the panel's title. The host mounts the
+   * element's content INSIDE the 28 px title position and keeps the rest of
+   * the header its own: the fold chevron, the drag by the header, the
+   * right-click menu, the `status` after the title and the hover / active
+   * controls. The content must fit the title's height and may not take the
+   * header's drag: the host lets a press on a `button` inside it stay a
+   * click, any other press still drags the panel. `title` stays required
+   * (tooltip, strip label, the panel menu). Return cleanup.
+   */
+  headerTitle?(el: HTMLElement): () => void;
+  /**
+   * SDK 1.53: earlier widget ids this panel replaces (`['search', 'tasks']`
+   * for a merged panel). A stored layout (any view) that names one gets the
+   * panel at that place with that open / fold / size state, once; when
+   * several are named the first in the dock list wins the place.
+   */
+  readonly aliases?: readonly string[];
   /** Build the panel body; return cleanup (called on unregister). */
   mount(el: HTMLElement): () => void;
+}
+
+/** What a Find panel asks its modes (SDK 1.53): the shared field's content and the scope. */
+export interface FindQuery {
+  readonly tags: readonly string[];
+  readonly text: string;
+  /** Where to look: the open note, the active vault or every vault. */
+  readonly scope: 'file' | 'vault' | 'all';
+}
+
+/** One menu row a find mode contributes (SDK 1.53). */
+export type FindMenuEntry =
+  | { readonly kind: 'check'; readonly label: string; readonly checked: boolean; run(): void }
+  | { readonly kind: 'label'; readonly label: string }
+  | { readonly kind: 'separator' };
+
+/**
+ * A mode of the Find panel (SDK 1.53): a list the panel shows for the shared
+ * field's query. The host keeps a registry and attaches no meaning; the plugin
+ * that hosts the panel reads it. The mode keeps its own data, writes and
+ * pickers and only mounts its list.
+ */
+export interface FindModeContrib {
+  readonly id: string;
+  /** The word in the panel title (sentence case). */
+  readonly label: string;
+  /** Left to right among the modes; lower first. */
+  readonly order: number;
+  /** The header's status value for this mode, `null` = none. */
+  status(query: FindQuery): string | null;
+  /** The mode's rows of the panel's ⋯ menu, after the shared "Look in" group. */
+  menu(query: FindQuery): readonly FindMenuEntry[];
+  /**
+   * Mounts the mode's list into `listHost` and returns an updater the panel
+   * calls with every new query, plus the cleanup.
+   */
+  mount(listHost: HTMLElement, query: FindQuery): FindModeHandle;
+}
+
+export interface FindModeHandle {
+  /** The query changed (the mode re-renders). */
+  update(query: FindQuery): void;
+  /** The mode's own data changed: the panel re-reads `status` and `menu`. */
+  onChange(listener: () => void): Unsubscribe;
+  /** The mode is hidden or the panel unmounts. */
+  dispose(): void;
 }
 
 /**
@@ -1053,6 +1117,23 @@ export interface DreyPluginApi {
 
   readonly ui: {
     registerWidget(widget: PluginWidgetContrib): Unsubscribe;
+    /**
+     * Offer a mode to a Find panel (SDK 1.53). A base registry: the host
+     * attaches no meaning, the plugin that draws the panel reads
+     * `findModes()` / `onFindModesChange`. The registration goes with the
+     * plugin when it is disabled.
+     */
+    registerFindMode(mode: FindModeContrib): Unsubscribe;
+    /** The registered find modes, by `order` (SDK 1.53). */
+    findModes(): readonly FindModeContrib[];
+    /**
+     * Re-reads every dock panel's `status` now (SDK 1.53). The shell does it
+     * on document and vault events only; a panel whose status changes
+     * otherwise (an async search result) calls this after the change.
+     */
+    refreshStatus(): void;
+    /** Fires when a find mode is registered or removed (SDK 1.53). */
+    onFindModesChange(listener: () => void): Unsubscribe;
     registerSettingsPage(page: PluginSettingsPageContrib): Unsubscribe;
     registerDocKind(kind: PluginDocKindContrib): Unsubscribe;
     /**

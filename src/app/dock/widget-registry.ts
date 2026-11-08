@@ -71,6 +71,10 @@ export interface WidgetDescriptor {
    * widgets only — core panels use the `[appPanelHeaderActions]` template).
    */
   headerActionsMount?(el: HTMLElement): () => void;
+  /** A plugin widget that draws its own title into the header's title slot (SDK 1.53). */
+  headerTitleMount?(el: HTMLElement): () => void;
+  /** Earlier widget ids a stored layout may still name (SDK 1.53). */
+  aliases?: readonly string[];
 }
 
 /**

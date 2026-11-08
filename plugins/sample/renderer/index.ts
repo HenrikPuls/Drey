@@ -233,6 +233,29 @@ const plugin: PluginRendererModule = {
       },
     });
 
+    // A mode of a Find panel (SDK 1.53): the host keeps the registry, the
+    // plugin that draws the panel (tags) mounts the list and the menu rows.
+    api.ui.registerFindMode({
+      id: 'sample',
+      label: 'Sample',
+      order: 90,
+      status: (query) => `${query.tags.length + (query.text === '' ? 0 : 1)} terms`,
+      menu: () => [],
+      mount: (listHost, initial) => {
+        const line = document.createElement('p');
+        const draw = (query: { readonly text: string }): void => {
+          line.textContent = `You searched for "${query.text}".`;
+        };
+        draw(initial);
+        listHost.appendChild(line);
+        return {
+          update: draw,
+          onChange: () => () => undefined,
+          dispose: () => line.remove(),
+        };
+      },
+    });
+
     api.ui.registerSettingsPage({
       id: 'sample',
       label: 'Sample plugin',
