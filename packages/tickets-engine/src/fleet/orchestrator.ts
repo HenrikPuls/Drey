@@ -1960,6 +1960,7 @@ export class Orchestrator {
         ? {
             persona: {
               id: persona.id,
+              role: persona.role,
               // D-62: the pool/router choice of this pass; a pool entry may
               // name its own provider (`kimi/k2`), else the persona's harness runs.
               worker: modelChoice?.provider ?? persona.worker,

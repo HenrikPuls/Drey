@@ -3091,6 +3091,7 @@ export class EngineBoardService {
       const derived = deriveWorkerModel(personaResolution.persona, null);
       personaDispatch = {
         id: personaResolution.persona.id,
+        role: personaResolution.persona.role,
         worker: derived.workerChoice,
         model: derived.model ?? '',
         prompt: await loader.prompt(personaResolution.persona.id),

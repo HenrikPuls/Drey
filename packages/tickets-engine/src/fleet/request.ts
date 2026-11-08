@@ -115,6 +115,8 @@ export interface ComposeRunInput {
 export interface PersonaDispatch {
   /** The persona id — what `RunInfo.persona` stamps and the report groups by. */
   readonly id: string;
+  /** The persona's role for the brief's persona line (D-60); absent = id only. */
+  readonly role?: string | null;
   /** The harness pin (`opencode` | `claude-code` | `kimi`; anything unreadable leaves the ring in charge). */
   readonly worker: string;
   /** The model pin. */
@@ -272,7 +274,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         ...(extraReadGrounds.length > 0 ? { extraRepos: extraReadGrounds } : {}),
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
         ...(persona !== null
-          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id }
+          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id, personaRole: persona.role ?? null }
           : {}),
       })
     : composeInstruction({
@@ -299,7 +301,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         caps: input.caps ?? DEFAULT_FLEET_CAPS,
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
         ...(persona !== null
-          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching) }
+          ? { skillsSection: personaSkillsSection(persona.skills), memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id, personaRole: persona.role ?? null }
           : {}),
       });
   // A scout run never gates and never moves (concept §5.6) — the same
