@@ -1389,7 +1389,7 @@ export function parseProposal(json: unknown): ChatProposalView | null {
  * card's headline.
  */
 export interface ChatFailureView {
-  readonly code: 'not-configured' | 'unsupported' | 'unreachable' | 'refused' | 'timeout';
+  readonly code: 'not-configured' | 'unsupported' | 'unreachable' | 'refused' | 'timeout' | 'cancelled';
   readonly providerLabel: string;
   readonly baseUrl: string | null;
   readonly model: string | null;
@@ -1398,7 +1398,7 @@ export interface ChatFailureView {
   readonly file?: string;
 }
 
-const FAILURE_CODES: readonly ChatFailureView['code'][] = ['not-configured', 'unsupported', 'unreachable', 'refused', 'timeout'];
+const FAILURE_CODES: readonly ChatFailureView['code'][] = ['not-configured', 'unsupported', 'unreachable', 'refused', 'timeout', 'cancelled'];
 
 /** The `failure` of a refused chat turn; null when the answer carries none (or a malformed one). */
 export function parseChatFailure(json: unknown): ChatFailureView | null {

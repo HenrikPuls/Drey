@@ -683,6 +683,7 @@ export class Chat {
       unreachable: `${who} cannot reach the model`,
       refused: `The model refused ${who}'s request`,
       timeout: `The model took too long for ${who}`,
+      cancelled: `${who}'s turn was cancelled`,
     };
     return { ...failure, headline: headline[failure.code] };
   });

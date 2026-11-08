@@ -4,6 +4,12 @@
 
 Accepted — replaces the 120 s `/chat/completions` deadline.
 
+**Later change (milestone 212, D-63):** the rule binds the Mission Control
+chat bridge too (`packages/tickets-engine/src/services/chat-llm.ts`): its
+own 120 s turn timeout is gone, a turn streams until the model ends or the
+client's `signal` cancels it (the stream's events are the progress; the
+client's Cancel control is req-157).
+
 ## Context
 
 `LmStudioClient.chat` used `AbortSignal.timeout(120_000)`. On real
