@@ -1,3 +1,12 @@
+### Milestone 208 -- D-58 header icons stuck after fold or close; req-163 controls show while the panel is active
+
+**Not yet manually verified by the owner.**
+
+- **D-58, a dock panel's hover-only header icons stayed visible after folding it with the chevron.** Cause: `src/app/dock/panel-frame.css` set `--head-actions: 1` on `.head:focus-within`; a mouse click leaves focus on the chevron button, so the actions stayed shown until focus moved. Fix: `.head:has(:focus-visible)` -- hover or keyboard focus. Close via the strip icon or the context menu removes the frame, so it needed no change of its own.
+- **req-163, the owner amends board 9a: the controls also show while the panel is the active one.** `DockService.activePanel` follows a capture-phase `pointerdown` / `focusin` on `document` (the registered panel element that contains the target; outside every panel, e.g. the editor, clears it). `PanelFrame` sets `.active` on its host and `panel-frame.css` raises `--head-actions` for it; the calendar's title-replacing row reads the same switch; the existing opacity transition fades them out. ADR-0019 later change and the amendment note in `docs/design/work-panel/boards/notes.md`.
+- **Specs:** `dock.service.spec.ts` ("the active panel": pointer and focus inside a panel set it, a target outside every panel clears it). The CSS visibility itself is not specced (the renderer test setup cannot read the component CSS and jsdom does not evaluate `:has(:focus-visible)`).
+- **Not verified in a built app by this session.** To check: click into the Files tree and the Files header's controls appear; click into the editor and they go; mouse-fold a panel, move the pointer away, click the editor -- icons gone; Tab onto a chevron -- icons appear.
+
 ### Design — the Crew internals concept (2026-11-07/08)
 
 Documentation only, no code. A design session with the owner settled how the Crew works inside: fourteen rulings in

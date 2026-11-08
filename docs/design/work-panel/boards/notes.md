@@ -187,3 +187,6 @@ History rows 52 px: subject 14/20, "author · time · hash" 13/18, "↑ not push
 Banners (radius 8, title 14/600, sub 13): merge (--status-conflict 12 % / 45 %), amend (--accent), managed (--active-bg). ⋯: Fetch from the remote · Commit and push | Merge a branch… · Stash changes · Stashes… (count) · Amend the last commit | Git history of this file… · Refresh the status.
 Dialogs (branch picker, stashes, file history, confirms) are not part of this board. Icon lock is missing in src/app/icons/icon.ts although the panel asks for it today: the build adds it.
 
+## Amendment to board 9a (owner, 2026-11-07)
+
+Panel header controls are not hover-only: they show on header hover, on keyboard focus and while the panel is the active one (focus or the last pointer interaction inside it); they fade when the editor or another panel becomes active. See ADR-0019, milestone 208.

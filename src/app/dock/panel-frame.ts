@@ -22,7 +22,7 @@ import { WidgetRegistryService } from './widget-registry.service';
 /**
  * The chrome every open dock panel shares (board 9a): a header (a fold
  * chevron + the title + an optional status value + the panel's controls,
- * which show on hover or focus), then the panel body (`<ng-content>`).
+ * which show on header hover, keyboard focus or while the panel is active), then the panel body (`<ng-content>`).
  *
  * The body scrolls, except for the assistant panel, which fills the frame
  * and scrolls internally (its own header + composer stay put). A closed
@@ -41,6 +41,7 @@ import { WidgetRegistryService } from './widget-registry.service';
   styleUrl: './panel-frame.css',
   host: {
     '[class.dragging]': 'isDragging()',
+    '[class.active]': 'isActive()',
   },
 })
 export class PanelFrame implements OnInit {
@@ -91,6 +92,8 @@ export class PanelFrame implements OnInit {
   );
   private readonly pluginActionsView = viewChild<ElementRef<HTMLDivElement>>('pluginActions');
   protected readonly isDragging = computed(() => this.dock.dragging() === this.panelId());
+  /** True while this is the panel the user last interacted with: its header controls show. */
+  protected readonly isActive = computed(() => this.dock.activePanel() === this.panelId());
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.dock.unregisterPanelEl(this.panelId(), this.el));

@@ -679,4 +679,36 @@ describe('DockService', () => {
       expect(setItem.mock.calls.length).toBeLessThan(10);
     });
   });
+
+  describe('the active panel (req-163)', () => {
+    function frame(dock: DockService, id: string): HTMLElement {
+      const el = document.createElement('div');
+      el.appendChild(document.createElement('button'));
+      document.body.appendChild(el);
+      dock.registerPanelEl(id, el);
+      return el;
+    }
+
+    it('follows pointer and focus inside a panel and clears outside every panel', () => {
+      const dock = make();
+      const files = frame(dock, 'files');
+      const search = frame(dock, 'search');
+      const editor = document.createElement('div');
+      document.body.appendChild(editor);
+      expect(dock.activePanel()).toBeNull();
+
+      files.firstElementChild!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(dock.activePanel()).toBe('files');
+
+      search.firstElementChild!.dispatchEvent(new Event('focusin', { bubbles: true }));
+      expect(dock.activePanel()).toBe('search');
+
+      editor.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(dock.activePanel()).toBeNull();
+
+      for (const el of [files, search, editor]) {
+        el.remove();
+      }
+    });
+  });
 });

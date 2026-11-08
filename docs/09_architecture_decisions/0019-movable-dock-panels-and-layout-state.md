@@ -329,3 +329,18 @@ the bottom dock kept its height around an empty panel. SDK 1.52 adds the optiona
 `DockService.bottomShowsNothing()` is true and the dock draws nothing (no band,
 no splitter; the panel stays mounted). A side dock ignores `shown` -- its strip
 and header stay.
+
+## Later change -- board 9a amended by the owner: hover-only became hover, keyboard focus or the active panel (milestone 208, D-58, req-163)
+
+Board 9a showed a panel's header controls on header hover or focus only. The
+owner's first verification round found two faults. `:focus-within` kept the icons
+on after a mouse click on the chevron (D-58), and hidden buttons surprised him
+when he was working in a panel (req-163). The rule is now: the controls show on
+header hover, on **keyboard** focus (`.head:has(:focus-visible)`, never
+`:focus-within`) and while the panel is the **active** one.
+`DockService.activePanel` is the panel last interacted with: a capture-phase
+`pointerdown` or `focusin` on `document` resolves the registered panel element
+that contains the target, and a target outside every panel (the editor, the
+titlebar, a strip) clears it. `PanelFrame` sets `.active` on its host, and
+`panel-frame.css` raises `--head-actions` for it, so the calendar's title-replacing
+row follows and the opacity fades out when another surface takes over.
