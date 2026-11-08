@@ -205,6 +205,33 @@ stays in place as belt-and-braces; `verify:pack` asserts the absence.
   `plugins.disabled` in `app-config.json` (Settings → Panels & plugins);
   an `apiVersion` mismatch marks the plugin `incompatible` and skips it.
 
+## Drey Service in the package (req-164, [ADR-0092](09_architecture_decisions/0092-drey-service-the-shipped-background-process.md))
+
+The background process ships inside the app, no second runtime: its entry
+is `dist-electron/packages/tickets-engine/src/service/service-main.js`
+(compiled by the plugin main tsc program with the rest of
+`packages/tickets-engine`), inside `app.asar` like the plugins. The tickets
+plugin starts it with the app's own executable as Node
+(`Drey.exe <app.asar>/…/service-main.js --home ~/.drey-engine --vault <tickets vault>`
+under `ELECTRON_RUN_AS_NODE=1`; Electron's Node mode reads the asar), detached,
+so it outlives the window. It serves Mission Control from
+`dist/mission-control/browser` beside it (the legacy remote client when that
+folder is missing). The launch is built in one place
+(`service/launch.ts`): the process mode — Node as now, or Electron headless
+(`Drey.exe --drey-service`) that the tray of req-165 would need — is the
+owner's open question Q3, and only that file changes with the answer.
+
+What it writes lives outside the install, in `%USERPROFILE%\.drey-engine`:
+`service.lock` (discovery), `service.log`, `service-start.log`,
+`config.json`, `fleet/` (the Crew runner's runs and chain state). An
+uninstall leaves that folder, like the vault. **Start with Windows** is
+opt-in (`service-main.js --autostart on`): the per-user
+`HKCU\…\CurrentVersion\Run` value `DreyService`, a hidden PowerShell that
+sets `ELECTRON_RUN_AS_NODE` and runs the entry (Node mode; a console may
+flash at log-in). The value names the installed path, so an update that
+moves the install needs it switched off and on again; the Settings switch
+of req-165 will rewrite it at every start.
+
 ## asar and `asarUnpack`
 
 `asar: true`. Three paths are **unpacked** to `resources/app.asar.unpacked/`:

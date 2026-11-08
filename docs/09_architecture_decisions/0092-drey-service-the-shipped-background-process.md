@@ -2,18 +2,23 @@
 
 ## Status
 
-Proposed (design session 2026-11-07/08, owner ruling R6 in
-`docs/design/work-panel/crew-internals-concept.md`). Amends ADR-0075 (the
-fleet runner as a standalone companion) and ADR-0088 (the engine as its own
-process); changes ADR-0021 (the MCP server's home). Built as req-164–163
-once the integrator schedules them.
+**Accepted — as built (milestone 209, req-164)** for the process, its
+components, discovery and lifecycle; the deviations are listed under "As
+built" below. The tray icon, the window and Settings → Background service
+(req-165), the Sessions area (req-166), the MCP server's move (req-167) and
+`service.json` / the three configuration layers (req-173) remain proposed
+in this ADR until those items ship. Design session 2026-11-07/08, owner
+ruling R6 in `docs/design/work-panel/crew-internals-concept.md`. Amends
+ADR-0075 (the fleet runner as a standalone companion) and ADR-0088 (the
+engine as its own process); will change ADR-0021 (the MCP server's home)
+with req-167.
 
 ## Context
 
 Drey runs two invisible processes beside itself: the tickets engine
 (`~/.drey-engine`, lockfile, spawned by the plugin, never stopped by Drey,
 serves the phones with Drey closed) and the fleet runner
-(`<userData>/fleet`, detached, idle exit per req-110). Drey's MCP server is a
+(`~/.drey-engine/fleet`, detached, idle exit per req-110). Drey's MCP server is a
 third thing, in the Drey process, and dies with it. The owner's verification
 round of 2026-11-07 hit the consequence twice: the Autopilot could not be
 switched on and nothing said why (D-51: no spawn attempt was visible
@@ -86,3 +91,59 @@ permission mode, caps — lives in that vault's `_meta/`; keys that sit in
   second runtime.
 - Risk: a tray icon is a second entry point; it must never start a chain
   (the boot rule) and never show a token.
+
+## As built (milestone 209, req-164)
+
+What req-164 built, and where it differs from the decision above:
+
+- **Components.** `packages/tickets-engine/src/service/`: `ServiceHost` hosts
+  the **engine** (always on), the **Crew runner** — in the service's own
+  process, not a child process: `startRunner` runs in-process with no
+  descriptor file and no signal handlers of its own, its exit is a sleep and
+  the next demand wakes it (one process fewer than before) — the **remote
+  gateway** (inside the engine; its row follows Settings → Remote access)
+  and the **MCP server** as a row reading `external — served by Drey (until
+  req-167)`: Drey's MCP server stays in the Drey process for now
+  (integrator's ruling Q1, 2026-11-08). Only the runner has start/stop of
+  its own; the engine runs as long as the service, the gateway follows its
+  settings.
+- **Home (deviation).** The service home is `~/.drey-engine`, not
+  `<userData>/service/` (integrator's ruling Q4, 2026-11-08): the engine's
+  `config.json`, the fleet root `~/.drey-engine/fleet` (the Context's
+  `<userData>/fleet` was stale) and the e2e isolation through
+  `USERPROFILE` stay where they were. req-173 may move it.
+- **Discovery.** One `service.lock` (pid, build stamp, control port + token,
+  a record per component with the runner's own port and token) replaces
+  `engine.lock` and `fleet/runner.json`. The control port serves `/health`,
+  `/status`, `/log`, `/shutdown` (`{handover: true}` for a newer build) and
+  `/components/runner/start|stop`; its token is the engine's.
+- **One log.** `service.log`, one line per event with the component as a
+  field, capped at 1 MB. The per-component files rotated daily and kept 14
+  days, the log level and the log folder are Settings → Background service
+  (req-165).
+- **Sleep, two levels.** The runner keeps req-110's verdict. The service
+  leaves when no Drey holds the engine's event stream (`DreyPresence`), the
+  runner sleeps and **no enabled remote gateway with at least one paired
+  device** holds it (integrator's ruling Q2, 2026-11-08 — the ADR's "keep
+  running after Drey quits" did not say what keeps it for the phones) — for
+  `service.idleMinutes` (15). The boot rule of ADR-0077 stands.
+- **Drey as a client.** `plugins/tickets/main/service-lifecycle.ts`
+  (`ensureService`) adopts a live service of the same or a newer build,
+  asks an older one for the handover (req-51's rule, now for the whole
+  service; refused while a run gates — Drey then adopts it and asks again on
+  its next start, where the old fleet client asked again on every poll), or
+  starts one. A boot claim keeps two Dreys from starting two.
+- **Process mode and autostart (open).** The service runs as Node under
+  Electron's binary (`ELECTRON_RUN_AS_NODE`), as the engine did; the
+  ADR's "Electron app run headless" is the owner's open question Q3 (the
+  RAM cost of Electron mode). Both the spawn and the start-with-Windows
+  entry are built in `service/launch.ts` only. Start with Windows is opt-in
+  through `service-main.js --autostart on` (a hidden PowerShell in the
+  per-user `Run` key sets the variable); its Settings switch is req-165.
+- **Migration.** On its first start the service ends a pre-service engine
+  (by pid, after that engine's own health check answered with its own token)
+  and asks a pre-service runner for the handover; both lock files go. A
+  runner that refuses keeps the Crew runner component blocked until it has
+  gone. `config.json` keys stay where they are (req-173 moves them).
+- **Command line.** `service-main.js --version | --status | --stop |
+  --autostart on|off|status`; operations in `plugins/tickets/SERVICE.md`.

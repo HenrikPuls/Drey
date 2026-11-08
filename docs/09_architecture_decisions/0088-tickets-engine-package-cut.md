@@ -511,3 +511,13 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     uses, so the confirmation rule and the bounds exist once. Devices and
     pairing stay the desktop's Remote section (req-66, D-2's single pairing
     slot), renamed "Mission Control on other devices".
+
+## Later change — the engine is a component of Drey Service (req-164, milestone 209)
+
+The standalone engine process is now the always-on **engine component** of
+Drey Service ([ADR-0092](0092-drey-service-the-shipped-background-process.md)),
+with the Crew runner and the remote gateway in the same process.
+`engine-main.js` and `engine.lock` are gone: the entry is
+`service/service-main.js`, discovery is `~/.drey-engine/service.lock`, and
+the plugin's `service-lifecycle.ts` adopts, hands over or starts the
+service. The invoke channel, its token and the home are unchanged.

@@ -16,6 +16,11 @@ step needs.
 
 Tool-neutral operational guides:
 
+- [`plugins/tickets/SERVICE.md`](plugins/tickets/SERVICE.md) — Drey Service,
+  the one background process (engine, Crew runner, remote gateway):
+  `service.lock`, `--status`, the control routes, start/adopt/handover and
+  when it sleeps. Read it when the user asks whether anything is running in
+  the background, or why it is or is not.
 - [`plugins/tickets/FLEET.md`](plugins/tickets/FLEET.md) — running and
   diagnosing the fleet runner (agent runs on tickets: status, HTTP surface,
   run files, chain state). Read it when the user asks about the agent

@@ -571,12 +571,16 @@ extraction, ADR-0088):
   machine, drift, status log, ledger, git plumbing · `src/fleet` the
   runner, orchestrator, providers, worktrees, telemetry · `src/contracts`
   the cross-layer types and pure helpers · `src/services` since E2a the
-  host-agnostic board service behind `EngineHost`/`FleetPort`). No
+  host-agnostic board service behind `EngineHost`/`FleetPort` ·
+  `src/service` **Drey Service**, the one shipped background process
+  (req-164, ADR-0092): engine, Crew runner (in-process), remote gateway
+  and an MCP row as components, `~/.drey-engine/service.lock`, the
+  two-level sleep — `plugins/tickets/SERVICE.md`). No
   Drey/Electron/plugin imports (ESLint-enforced); the plugin main tsc
   program compiles it into `dist-electron/packages/tickets-engine/`, and
   `plugins/tickets/shared/` holds thin re-export shims for the renderer
-  and phone client. The standalone engine process + HTTP/SSE server
-  arrive with E2b.
+  and phone client. The tickets plugin is Drey Service's client
+  (`main/service-lifecycle.ts`: adopt, hand over, or start; never stop).
 
 This map is a starting point, not a fixed contract — but any deviation
 should be called out explicitly (see Working Style below), not
