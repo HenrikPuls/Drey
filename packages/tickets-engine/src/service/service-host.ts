@@ -14,6 +14,16 @@
  * The host owns the control port (bearer = the engine token), the one log
  * (`service.log`, the component as a field), `service.lock`, and the
  * service-level sleep ({@link serviceSleepVerdict}).
+ *
+ * **Optional (the owner's ruling on Q3, 2026-11-08).** `service.enabled`
+ * (default off) decides the mode, re-read every tick from the engine's
+ * config (Drey syncs it from Settings → Tickets):
+ * - **background** (on): the service outlives Drey and sleeps on the
+ *   two-level verdict; `service.autostart` registers the log-in start.
+ * - **with Drey** (off): the components live and die with Drey — once no
+ *   Drey has held the event stream for {@link WITH_DREY_GRACE_MS} the
+ *   service stops its live runs and leaves (Drey's exit prompt asked the
+ *   owner first; a crashed Drey takes its runs with it).
  */
 import { timingSafeEqual } from 'node:crypto';
 import { once } from 'node:events';
@@ -65,6 +75,14 @@ export interface ServiceHostOptions {
   readonly startRunner?: (args: Args, deps: RunnerDeps) => Promise<RunnerHandle | null>;
   readonly legacy?: LegacyDeps;
   readonly now?: () => number;
+  /**
+   * Applies start with Windows (on = background mode and `service.autostart`);
+   * the entry passes the registry writer, a spec leaves it out (no-op).
+   */
+  readonly applyAutostart?: (on: boolean) => Promise<void>;
+  /** Test seams for the with-Drey spans ({@link WITH_DREY_GRACE_MS}, {@link FIRST_DREY_WAIT_MS}). */
+  readonly withDreyGraceMs?: number;
+  readonly firstDreyWaitMs?: number;
 }
 
 export interface ServiceStatus {
@@ -76,11 +94,20 @@ export interface ServiceStatus {
   /** What holds the service now, or that nothing does. */
   readonly sleep: SleepVerdict;
   readonly dreyClients: number;
+  /** `service.enabled`: background (outlives Drey) or with Drey. */
+  readonly mode: ServiceMode;
 }
 
 type ShutdownReply = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
 const LOG_CAP = 1024 * 1024;
+
+/** With the service off: how long after the last Drey left the service follows it (longer than a reconnect). */
+export const WITH_DREY_GRACE_MS = 10_000;
+/** With the service off: how long a service started for a Drey waits for its first Drey before it gives up. */
+export const FIRST_DREY_WAIT_MS = 120_000;
+
+export type ServiceMode = 'background' | 'with-drey';
 
 export class ServiceHost {
   private engine: Engine | null = null;
@@ -96,14 +123,21 @@ export class ServiceHost {
   private idle: ServiceIdleWatch;
   private closing: Promise<ShutdownReply> | null = null;
   private legacyRunnerBusy = false;
+  private mode: ServiceMode = 'with-drey';
+  private sawDrey = false;
+  private dreyGoneAt: number | null = null;
+  private readonly bootAt: number;
+  private autostartApplied: boolean | null = null;
 
   private constructor(private readonly opts: ServiceHostOptions) {
     this.idle = new ServiceIdleWatch(opts.idleMs, opts.now);
-    const config = new FileConfigStore(path.join(opts.home, 'config.json'));
+    this.bootAt = this.now();
+    const ownConfig = new FileConfigStore(path.join(opts.home, 'config.json'));
     this.runner = new RunnerComponent({
       root: path.join(opts.home, 'fleet'),
       ...(opts.runnerIdleMs === undefined ? {} : { idleMs: opts.runnerIdleMs }),
-      storeBacked: async () => (await config.get<string>('backend')) === 'dricket',
+      // The engine's store is the one Drey's sync writes; before it exists, the file.
+      storeBacked: async () => (await (this.engine?.config ?? ownConfig).get<string>('backend')) === 'dricket',
       log: (line) => this.log('runner', line.replace(/^\[fleet [^\]]+\] /, '')),
       onChange: () => void this.refreshLock(),
       ...(opts.startRunner === undefined ? {} : { start: opts.startRunner }),
@@ -156,9 +190,10 @@ export class ServiceHost {
       ...this.opts.engineOptions,
     });
     this.token = this.engine.token;
+    await this.readMode();
     await this.listen();
     await this.refreshLock();
-    this.log('service', `up: control 127.0.0.1:${this.port}, engine ${this.engine.invokeUrl}`);
+    this.log('service', `up: control 127.0.0.1:${this.port}, engine ${this.engine.invokeUrl}, ${this.mode === 'background' ? 'background (outlives Drey)' : 'with Drey (the background service is off)'}`);
 
     // Runs a retiring runner handed over wait for a successor: wake it now.
     if (!this.legacyRunnerBusy && (await hasHandedOverRuns(path.join(home, 'fleet')))) {
@@ -193,6 +228,44 @@ export class ServiceHost {
     }
   }
 
+  private now(): number {
+    return (this.opts.now ?? Date.now)();
+  }
+
+  /** `service.enabled` / `service.autostart` from the engine's config; applies start with Windows when it changed. */
+  private async readMode(): Promise<void> {
+    const config = this.engine?.config;
+    const enabled = config === undefined || config === null ? false : (await config.get<unknown>('service.enabled').catch(() => undefined)) === true;
+    const autostart = enabled && config !== undefined && config !== null && (await config.get<unknown>('service.autostart').catch(() => undefined)) === true;
+    const mode: ServiceMode = enabled ? 'background' : 'with-drey';
+    if (mode !== this.mode) {
+      this.log('service', mode === 'background' ? 'the background service is on — it outlives Drey' : 'the background service is off — it ends with Drey');
+      this.mode = mode;
+    }
+    if (autostart !== this.autostartApplied) {
+      this.autostartApplied = autostart;
+      await (this.opts.applyAutostart?.(autostart) ?? Promise.resolve()).then(
+        () => this.log('service', `start with Windows: ${autostart ? 'on' : 'off'}`),
+        (error: unknown) => this.log('service', `start with Windows could not be ${autostart ? 'registered' : 'removed'}: ${String(error)}`, 'warn'),
+      );
+    }
+  }
+
+  /** With the service off: true once Drey has gone for the grace (or never came). */
+  private dreyLeft(state: ServiceLiveness): boolean {
+    const now = this.now();
+    if (state.dreyClients > 0) {
+      this.sawDrey = true;
+      this.dreyGoneAt = null;
+      return false;
+    }
+    if (!this.sawDrey) {
+      return now - this.bootAt >= (this.opts.firstDreyWaitMs ?? FIRST_DREY_WAIT_MS);
+    }
+    this.dreyGoneAt ??= now;
+    return now - this.dreyGoneAt >= (this.opts.withDreyGraceMs ?? WITH_DREY_GRACE_MS);
+  }
+
   private liveness(): ServiceLiveness {
     const remote = this.engine?.remoteStatus();
     return {
@@ -209,8 +282,19 @@ export class ServiceHost {
     if (this.legacyRunnerBusy) {
       await this.retireLegacyRunnerOnce();
     }
+    await this.readMode();
     await this.refreshLock();
     const state = this.liveness();
+    if (this.mode === 'with-drey') {
+      // Keeps the background clock fresh for a switch to background later.
+      this.idle.expired({ ...state, dreyClients: 1 });
+      if (this.dreyLeft(state)) {
+        this.log('service', 'the background service is off and Drey has gone — stopping the live runs and leaving');
+        void this.shutdown({ handover: false });
+      }
+      return;
+    }
+    this.sawDrey ||= state.dreyClients > 0;
     if (this.idle.expired(state)) {
       this.log('service', `nothing has held the service for ${Math.round(this.opts.idleMs / 1000)}s (no Drey, the runner asleep, no paired device) — leaving`);
       void this.shutdown({ handover: false });
@@ -253,6 +337,7 @@ export class ServiceHost {
       components: this.records(),
       sleep: serviceSleepVerdict(state),
       dreyClients: state.dreyClients,
+      mode: this.mode,
     };
   }
 
@@ -269,6 +354,7 @@ export class ServiceHost {
       vaultPath: this.opts.vaultPath,
       port: this.port,
       token: this.token,
+      mode: this.mode,
       components: this.records(),
     };
     const json = JSON.stringify(lock);
@@ -379,6 +465,25 @@ export class ServiceHost {
         send(200, { ok: true });
         void this.shutdown({ handover: false });
       }
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/settings') {
+      // `service.enabled` / `service.autostart` from a terminal (`--autostart`); Drey writes them through configSet.
+      const body = (await readJson(req)) as { enabled?: unknown; autostart?: unknown };
+      const config = this.engine?.config;
+      if (config === undefined || config === null) {
+        send(503, { ok: false, error: 'the engine is not up yet' });
+        return;
+      }
+      if (typeof body.enabled === 'boolean') {
+        await config.set('service.enabled', body.enabled);
+      }
+      if (typeof body.autostart === 'boolean') {
+        await config.set('service.autostart', body.autostart);
+      }
+      await this.readMode();
+      await this.refreshLock();
+      send(200, { ok: true, mode: this.mode, autostart: this.autostartApplied === true });
       return;
     }
     if (req.method === 'POST' && parts[0] === 'components' && parts.length === 3) {

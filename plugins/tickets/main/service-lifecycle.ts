@@ -125,6 +125,9 @@ const SYNCED_KEYS = (providers: readonly string[]): readonly string[] => [
   'remote.publicUrl',
   'remote.allowBypass',
   'remote.devices',
+  // req-164: the background service is optional; it reads its mode from the engine's config.
+  'service.enabled',
+  'service.autostart',
 ];
 
 /** The assistant LLM slice the chat bridge needs, out of the base app config. */

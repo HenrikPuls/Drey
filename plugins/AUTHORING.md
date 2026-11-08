@@ -113,6 +113,10 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.53 adds `ctx.app.registerQuitGuard(guard)` (req-164): asked when the owner closes the main window, after
+  the save-before-exit prompt let the close through; resolve `false` to keep the window open. A guard may ask
+  the owner itself (a native box on `getMainWindow()`); guards run in turn, the first `false` wins, a throwing
+  one lets the close go on. The tickets plugin asks about live agent runs while the background service is off.
   1.52 adds `PluginWidgetContrib.shown?()` (default true, re-read on the `status` tick): `false` means the panel
   draws nothing right now. Only the bottom dock with that one panel reads it -- it then takes no height and
   no splitter until `shown()` is true again; a side dock ignores it (its strip icon and header stay).

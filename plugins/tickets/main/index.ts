@@ -51,6 +51,7 @@ import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
 import { ensureService, syncChatConfig, syncNotesVault, syncStoreConfig } from './service-lifecycle';
+import { SERVICE_AUTOSTART_KEY, SERVICE_ENABLED_KEY, createServiceQuitGuard, quitWordsOf, type QuitChoice } from './service-quit-guard';
 import { TicketDocuments, askToAddCheckout } from './ticket-documents';
 import { isStoreDocumentPath, storeDocumentHeader, storeDocumentHeaderEdit } from './store-document-header';
 import { checkoutOf, readStoreSettings } from '../../../packages/tickets-engine/src/store/store-settings';
@@ -158,6 +159,49 @@ const plugin: MainPluginModule = {
     );
     void fleet.startPolling();
     void board.worktreeBootSweep().catch((error: unknown) => ctx.log(`engine boot sweep: ${messageOf(error)}`, 'warn'));
+    // req-164, the owner's Q3 ruling: the background service is optional. Settings →
+    // Tickets reads and writes the two keys here; each write reaches the engine's config,
+    // where the service re-reads its mode every tick.
+    const serviceSettings = async (): Promise<{ enabled: boolean; autostart: boolean }> => ({
+      enabled: (await ctx.config.get<boolean>(SERVICE_ENABLED_KEY)) === true,
+      autostart: (await ctx.config.get<boolean>(SERVICE_AUTOSTART_KEY)) === true,
+    });
+    ctx.ipc.handle('serviceSettings', () => serviceSettings());
+    ctx.ipc.handle('serviceSettingsSet', async (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      for (const key of [SERVICE_ENABLED_KEY, SERVICE_AUTOSTART_KEY] as const) {
+        const value = p[key === SERVICE_ENABLED_KEY ? 'enabled' : 'autostart'];
+        if (typeof value === 'boolean') {
+          await ctx.config.set(key, value);
+          await client.invoke('configSet', { key, value });
+        }
+      }
+      return serviceSettings();
+    });
+    ctx.app.registerQuitGuard(
+      createServiceQuitGuard({
+        config: ctx.config,
+        runs: () => fleet.runs(),
+        abortAll: () => fleet.abortAll(),
+        configSet: (key, value) => client.invoke('configSet', { key, value }),
+        log: ctx.log,
+        ask: async (liveCount): Promise<QuitChoice> => {
+          const words = quitWordsOf((key, params) => ctx.i18n.t(key as never, params as never), liveCount);
+          const window = ctx.app.getMainWindow();
+          const options = {
+            type: 'warning' as const,
+            message: words.message,
+            detail: words.detail,
+            buttons: [words.stop, words.keep, words.cancel],
+            defaultId: 2,
+            cancelId: 2,
+            noLink: true,
+          };
+          const { response } = window !== null && !window.isDestroyed() ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
+          return response === 0 ? 'stop' : response === 1 ? 'keep' : 'cancel';
+        },
+      }),
+    );
     ctx.ipc.handle('remoteStatus', () => remoteService.status());
     ctx.ipc.handle('remoteConfigure', async (payload) => {
       const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};

@@ -454,6 +454,15 @@ export interface MainPluginContext {
     onMainWindowCreated(cb: (win: BrowserWindow) => void): Unsubscribe;
     getMainWindow(): BrowserWindow | null;
     onWillQuit(cb: () => void): Unsubscribe;
+    /**
+     * A guard asked when the owner closes the main window (SDK 1.53, req-164),
+     * after the save-before-exit prompt answered "save" or "exit without
+     * saving": resolve `true` to let the close go on, `false` to cancel it
+     * (the window stays). A guard may ask the owner itself (a native dialog on
+     * `getMainWindow()`); guards run one after another, the first `false`
+     * wins. A guard that throws lets the close go on.
+     */
+    registerQuitGuard(guard: () => Promise<boolean>): Unsubscribe;
     readonly appVersion: string;
     /** The app's user-data root (SDK 1.27): app-data a plugin may build
      *  on, e.g. `<userRoot>/fleet` for the fleet runner's runtime files.

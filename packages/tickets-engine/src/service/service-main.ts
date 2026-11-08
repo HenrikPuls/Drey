@@ -8,7 +8,7 @@
  *   service-main.js --version                                   the version and build stamp
  *   service-main.js --status                                    the components, from service.lock + /status
  *   service-main.js --stop                                      ask a running service to leave
- *   service-main.js --autostart on|off|status                   start with Windows (opt-in)
+ *   service-main.js --autostart on|off|status                   start with Windows (opt-in; on also enables the service)
  *
  * The home is `~/.drey-engine` (the integrator's ruling of 2026-11-08: the
  * engine's config, the fleet root and the e2e isolation stay where they
@@ -177,10 +177,23 @@ async function run(opts: CliOptions): Promise<number> {
       return 0;
     }
     case 'autostart': {
-      const target = { entry: __filename, home: opts.home, vaultPath: null };
+      // Start with Windows belongs to the background service: on also switches it on.
       if (opts.autostart === 'on' || opts.autostart === 'off') {
-        await setAutostart(opts.autostart === 'on', target);
-        await new FileConfigStore(path.join(opts.home, 'config.json')).set('service.autostart', opts.autostart === 'on');
+        const on = opts.autostart === 'on';
+        const settings = on ? { enabled: true, autostart: true } : { autostart: false };
+        const lock = await readServiceLock(opts.home);
+        if (lock !== null && (await serviceAlive(lock))) {
+          // A running service owns the setting: it writes it and applies the registry itself.
+          await fetch(`http://127.0.0.1:${lock.port}/settings`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${lock.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify(settings),
+          });
+        } else {
+          const config = new FileConfigStore(path.join(opts.home, 'config.json'));
+          await config.setMany(Object.entries(settings).map(([key, value]) => [`service.${key}`, value] as const));
+          await setAutostart(on, { entry: __filename, home: opts.home, vaultPath: null });
+        }
       }
       const entry = await autostartEntry();
       out(entry === null ? 'start with Windows: off' : `start with Windows: on\n  ${entry}`);
@@ -218,6 +231,8 @@ async function run(opts: CliOptions): Promise<number> {
       idleMs: opts.idleMs ?? serviceIdleMsOf(await config.get<unknown>(SERVICE_IDLE_KEY)),
       exit: (code) => process.exit(code),
       stdout: out,
+      applyAutostart: (on) =>
+        process.platform === 'win32' ? setAutostart(on, { entry: __filename, home: opts.home, vaultPath: null }) : Promise.resolve(),
     });
     const quit = (): void => void host.shutdown({ handover: false });
     process.on('SIGINT', quit);

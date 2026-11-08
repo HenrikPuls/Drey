@@ -92,6 +92,7 @@ const exitBridge: ExitBridge = new ExitBridge(() => mainWindow.current);
 const mainWindow: MainWindowHost = new MainWindowHost({
   exitBridge,
   onCreated: (window) => services?.pluginHost.notifyMainWindowCreated(window),
+  quitGuards: () => services?.pluginHost.runQuitGuards() ?? Promise.resolve(true),
 });
 
 /**

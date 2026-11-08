@@ -194,7 +194,43 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   keepSetting.append(el('b', 'tset-set-name', 'Keep videos in Git'), keepLabel, confirmBox, videoNote);
   video.list.append(keepSetting, setting('Largest video', 'One limit per video. Nothing is removed automatically.', limit, limitUnit));
 
-  root.append(team.root, flow.root, autopilot.root, budget.root);
+  // --- Background service (req-164, the owner's Q3 ruling: optional, off by default) ---
+  // Its own category is req-165's; until then the two switches live here.
+  const serviceT = (key: string): string => api.i18n.t(key as never);
+  const service = section('tset-service-head', serviceT('service.settings.title'), 'service');
+  const serviceCheck = (id: string): HTMLInputElement => {
+    const box = el('input');
+    box.type = 'checkbox';
+    box.id = id;
+    return box;
+  };
+  const serviceEnabled = serviceCheck('tset-service-enabled');
+  serviceEnabled.dataset['settingKey'] = 'service.enabled';
+  serviceEnabled.setAttribute('aria-label', serviceT('service.settings.enabled'));
+  const serviceAutostart = serviceCheck('tset-service-autostart');
+  serviceAutostart.dataset['settingKey'] = 'service.autostart';
+  serviceAutostart.setAttribute('aria-label', serviceT('service.settings.autostart'));
+  const paintService = (value: unknown): void => {
+    const v = (value ?? {}) as { enabled?: unknown; autostart?: unknown };
+    serviceEnabled.checked = v.enabled === true;
+    serviceAutostart.checked = v.enabled === true && v.autostart === true;
+    serviceAutostart.disabled = v.enabled !== true;
+  };
+  const writeService = (patch: { enabled?: boolean; autostart?: boolean }): void => {
+    void api.backend.invoke('serviceSettingsSet', patch).then(paintService, () => void loadService());
+  };
+  const loadService = async (): Promise<void> => {
+    paintService(await api.backend.invoke('serviceSettings').catch(() => null));
+  };
+  serviceEnabled.addEventListener('change', () => writeService(serviceEnabled.checked ? { enabled: true } : { enabled: false, autostart: false }));
+  serviceAutostart.addEventListener('change', () => writeService({ autostart: serviceAutostart.checked }));
+  service.list.append(
+    setting(serviceT('service.settings.enabled'), serviceT('service.settings.enabled_desc'), serviceEnabled),
+    setting(serviceT('service.settings.autostart'), serviceT('service.settings.autostart_desc'), serviceAutostart),
+  );
+  void loadService();
+
+  root.append(team.root, flow.root, autopilot.root, service.root, budget.root);
 
   // --- painting ------------------------------------------------------------
   const paintTeam = (): void => {

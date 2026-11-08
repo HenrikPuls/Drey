@@ -24,12 +24,20 @@ describe('ServiceHost', () => {
   let runnerExit: ((code: number) => void) | null = null;
   let handoverRefusal: string | null = null;
   let runnerStops = 0;
+  /** The engine's config: `service.enabled` decides the mode (the owner's Q3 ruling). */
+  let engineConfig: Record<string, unknown> = {};
+  let autostarts: boolean[] = [];
 
   const fakeEngine = async (_opts: EngineOptions): Promise<Engine> =>
     ({
       invokeUrl: 'http://127.0.0.1:4100',
       token: 'tok',
-      config: null as never,
+      config: {
+        get: async (key: string) => engineConfig[key],
+        set: async (key: string, value: unknown) => {
+          engineConfig[key] = value;
+        },
+      } as never,
       ready: Promise.resolve(),
       invoke: async () => null,
       onEvent: () => () => undefined,
@@ -83,7 +91,7 @@ describe('ServiceHost', () => {
     };
   };
 
-  const start = async (idleMs = 60_000, tickMs = 20): Promise<ServiceHost> => {
+  const start = async (idleMs = 60_000, tickMs = 20, spans: { withDreyGraceMs?: number; firstDreyWaitMs?: number } = {}): Promise<ServiceHost> => {
     // This test's own list: a previous test's host exits a moment after its teardown.
     const mine = exits;
     host = await ServiceHost.start({
@@ -96,6 +104,10 @@ describe('ServiceHost', () => {
       exit: (code) => mine.push(code),
       createEngine: fakeEngine,
       startRunner: fakeRunner,
+      applyAutostart: async (on) => {
+        autostarts.push(on);
+      },
+      ...spans,
     });
     return host;
   };
@@ -127,6 +139,9 @@ describe('ServiceHost', () => {
     runnerExit = null;
     handoverRefusal = null;
     runnerStops = 0;
+    // The background mode unless a test says otherwise.
+    engineConfig = { 'service.enabled': true };
+    autostarts = [];
   });
 
   afterEach(async () => {
@@ -245,5 +260,59 @@ describe('ServiceHost', () => {
     expect(text.split('\n').every((line) => line.split(/\s+/)[2] === 'service')).toBe(true);
     await until(async () => (await fsp.readFile(path.join(home, 'service.log'), 'utf8').catch(() => '')).includes('up: control'));
     expect(formatServiceLogLine(new Date('2026-11-08T00:00:00.000Z'), 'warn', 'runner', 'x')).toBe('2026-11-08T00:00:00.000Z warn  runner  x');
+  });
+
+  describe("optional (the owner's Q3 ruling): with the service off it lives and dies with Drey", () => {
+    it('records its mode in the lock and the status', async () => {
+      engineConfig = {};
+      await start();
+      expect((await readServiceLock(home))!.mode).toBe('with-drey');
+      expect((await control('GET', '/status')).json['mode']).toBe('with-drey');
+    });
+
+    it('leaves once its Drey has gone for the grace — a paired device or an awake runner does not keep it', async () => {
+      engineConfig = {};
+      dreyClients = 1;
+      remote = { enabled: true, devices: 2, listening: '127.0.0.1:7420' };
+      await start(60_000, 20, { withDreyGraceMs: 150 });
+      await control('POST', '/components/runner/start');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(exits).toEqual([]);
+      dreyClients = 0;
+      await until(() => exits.length > 0);
+      // The runner's live runs were stopped: nothing survives Drey.
+      expect(runnerStops).toBe(1);
+      expect(engineClosed).toBe(true);
+      host = null;
+    });
+
+    it('a service whose Drey never came gives up after the first-Drey wait', async () => {
+      engineConfig = {};
+      await start(60_000, 20, { firstDreyWaitMs: 150 });
+      await until(() => exits.length > 0);
+      host = null;
+    });
+
+    it('switched on while running (Keep running at quit): it now outlives Drey', async () => {
+      engineConfig = {};
+      dreyClients = 1;
+      await start(60_000, 20, { withDreyGraceMs: 100 });
+      engineConfig['service.enabled'] = true;
+      await until(async () => (await readServiceLock(home))?.mode === 'background');
+      dreyClients = 0;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(exits).toEqual([]);
+    });
+
+    it('start with Windows follows enabled AND autostart, applied when it changes', async () => {
+      engineConfig = { 'service.autostart': true };
+      dreyClients = 1;
+      await start();
+      expect(autostarts).toEqual([false]);
+      expect((await control('POST', '/settings', { enabled: true })).json).toMatchObject({ mode: 'background', autostart: true });
+      expect(autostarts).toEqual([false, true]);
+      await control('POST', '/settings', { autostart: false });
+      expect(autostarts).toEqual([false, true, false]);
+    });
   });
 });

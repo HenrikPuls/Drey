@@ -50,6 +50,8 @@ export interface ServiceLock {
   readonly port: number;
   /** The bearer token of the control port and the engine's invoke channel. */
   readonly token: string;
+  /** `service.enabled` (the owner's Q3 ruling): `background` outlives Drey, `with-drey` ends with it. Absent on a lock read before the mode was known. */
+  readonly mode?: 'background' | 'with-drey';
   readonly components: Readonly<Record<ComponentName, ComponentRecord>>;
 }
 

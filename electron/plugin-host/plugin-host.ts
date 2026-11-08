@@ -64,6 +64,7 @@ interface ActivatedPlugin {
   /** Everything the context handed out as an Unsubscribe; `deactivate` drains these. */
   readonly disposables: Array<Unsubscribe>;
   readonly willQuitCallbacks: Array<() => void>;
+  readonly quitGuards: Array<() => Promise<boolean>>;
   module: PluginMainModule | null;
 }
 
@@ -600,6 +601,25 @@ export class PluginHost {
     return this.taskProvider;
   }
 
+  /**
+   * The plugins' quit guards (SDK 1.53), one after another: false as soon as
+   * one cancels the close. A guard that throws is logged and lets it go on.
+   */
+  async runQuitGuards(): Promise<boolean> {
+    for (const [id, plugin] of this.activated) {
+      for (const guard of [...plugin.quitGuards]) {
+        try {
+          if (!(await guard())) {
+            return false;
+          }
+        } catch (error) {
+          this.deps.log(`plugin "${id}": quit guard failed: ${error instanceof Error ? error.message : String(error)}`, 'warn');
+        }
+      }
+    }
+    return true;
+  }
+
   async runWillQuitHooks(): Promise<void> {
     for (const plugin of this.activated.values()) {
       for (const cb of plugin.willQuitCallbacks) {
@@ -638,6 +658,7 @@ export class PluginHost {
       methods: new Map(),
       disposables: [],
       willQuitCallbacks: [],
+      quitGuards: [],
       module: null,
     };
     this.activated.set(id, plugin);
@@ -762,6 +783,10 @@ export class PluginHost {
       onWillQuit: (cb) => {
         plugin.willQuitCallbacks.push(cb);
         return track(() => removeItem(plugin.willQuitCallbacks, cb));
+      },
+      registerQuitGuard: (guard) => {
+        plugin.quitGuards.push(guard);
+        return track(() => removeItem(plugin.quitGuards, guard));
       },
       appVersion: app.getVersion(),
       /** `<userData>` — app-data roots a plugin may build on (SDK 1.27:

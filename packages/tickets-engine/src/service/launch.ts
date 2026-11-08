@@ -1,15 +1,19 @@
 /**
  * How Drey Service is started — the one seam (req-164).
  *
- * The owner's open question Q3 decides the process mode: plain Node under
- * Electron's binary (`ELECTRON_RUN_AS_NODE`, today's way, the default here)
- * or Electron headless (`Drey.exe --drey-service`, which the tray of
- * req-165 and a clean Windows log-in start would need). Both the spawn from
- * Drey and the Windows log-in entry are built here and only here, so the
- * answer changes this file, not its callers.
+ * **Process mode (the owner's Q3, decided here, 2026-11-08):** plain Node
+ * under Electron's binary (`ELECTRON_RUN_AS_NODE`), not a headless Electron
+ * (`Drey.exe --drey-service`). The owner's ruling made the service
+ * optional, so neither case needs Electron: "enabled → starts with Windows"
+ * is a hidden `wscript` launcher that sets the variable, "disabled → dies
+ * with Drey" is the service's own with-Drey mode — and Node mode costs no
+ * Chromium (the ~50–80 MB the owner watches). The tray of req-165 is the
+ * one thing that would need Electron; it can start as a separate small
+ * window process on demand. Both the spawn from Drey and the log-in entry
+ * are built here and only here.
  */
 import { execFile, spawn } from 'node:child_process';
-import { closeSync, openSync } from 'node:fs';
+import { closeSync, openSync, promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -28,10 +32,6 @@ export interface LaunchTarget {
   /** The binary to run; the current process's (Electron's) by default. */
   readonly execPath?: string;
 }
-
-/** The process mode (Q3). Node until the owner rules otherwise. */
-export type ServiceMode = 'node';
-export const SERVICE_MODE: ServiceMode = 'node';
 
 export const SERVICE_ENTRY_NAME = 'service-main.js';
 
@@ -61,36 +61,56 @@ export function spawnService(cmd: LaunchCommand, home: string): number | null {
 
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 export const AUTOSTART_VALUE = 'DreyService';
+export const AUTOSTART_LAUNCHER = 'start-service.vbs';
+
+/** The VBScript string literal of a value: doubled quotes inside quotes. */
+const vbs = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
 /**
- * The log-in command line. A `Run` entry cannot carry an environment
- * variable, so in Node mode it goes through a hidden PowerShell that sets
- * `ELECTRON_RUN_AS_NODE` first (a console may flash for an instant at
- * log-in). Electron-headless mode (Q3) would make it `"Drey.exe"
- * --drey-service`.
+ * The log-in launcher, written into the service home. A `Run` entry cannot
+ * carry an environment variable, so `wscript` sets it for the process and
+ * starts the service with a hidden window (style 0) — no console at log-in.
  */
-export function autostartCommandLine(target: LaunchTarget): string {
+export function autostartLauncherScript(target: LaunchTarget): string {
   const cmd = serviceLaunchCommand(target);
-  const quote = (value: string): string => `'${value.replace(/'/g, "''")}'`;
-  const envs = Object.entries(cmd.env).map(([key, value]) => `$env:${key}=${quote(value)}; `).join('');
-  const call = `& ${quote(cmd.command)} ${cmd.args.map(quote).join(' ')}`;
-  return `powershell.exe -NoProfile -WindowStyle Hidden -Command "${envs}${call}"`;
+  // Every argument quoted inside the command string (paths have spaces).
+  const line = [cmd.command, ...cmd.args].map((arg) => vbs(`"${arg}"`)).join(' & " " & ');
+  const env = Object.entries(cmd.env)
+    .map(([key, value]) => `shell.Environment("Process")(${vbs(key)}) = ${vbs(value)}`)
+    .join('\r\n');
+  return ['Set shell = CreateObject("WScript.Shell")', env, `shell.Run ${line}, 0, False`, ''].join('\r\n');
+}
+
+/** The `Run` value: wscript over this home's launcher. */
+export function autostartCommandLine(home: string): string {
+  return `wscript.exe "${path.join(home, AUTOSTART_LAUNCHER)}"`;
 }
 
 export type RegExec = (args: readonly string[]) => Promise<string>;
 
 const realReg: RegExec = async (args) => (await promisify(execFile)('reg.exe', [...args], { windowsHide: true })).stdout;
 
-/** Start with Windows on or off (opt-in, off by default): the per-user `Run` key. */
+/**
+ * Start with Windows on or off (opt-in, off by default; on only while the
+ * service is enabled): the per-user `Run` value plus the launcher. Off removes
+ * the value only when it is this home's — a test home never removes the
+ * owner's entry (HKCU is not isolated by `USERPROFILE`).
+ */
 export async function setAutostart(on: boolean, target: LaunchTarget, reg: RegExec = realReg): Promise<void> {
   if (process.platform !== 'win32') {
     throw new Error('start with the system is only built for Windows');
   }
+  const launcher = path.join(target.home, AUTOSTART_LAUNCHER);
   if (on) {
-    await reg(['add', RUN_KEY, '/v', AUTOSTART_VALUE, '/t', 'REG_SZ', '/d', autostartCommandLine(target), '/f']);
-  } else {
+    await fsp.writeFile(launcher, autostartLauncherScript({ ...target, vaultPath: null }), 'utf8');
+    await reg(['add', RUN_KEY, '/v', AUTOSTART_VALUE, '/t', 'REG_SZ', '/d', autostartCommandLine(target.home), '/f']);
+    return;
+  }
+  const entry = await autostartEntry(reg);
+  if (entry !== null && entry.toLowerCase().includes(launcher.toLowerCase())) {
     await reg(['delete', RUN_KEY, '/v', AUTOSTART_VALUE, '/f']).catch(() => '');
   }
+  await fsp.rm(launcher, { force: true });
 }
 
 /** The registered log-in command, or null when start with Windows is off. */

@@ -1,5 +1,16 @@
+import { promises as fsp } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AUTOSTART_VALUE, autostartCommandLine, autostartEntry, serviceLaunchCommand, setAutostart } from './launch';
+import {
+  AUTOSTART_LAUNCHER,
+  AUTOSTART_VALUE,
+  autostartCommandLine,
+  autostartEntry,
+  autostartLauncherScript,
+  serviceLaunchCommand,
+  setAutostart,
+} from './launch';
 import { formatStatus, parseServiceArgs } from './service-main';
 import type { ServiceLock } from './service-lock';
 
@@ -22,24 +33,46 @@ describe('the launch seam', () => {
     expect(serviceLaunchCommand({ ...target, vaultPath: null }).args).not.toContain('--vault');
   });
 
-  it('the log-in command sets the variable in a hidden PowerShell, quoting every path', () => {
-    const line = autostartCommandLine({ ...target, vaultPath: null, home: "C:/Users/o'neil/.drey-engine" });
-    expect(line).toBe(
-      `powershell.exe -NoProfile -WindowStyle Hidden -Command "$env:ELECTRON_RUN_AS_NODE='1'; & 'D:/app/Drey.exe' 'D:/app/service-main.js' '--home' 'C:/Users/o''neil/.drey-engine'"`,
-    );
+  it('the log-in launcher sets the variable and runs the service hidden, every path quoted, no vault', () => {
+    const script = autostartLauncherScript({ ...target, vaultPath: null, execPath: 'C:/Program Files/Drey/Drey.exe' });
+    expect(script).toContain('shell.Environment("Process")("ELECTRON_RUN_AS_NODE") = "1"');
+    expect(script).toContain('shell.Run """C:/Program Files/Drey/Drey.exe""" & " " & """D:/app/service-main.js"""');
+    expect(script).toContain(', 0, False');
+    expect(script).not.toContain('--vault');
   });
 
-  it.runIf(process.platform === 'win32')('start with Windows writes and removes the per-user Run value', async () => {
-    const calls: (readonly string[])[] = [];
-    const reg = async (args: readonly string[]): Promise<string> => {
-      calls.push(args);
-      return `    ${AUTOSTART_VALUE}    REG_SZ    powershell.exe -x\r\n`;
-    };
-    await setAutostart(true, target, reg);
-    await setAutostart(false, target, reg);
-    expect(calls[0]!.slice(0, 4)).toEqual(['add', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', AUTOSTART_VALUE]);
-    expect(calls[1]!.slice(0, 1)).toEqual(['delete']);
-    expect(await autostartEntry(reg)).toBe('powershell.exe -x');
+  it("the Run value is wscript over this home's launcher", () => {
+    expect(autostartCommandLine('C:/Users/me/.drey-engine')).toBe(`wscript.exe "${path.join('C:/Users/me/.drey-engine', AUTOSTART_LAUNCHER)}"`);
+  });
+
+  it.runIf(process.platform === 'win32')("start with Windows writes the value and the launcher; off removes only this home's value", async () => {
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-autostart-'));
+    try {
+      const calls: (readonly string[])[] = [];
+      let registered = `wscript.exe "${path.join(home, AUTOSTART_LAUNCHER)}"`;
+      const reg = async (args: readonly string[]): Promise<string> => {
+        calls.push(args);
+        return `    ${AUTOSTART_VALUE}    REG_SZ    ${registered}\r\n`;
+      };
+      const mine = { ...target, home };
+      await setAutostart(true, mine, reg);
+      expect(calls[0]!.slice(0, 4)).toEqual(['add', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', AUTOSTART_VALUE]);
+      await expect(fsp.access(path.join(home, AUTOSTART_LAUNCHER))).resolves.toBeUndefined();
+      expect(await autostartEntry(reg)).toBe(registered);
+
+      calls.length = 0;
+      await setAutostart(false, mine, reg);
+      expect(calls.map((c) => c[0])).toEqual(['query', 'delete']);
+      await expect(fsp.access(path.join(home, AUTOSTART_LAUNCHER))).rejects.toThrow();
+
+      // Another home's entry (the owner's real one, seen from a test home) is left alone.
+      registered = 'wscript.exe "C:\\Users\\owner\\.drey-engine\\start-service.vbs"';
+      calls.length = 0;
+      await setAutostart(false, mine, reg);
+      expect(calls.map((c) => c[0])).toEqual(['query']);
+    } finally {
+      await fsp.rm(home, { recursive: true, force: true });
+    }
   });
 });
 

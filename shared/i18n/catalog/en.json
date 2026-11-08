@@ -690,5 +690,15 @@
   "persona.page.discard": "Discard",
   "persona.page.save": "Save",
   "persona.page.save_title": "Saves {path} as one commit",
-  "persona.page.words": "{count, plural, one {# word} other {# words}}"
+  "persona.page.words": "{count, plural, one {# word} other {# words}}",
+  "service.settings.title": "Background service",
+  "service.settings.enabled": "Run in the background",
+  "service.settings.enabled_desc": "Agent runs and the phone gateway keep working after Drey closes. Off: everything stops with Drey.",
+  "service.settings.autostart": "Start with Windows",
+  "service.settings.autostart_desc": "Starts the background service when you sign in.",
+  "service.quit.message": "{count, plural, one {# agent run is still running.} other {# agent runs are still running.}}",
+  "service.quit.detail": "The background service is off, so the runs end when Drey closes.",
+  "service.quit.stop": "Stop the runs and quit",
+  "service.quit.keep": "Keep running (enable the service)",
+  "service.quit.cancel": "Cancel"
 }
