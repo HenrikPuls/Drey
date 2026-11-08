@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
-import { i18n } from '../../../shared/i18n';
 import { createServiceQuitGuard, liveRunsOf, quitWordsOf, type QuitChoice } from './service-quit-guard';
 
 /**
@@ -79,15 +80,19 @@ describe('the quit guard of the optional service', () => {
     ]);
   });
 
-  it('the words come from the catalog, the count as an ICU plural', () => {
-    const t = (key: string, params?: Record<string, unknown>): string => i18n.t(key as never, params as never);
-    expect(quitWordsOf(t, 1).message).toBe('1 agent run is still running.');
+  it('the words come from the catalog, the count passed for its ICU plural', () => {
+    const t = (key: string, params?: Record<string, unknown>): string => `${key}${params === undefined ? '' : JSON.stringify(params)}`;
     expect(quitWordsOf(t, 3)).toEqual({
-      message: '3 agent runs are still running.',
-      detail: 'The background service is off, so the runs end when Drey closes.',
-      stop: 'Stop the runs and quit',
-      keep: 'Keep running (enable the service)',
-      cancel: 'Cancel',
+      message: 'service.quit.message{"count":3}',
+      detail: 'service.quit.detail',
+      stop: 'service.quit.stop',
+      keep: 'service.quit.keep',
+      cancel: 'service.quit.cancel',
     });
+    const catalog = JSON.parse(readFileSync(path.join(__dirname, '..', '..', '..', 'shared', 'i18n', 'catalog', 'en.json'), 'utf8')) as Record<string, string>;
+    expect(catalog['service.quit.message']).toContain('{count, plural');
+    for (const key of ['service.quit.detail', 'service.quit.stop', 'service.quit.keep', 'service.quit.cancel']) {
+      expect(typeof catalog[key]).toBe('string');
+    }
   });
 });

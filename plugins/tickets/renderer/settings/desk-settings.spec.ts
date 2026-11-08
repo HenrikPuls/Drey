@@ -22,6 +22,12 @@ function setup(settingsReply: unknown = videos(false)) {
     if (method === 'settingsRead') {
       return Promise.resolve(settingsReply);
     }
+    if (method === 'serviceSettings') {
+      return Promise.resolve({ enabled: false, autostart: false });
+    }
+    if (method === 'serviceSettingsSet') {
+      return Promise.resolve({ enabled: true, autostart: false });
+    }
     return Promise.resolve(videos(true, 40));
   });
   const api = { i18n, backend: { invoke }, settings: { get: () => Promise.resolve(undefined) } } as unknown as DreyPluginApi;
@@ -65,9 +71,23 @@ describe('Settings → Tickets desk rows', () => {
     const { desk } = setup();
     await settle();
     const names = [...desk.root.querySelectorAll('.tset-set-name')].map((n) => n.textContent);
-    expect(names).toEqual(['Personas', 'Your name', 'Default flow', 'Autopilot', 'Resume paused autopilot at', 'Daily budget', 'Runners']);
-    expect([...desk.root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Crew', 'Flow', 'Autopilot', 'Budget and runners']);
-    expect([...document.querySelectorAll('section')].map((n) => (n as HTMLElement).dataset['settingsSection'])).toEqual(['crew', 'flow', 'autopilot', 'budget', 'videos']);
+    expect(names).toEqual(['Personas', 'Your name', 'Default flow', 'Autopilot', 'Resume paused autopilot at', 'Run in the background', 'Start with Windows', 'Daily budget', 'Runners']);
+    expect([...desk.root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Crew', 'Flow', 'Autopilot', 'Background service', 'Budget and runners']);
+    expect([...document.querySelectorAll('section')].map((n) => (n as HTMLElement).dataset['settingsSection'])).toEqual(['crew', 'flow', 'autopilot', 'service', 'budget', 'videos']);
+  });
+
+  it('req-164: the background service is off by default; start with Windows waits for it', async () => {
+    const { desk, invoke } = setup();
+    await settle();
+    const enabled = desk.root.querySelector<HTMLInputElement>('#tset-service-enabled')!;
+    const autostart = desk.root.querySelector<HTMLInputElement>('#tset-service-autostart')!;
+    expect(enabled.checked).toBe(false);
+    expect(autostart.disabled).toBe(true);
+    enabled.checked = true;
+    enabled.dispatchEvent(new Event('change'));
+    expect(invoke).toHaveBeenCalledWith('serviceSettingsSet', { enabled: true });
+    await settle();
+    expect(autostart.disabled).toBe(false);
   });
 
   it('opens the flow editor on the picked ticket, not an inbox idea', async () => {
