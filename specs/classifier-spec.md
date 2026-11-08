@@ -278,6 +278,27 @@ create as a `raw capture:` Log line (ticket-schema).
   this provider …"*, an unreachable or refusing endpoint with *"<provider>
   at <url>: <reason>"* — never as a model reply. "Test connection" is a
   tokenless `GET {baseUrl}/models` (`/v1/models` for Anthropic).
+  **The call carries no timeout** (milestone 212, D-63; ADR-0014): a turn
+  streams until the model ends or the client's `signal` cancels it — a
+  cancelled turn fails with *"<provider> at <url>: the turn was
+  cancelled."* (code `cancelled`); the stream's `text` / `thought` events
+  are the progress. The Cancel control is req-157.
+- **The fleet's step prompts and the run brief's persona line**
+  (`packages/tickets-engine/prompts/*.md`, `fleet/assignment.ts`; milestone
+  212, D-60 / D-61). The shipped step prompts (`build-default` v6,
+  `qa-default` v2, `review-default` v3, `scout-default` v2) ask the worker,
+  in their "How to work" list, to append one friction line to
+  `tickets/_meta/personas/<your persona>/friction.md` and end the
+  paragraph with: *"Your brief names your persona in its "Your persona:"
+  line; a brief without that line has no persona: skip it."* The brief —
+  ship and scout alike — names the persona right after the ticket line:
+  `Your persona: <id> (<role>) — its folder is
+  tickets/_meta/personas/<id>/ in the tickets repo; the persona-bound files
+  the prompt names (the friction file) live there.` (no line on a ring
+  run). The brief's variable parts carry the persona's `## Memory` slice
+  and no longer a `## Coaching` slice of `thread.md` (D-61: nothing is
+  adopted unreviewed; req-168/169). The rest of the brief's order is
+  `plugins/tickets/FLEET.md`, "The instruction".
 - The former built-in "Summarise note" (`builtin:note-summary`) is
   retired (`RETIRED_BUILTIN_TEMPLATE_IDS` in `shared/config/normalize.ts`).
 

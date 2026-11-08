@@ -470,7 +470,8 @@ speech bubble (**Model**), a rocket (**Mission Control**) and two heads
   The head's list button opens the earlier Mission Control chats, `+`
   starts a new one.
 - **1:1** opens a menu of the crew's agent personas. Your messages go into
-  that persona's thread, which the persona reads before the next run.
+  that persona's thread — a note to the persona; no run reads it until the
+  1:1 becomes a conversation with the persona.
 
 #### Shape a ticket in the editor {#shape-in-editor}
 
@@ -1126,6 +1127,12 @@ run and halts the chain; it asks twice. A device paired read-only sees the
 state but cannot change it. After a restart the state is Off. The same switch
 is in Settings → Tickets → *Budget and runners*.
 
+The Autopilot only decides whether tickets move on and start by themselves.
+Talking to the crew does not need it: Mission Control, *Shape with Paul* and a
+1:1 with a crew member work with the Autopilot Off. A message to an agent's
+run starts the runner when it is not running. If the runner cannot be started,
+the switch says why (*The runner could not be started: …*).
+
 ### Running agents on tickets (the fleet)
 
 A ticket can be worked by an **external agent CLI** — OpenCode or
@@ -1415,7 +1422,7 @@ The runner does not stand around, either: switching the Autopilot **Off**
 ends it as soon as nothing is running, and closing Drey ends it when no run
 is live and the Autopilot is Off. A live run keeps it, and so does an On or
 Paused Autopilot — the chain keeps working with Drey closed. It comes back by
-itself the next time a run starts.
+itself the next time a run starts or the Autopilot is switched On.
 
 ### The chain runs itself (milestone 85)
 

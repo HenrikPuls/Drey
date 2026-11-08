@@ -4,6 +4,8 @@ Diese Datei ist auf Wunsch des Owners (2026-11-08) bewusst auf Deutsch geschrieb
 
 Stand: Branch `desktop-integration`, aus dem Code gelesen. Wo Code und Dokumentation auseinanderlaufen, steht dabei, was gilt; gefolgt bin ich immer dem Code.
 
+Nachtrag Milestone 212 (2026-11-08): Die vier Befunde D-60 bis D-63, die beim Schreiben dieser Datei auffielen, sind behoben; die betroffenen Stellen tragen den Vermerk „(behoben in 212)“ und beschreiben den neuen Stand.
+
 ---
 
 ## 1. Die Bausteine
@@ -108,7 +110,7 @@ Eine **Persona** ist ein Verzeichnis `tickets/_meta/personas/<id>/` mit folgende
 | `persona.md` | Frontmatter: `title`, `kind` (`agent`/`human`), `role`, `worker`, `models.default/pool/router`, `color`, `skills`, `budget`; darunter Prosa | Owner (Persona-Seite, `personaPatch`) | Dispatch, UI |
 | `prompt.md` | Persona-Prompt; **ersetzt** den Phasen-Prompt im Brief | Owner, angenommener Vorschlag | Brief |
 | `memory.md` | `# Memory`, eine Zeile pro Eintrag, max. 200 Zeilen, `[pinned]` | nur Owner-Aktionen (siehe 4) | Brief (`## Memory`) |
-| `thread.md` | Coaching-Thread des 1:1 | `personaThreadAppend` | Brief (`## Coaching`) |
+| `thread.md` | Coaching-Thread des 1:1 | `personaThreadAppend` | 1:1-Tab; kein Run (behoben in 212, D-61 — bis req-168/169 liest ihn kein Brief) |
 | `skills/<name>.md` oder `skills/<name>/SKILL.md` | Skill-Text; Fallback `_meta/skills/` | Owner | Brief (`## Skills`) |
 | `friction.md`, `improvements.md` | Reibungszeilen; Vorschläge der Aggregation | Worker (theoretisch), Aggregator | Persona-Seite |
 
@@ -120,7 +122,7 @@ Eine Datei `persona-skills.ts` oder `persona-improvements.ts` gibt es unter `ser
 
 **`you`** ist die Persona mit `kind: human`, also der Owner selbst als Teammitglied. Ein Gate, das `you` zugewiesen ist, startet keinen Run, sondern parkt das Ticket. Die Persona zählt weder für Kapazität noch für Budget oder Pool. Ihr Titel kommt aus `personas.humanName` und ist standardmäßig „You“. (Datei: `packages/tickets-engine/src/core/persona.ts`, `packages/tickets-engine/src/core/manual-gate.ts`)
 
-**Zuordnung.** Wer ein Ticket bearbeitet, entscheidet eine Leiter: zuerst der Pin im Ticket (`persona:`), dann die Phasen-Persona aus `pipeline.md`, dann die Default-Persona aus der Engine-Konfiguration (`defaultPersona`). Hat die gewinnende Persona einen lesbaren `worker`, liefert sie Harness und Modell (`models.default`). Ohne Persona gilt der alte Ring: Ticket-`worker:`, Spalte, `@worker` im Handover, Repo und Default `opencode`. Eine Worker-Wahl des Owners im Startdialog schlägt die Persona. Den Router reicht der Dispatch nicht durch, denn er übergibt `personaModelFor(persona, null)`. Pool und `router` einer Persona haben auf den Dispatch daher heute keinen Einfluss. (Datei: `packages/tickets-engine/src/services/persona-loader.ts`, `packages/tickets-engine/src/fleet/request.ts`, `packages/tickets-engine/src/fleet/assignment.ts`, `packages/tickets-engine/src/fleet/orchestrator.ts`)
+**Zuordnung.** Wer ein Ticket bearbeitet, entscheidet eine Leiter: zuerst der Pin im Ticket (`persona:`), dann die Phasen-Persona aus `pipeline.md`, dann die Default-Persona aus der Engine-Konfiguration (`defaultPersona`). Hat die gewinnende Persona einen lesbaren `worker`, liefert sie den Harness; das Modell wählt seit 212 (D-62, behoben) der Dispatch aus Pool und Router: `off` nimmt `models.default`, dann den Pool in Reihenfolge; `budget` den Pool in Reihenfolge; `escalate-on-fail` den Default und pro fehlgeschlagenem Run in dieser Phase einen Pool-Schritt weiter. Ein Eintrag, dessen Provider-Pool keinen freien Slot hat, wird übersprungen; ein Eintrag darf seinen Provider nennen (`kimi/k2`). `runner.log` nennt Modell und Grund. Ohne Persona gilt der alte Ring: Ticket-`worker:`, Spalte, `@worker` im Handover, Repo und Default `opencode`. Eine Worker-Wahl des Owners im Startdialog schlägt die Persona (und bekommt den Default). req-170 ersetzt das durch Klassen-Anforderungen. (Datei: `packages/tickets-engine/src/services/persona-loader.ts`, `packages/tickets-engine/src/fleet/request.ts`, `packages/tickets-engine/src/fleet/assignment.ts`, `packages/tickets-engine/src/fleet/orchestrator.ts`)
 
 **Pia, Paul, Ben, Ralf und Tessa** sind eine Beispiel-Crew aus den Fixtures und Tests: Planer, Builder, Reviewer und Testerin. Pia ist laut Audit Mission Control selbst. Verpflichtend ist keine von ihnen. Zwei Stellen setzen die Namen allerdings fest voraus. `SHAPE_SYSTEM_PROMPT` und `FLOW_SYSTEM_PROMPT` sagen dem Modell „ben builds, ralf reviews, tessa tests, paul plans“. (Datei: `docs/design/work-panel/default-names-audit.md`, `packages/tickets-engine/src/services/chat-llm.ts`)
 
@@ -135,14 +137,14 @@ Eine Datei `persona-skills.ts` oder `persona-improvements.ts` gibt es unter `ser
 3. `## Skills` (seit 204).
 4. `## Plan` wörtlich.
 5. Wer, wo und welcher Branch, dazu der Pfad der Ticketdatei und die Beschreibung.
-6. Der variable Teil: `## Memory` (die letzten max. 20 Zeilen bzw. 500 Tokens), `## Coaching` (die letzten 5 Owner-Nachrichten aus `thread.md`), der `## Handover` des vorigen Schritts (max. 2.000 Zeichen), der Diff-Stat und bei einem Retry das Ende des Gate-Fehlers.
+6. Der variable Teil: `## Memory` (die letzten max. 20 Zeilen bzw. 500 Tokens), der `## Handover` des vorigen Schritts (max. 2.000 Zeichen), der Diff-Stat und bei einem Retry das Ende des Gate-Fehlers. (`## Coaching` aus `thread.md` ist seit 212 weg, D-61 behoben.) Direkt nach der Ticket-Zeile in 5 steht seit 212 die Persona-Zeile `Your persona: <id> (<role>) — its folder is …` (D-60 behoben).
 7. Die Gate-Kommandos, die Completion- oder Dialog-Disziplin, die Handover-Disziplin und die Frageform an den Owner.
 
 (Datei: `packages/tickets-engine/src/fleet/request.ts`, `packages/tickets-engine/src/fleet/assignment.ts`, `packages/tickets-engine/src/fleet/context-pack.ts`, `packages/tickets-engine/src/fleet/orchestrator.ts`)
 
 **Handover-Modi.** Es gibt `fresh`, `resume` und `resume-compact`. Der Dispatcher fordert `auto` an, `resolveHandover` entscheidet. Review startet immer frisch. Fortgesetzt wird nur bei gleichem Provider, gleichem Modell und gleicher Phase, und nur wenn die Pause warm ist (Default 15 min). Ab 60k Tokens Kontext wird vorher kompaktiert, das können nur opencode und kimi nativ. `fleet.contextCapTokens` (Default 160.000) ist das Fenster, in dem der Provider mitten im Run kompaktiert. Ein fortgesetzter Run bekommt nur die `continuation`, also den variablen Teil, nicht den ganzen Brief. (Datei: `packages/tickets-engine/src/fleet/handover.ts`, `packages/tickets-engine/src/fleet/protocol.ts`, `packages/tickets-engine/src/contracts/fleet-defaults.ts`)
 
-**Rückfluss in die Persona.** `memory.md` wird nur in drei Fällen geschrieben: über `personaLearn` („teach“), über `personaMemoryAppend` und wenn der Owner einen Vorschlag annimmt (`decideImprovement`). Die Coaching-Zeilen fließen ohne Freigabe in den nächsten Brief. Die Friction-Schleife sieht so aus: Die Prompts bitten den Worker, eine Zeile nach `friction.md` zu schreiben. Der `ImprovementsService` fasst bei 3 Funden, oder bei 3 Funden plus 5 abgeschlossenen Runs, über die Chat-Bridge Vorschläge in `improvements.md` zusammen. Übernommen wird ein Vorschlag erst, wenn der Owner ihn annimmt. (Datei: `packages/tickets-engine/src/services/board-service.ts`, `packages/tickets-engine/src/services/improvements-service.ts`, `packages/tickets-engine/prompts/build-default.md`)
+**Rückfluss in die Persona.** `memory.md` wird nur in drei Fällen geschrieben: über `personaLearn` („teach“), über `personaMemoryAppend` und wenn der Owner einen Vorschlag annimmt (`decideImprovement`). Die Coaching-Zeilen fließen seit 212 nicht mehr in den Brief (D-61 behoben; der akzeptierte Weg kommt mit req-168/169). Die Friction-Schleife sieht so aus: Die Prompts bitten den Worker, eine Zeile nach `friction.md` zu schreiben. Der `ImprovementsService` fasst bei 3 Funden, oder bei 3 Funden plus 5 abgeschlossenen Runs, über die Chat-Bridge Vorschläge in `improvements.md` zusammen. Übernommen wird ein Vorschlag erst, wenn der Owner ihn annimmt. (Datei: `packages/tickets-engine/src/services/board-service.ts`, `packages/tickets-engine/src/services/improvements-service.ts`, `packages/tickets-engine/prompts/build-default.md`)
 
 ---
 
@@ -181,7 +183,7 @@ sequenceDiagram
   C->>C: Board-Digest (max 2 KB, nur offene)
   C->>C: T-0091 erkennen, Datei lesen (max 8.000 Z.) + 20 Kommentare
   C->>B: runTurn(system=Mission+Digest+Named, history 20)
-  B->>L: POST stream:true (Timeout 120 s)
+  B->>L: POST stream:true (kein Timeout seit 212, D-63; Abbruch nur durch den Client)
   L-->>B: SSE-Deltas
   B-->>C: {say, thought, commands:[]}
   C-->>G: Antwort + ggf. Vorschlagskarten
@@ -214,9 +216,9 @@ sequenceDiagram
 
 ## 6. Was heute NICHT passiert
 
-- **Ein 1:1 geht an kein Modell.** `personaThreadAppend` hängt eine Zeile an `thread.md` an und committet. Niemand antwortet. Der Text landet nur als `## Coaching` im nächsten Run dieser Persona. (Datei: `packages/tickets-engine/src/services/board-service.ts`, `packages/tickets-engine/src/fleet/context-pack.ts`)
+- **Ein 1:1 geht an kein Modell.** `personaThreadAppend` hängt eine Zeile an `thread.md` an und committet. Niemand antwortet. Seit 212 landet der Text auch nicht mehr im nächsten Run (D-61 behoben); er ist eine Notiz an die Persona, bis req-168 das 1:1 zur Session macht. (Datei: `packages/tickets-engine/src/services/board-service.ts`, `packages/tickets-engine/src/fleet/context-pack.ts`)
 - **Memory wird nicht automatisch geschrieben.** `appendMemory` hat nur Aufrufer auf der Owner-Seite. Beim Settle schreibt der Runner nichts in die Persona. (Datei: `packages/tickets-engine/src/services/board-service.ts`)
-- **Friction aus Build-Runs kommt praktisch nicht an.** Der Ship-Brief nennt die Persona-ID nicht; nur der Scout-Brief führt `personaId`. `build-default` sagt dem Worker „No persona in your brief: skip it“. (Datei: `packages/tickets-engine/src/fleet/assignment.ts`, `packages/tickets-engine/prompts/build-default.md`)
+- **Friction aus Build-Runs kam praktisch nicht an (behoben in 212, D-60).** Der Ship-Brief nannte die Persona nicht; nur der Scout-Brief führte `personaId`, und `build-default` sagte „No persona in your brief: skip it“. Jetzt nennen beide Briefs die Persona-Zeile, und die Prompts verweisen auf sie. (Datei: `packages/tickets-engine/src/fleet/assignment.ts`, `packages/tickets-engine/prompts/build-default.md`)
 - **Runner haben keinen MCP-Vault-Zugriff.** Der claude-Adapter übergibt kein `--mcp-config`, und kimi bekommt ausdrücklich `mcpServers: []`. (Datei: `packages/tickets-engine/src/fleet/providers.ts`, `packages/tickets-engine/src/fleet/kimi.ts`)
 - **Skills stehen erst seit 204 im Brief**, und zwar vollständig, im stabilen Teil. (Datei: `specs/changelog.md`, `packages/tickets-engine/src/fleet/context-pack.ts`)
 - **Das Modell pro Runner ist nicht wählbar (req-156).** Mission Control hat genau einen `chat.model`. Provider ohne HTTP-Dialekt (`claude-code`, `copilot-*`) verweigert die Bridge. (Datei: `specs/roadmap.md`, `packages/tickets-engine/src/services/chat-model.ts`)

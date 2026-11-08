@@ -378,6 +378,23 @@ up to the plan is byte-identical across runs of the same repo and
 phase, so a warm prompt cache survives. A red-gate retry is a fresh run
 whose instruction carries the ticket's most recent `gateFailure`
 section — the worker continues the branch instead of starting over.
+A persona run names its persona right after the ticket line (milestone
+212, D-60: `Your persona: <id> (<role>) — its folder is
+tickets/_meta/personas/<id>/ …`, ship and scout brief alike), which is
+what lets the step prompts' Friction paragraph run; the persona's
+`## Memory` slice rides the variable parts, its `thread.md` does not
+(D-61 — nothing is adopted unreviewed; req-168/169).
+
+**Which model a persona run gets (milestone 212, D-62).** The dispatch
+pass resolves the model through `personaModelFor(persona, context)`:
+router `off` walks `models.default` then `models.pool` in order, `budget`
+the pool in order, `escalate-on-fail` the default then one pool step per
+failed run of the ticket in this phase; a pool entry whose provider pool
+(`fleet.pool.<provider>.size` minus the live runs, as the planner counts
+them at that point of the pass) has no free slot is skipped, and an entry
+may name its own provider (`kimi/k2`). The `dispatched …` log line ends
+with `— model <id>: <why>`, e.g. `— model k2: sonnet: the claude-code pool
+is full — pool fallback`. req-170 replaces this with class requests.
 
 The caps are the plugin config keys `fleet.cap.gateFailureLines` /
 `fleet.cap.gateFailureBytes` / `fleet.cap.diffStatLines` /

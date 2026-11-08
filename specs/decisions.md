@@ -8,6 +8,11 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **The coaching thread riding the run brief unreviewed** (2026-11-08; milestone 212, D-61). From U4 (milestone 102)
+  to 211 the last five owner messages of a persona's `thread.md` rode every run as a `## Coaching` section, with no
+  review step between the 1:1 and the model. Dropped: the owner's rule is that nothing a persona reads is adopted
+  automatically (concept R2/R14); the accepted path is req-168 (the 1:1 as a persona session) and req-169 (memory
+  with author and evidence, removable per line). The thread stays the 1:1 pane's note until then.
 - **Search and Tasks as two bands of one panel, or tasks as a saved search** (owner, 2026-11-07; req-161, board
   `FindDirections`). Direction B (one field, a "Notes" band and a "Tasks" band that fold) mixed both lists in one
   height and left open whether Match case / Regular expression apply to tasks; direction C (tasks as a saved search
