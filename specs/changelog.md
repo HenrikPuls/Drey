@@ -1,5 +1,5 @@
 
-### Linux port + removal of the tickets plugin
+### Linux port + removal of the tickets plugin (release 0.8.2)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-08
 (outside the list). `plugins/tickets/` (board, fleet runner, remote

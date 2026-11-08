@@ -212,6 +212,11 @@ jobs:
       - name: Build (renderer + main + plugins)
         run: npm run build
 
+      # Ubuntu 24.04 runners forbid unprivileged user namespaces, which
+      # Chromium's sandbox needs -- without this Electron aborts at launch.
+      - name: Allow Electron's sandbox (user namespaces)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       # Electron needs a display on a headless runner.
       - name: E2E (Playwright drives the built Electron app under xvfb)
         env:

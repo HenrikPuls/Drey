@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-08):** version 0.8.1. The tickets plugin and its agent
+**Status (2026-11-08):** version 0.8.2. The tickets plugin and its agent
 fleet were removed (see `decisions.md`) and Drey runs on Linux beside
 Windows (AppImage with in-app update, .deb notify-only; changelog, top
 entry). Milestone ids are assigned when work starts — check
