@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inPipelineOrder, parsePersonaFile, personaFileText, personaMigrationFor, personaModelFor, personaRef, resolvePersona } from './persona';
+import { inPipelineOrder, parsePersonaFile, personaFileText, personaMigrationFor, personaModelFor, personaRef, resolvePersona, type PersonaModelContext } from './persona';
 
 const PIA = `---
 title: Pia
@@ -121,17 +121,53 @@ describe('resolvePersona', () => {
   });
 });
 
-describe('personaModelFor', () => {
+describe('personaModelFor (D-62: the pool and the router act at dispatch)', () => {
   const pia = parsePersonaFile('pia', PIA);
-
-  it('runs the default with the router off', () => {
-    expect(personaModelFor(pia, 100_000)).toEqual({ model: 'opus', viaRouter: false });
+  const ctx = (over: Partial<PersonaModelContext> = {}): PersonaModelContext => ({
+    phase: 'plan',
+    provider: 'claude-code',
+    freeSlots: { 'claude-code': 1, opencode: 1, kimi: 1 },
+    failedRuns: 0,
+    ...over,
   });
 
-  it('routes inside the pool only', () => {
-    const budget = { ...pia, models: { ...pia.models, router: 'budget' as const } };
-    expect(personaModelFor(budget, 12_000).model).toBe('opus'); // pool order = price order
-    expect(personaModelFor(budget, 12_000).viaRouter).toBe(true);
+  it('without a fleet context the default stands (the Crew tab, estimates)', () => {
+    expect(personaModelFor(pia, null)).toEqual({ model: 'opus', provider: null, viaRouter: false, reason: 'the default' });
+  });
+
+  it('router off: the default while its pool has a free slot', () => {
+    expect(personaModelFor(pia, ctx())).toMatchObject({ model: 'opus', provider: null, viaRouter: false });
+  });
+
+  it("router off: the second pool entry when the first entry's pool is full", () => {
+    const mixed = { ...pia, models: { ...pia.models, pool: ['opus', 'kimi/k2', 'sonnet'] } };
+    const choice = personaModelFor(mixed, ctx({ freeSlots: { 'claude-code': 0, kimi: 1, opencode: 1 } }));
+    expect(choice).toMatchObject({ model: 'k2', provider: 'kimi', viaRouter: false });
+    expect(choice.reason).toContain('claude-code pool is full');
+  });
+
+  it('every pool full: the default is named and the provider gate makes the ticket wait', () => {
+    const mixed = { ...pia, models: { ...pia.models, pool: ['opus', 'kimi/k2'] } };
+    expect(personaModelFor(mixed, ctx({ freeSlots: { 'claude-code': 0, kimi: 0, opencode: 0 } }))).toMatchObject({ model: 'opus', provider: null });
+  });
+
+  it('a slash that names no worker provider is part of the model id (zai/glm-5.3)', () => {
+    const glm = { ...pia, models: { default: 'zai/glm-5.3', pool: ['zai/glm-5.3'], router: 'off' as const } };
+    expect(personaModelFor(glm, ctx())).toMatchObject({ model: 'zai/glm-5.3', provider: null });
+  });
+
+  it('budget router: the pool in order (cheapest first), skipping full pools', () => {
+    const budget = { ...pia, models: { default: 'opus', pool: ['glm-5.2', 'sonnet', 'opus'], router: 'budget' as const } };
+    expect(personaModelFor(budget, ctx())).toMatchObject({ model: 'glm-5.2', viaRouter: true });
+    const kimiFirst = { ...budget, models: { ...budget.models, pool: ['kimi/k2', 'sonnet'] } };
+    expect(personaModelFor(kimiFirst, ctx({ freeSlots: { kimi: 0, 'claude-code': 1 } }))).toMatchObject({ model: 'sonnet', provider: null, viaRouter: true });
+  });
+
+  it('escalate-on-fail: the default first, one pool step per failed run of the ticket in this phase', () => {
+    const escalate = { ...pia, models: { default: 'sonnet', pool: ['glm-5.2', 'sonnet', 'opus'], router: 'escalate-on-fail' as const } };
+    expect(personaModelFor(escalate, ctx())).toMatchObject({ model: 'sonnet', viaRouter: true });
+    expect(personaModelFor(escalate, ctx({ failedRuns: 1 }))).toMatchObject({ model: 'opus', viaRouter: true });
+    expect(personaModelFor(escalate, ctx({ failedRuns: 5 }))).toMatchObject({ model: 'opus' }); // the pool's end holds
   });
 });
 

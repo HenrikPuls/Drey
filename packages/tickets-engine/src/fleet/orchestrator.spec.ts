@@ -1327,7 +1327,7 @@ describe('Orchestrator', () => {
 
     async function writePersona(
       id: string,
-      over: { worker?: string; model?: string; prompt?: string | null; memory?: string; skills?: readonly string[] } = {},
+      over: { worker?: string; model?: string; pool?: readonly string[]; router?: string; prompt?: string | null; memory?: string; skills?: readonly string[] } = {},
     ): Promise<void> {
       const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', id);
       await fsp.mkdir(dir, { recursive: true });
@@ -1341,8 +1341,8 @@ describe('Orchestrator', () => {
           `worker: ${over.worker ?? 'opencode'}`,
           'models:',
           `  default: ${model}`,
-          `  pool: [${model}]`,
-          '  router: off',
+          `  pool: [${(over.pool ?? [model]).join(', ')}]`,
+          `  router: ${over.router ?? 'off'}`,
           "color: '#a78bfa'",
           `skills: [${(over.skills ?? []).join(', ')}]`,
           '---',
@@ -1487,6 +1487,49 @@ describe('Orchestrator', () => {
       expect(started.request.instruction).not.toContain('## Memory');
       expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
       expect(logs.filter((line) => line.includes('has no prompt.md'))).toHaveLength(1);
+    });
+
+    it("the persona's pool acts at dispatch: the second entry runs when the first entry's pool is full (D-62)", async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet', pool: ['sonnet', 'kimi/k2'] });
+      await writeTicket('T-0120', 'plan');
+      const logs: string[] = [];
+      const fleet = fakePort();
+      // The one claude-code slot is taken: the pool's second entry names kimi, which is free.
+      fleet.records.push({
+        info: { ...failedRecord('T-0098', '').info, id: 'R-seed', state: 'running', provider: 'claude-code' },
+        request: { ticketId: 'T-0098', column: 'plan' } as RunRequest,
+      });
+      const orch = new Orchestrator({ root: fleetRoot, log: (message) => logs.push(message), supervisorOf: () => fleet.port, scanIntervalMs: 60_000 });
+      await orch.configure({ ...CONFIG, pools: normalizeFleetPools({ opencode: { size: 1 }, 'claude-code': { size: 1 }, kimi: { size: 1 } }) });
+      await orch.setMaster('run');
+
+      const started = fleet.records.find((r) => r.info.id !== 'R-seed');
+      expect(started).toBeDefined();
+      expect(started!.request.provider).toBe('kimi');
+      expect(started!.request.model).toBe('k2');
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
+      // runner.log names the chosen model and why
+      const line = logs.find((l) => l.startsWith('dispatched T-0120'));
+      expect(line).toContain('kimi/k2');
+      expect(line).toContain('claude-code pool is full');
+    });
+
+    it("the persona's router is honoured: escalate-on-fail climbs the pool after a failed run (D-62)", async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet', pool: ['sonnet', 'opus'], router: 'escalate-on-fail' });
+      await writeTicket('T-0121', 'plan');
+      const logs: string[] = [];
+      const fleet = fakePort();
+      fleet.records.push({ ...failedRecord('T-0121', 'gate red'), info: { ...failedRecord('T-0121', 'gate red').info, provider: 'claude-code' } });
+      const orch = new Orchestrator({ root: fleetRoot, log: (message) => logs.push(message), supervisorOf: () => fleet.port, scanIntervalMs: 60_000 });
+      await orch.configure({ ...CONFIG, pools: normalizeFleetPools({ 'claude-code': { size: 2 } }) });
+      await orch.setMaster('run');
+
+      const started = fleet.records.find((r) => r.info.state === 'running');
+      expect(started!.request.provider).toBe('claude-code');
+      expect(started!.request.model).toBe('opus');
+      expect(logs.find((l) => l.startsWith('dispatched T-0121'))).toContain('escalate-on-fail');
     });
 
     it('the persona takes its own provider pool slot', async () => {
