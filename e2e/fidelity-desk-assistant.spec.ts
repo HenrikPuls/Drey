@@ -235,10 +235,10 @@ async function arrangeRight(page: Page, width: number): Promise<void> {
     const saved = JSON.parse(localStorage.getItem('drey.dock') ?? '{}') as { active: string; views: Record<string, Record<string, unknown>> };
     const view = saved.views[saved.active];
     const dock = view['dock'] as { left: string[]; right: string[]; bottom: string[] };
-    const search = named(['Search', 'Tasks']);
+    const search = named(['Find']);
     const assistant = named(['Assistant']);
     const open = { ...(view['open'] as Record<string, boolean>) };
-    for (const id of [...named(['Search']), ...assistant, ...named(['Files'])]) {
+    for (const id of [...named(['Find']), ...assistant, ...named(['Files'])]) {
       open[id] = true;
     }
     for (const id of named(['Tickets', 'Work'])) {
@@ -252,7 +252,7 @@ async function arrangeRight(page: Page, width: number): Promise<void> {
         right: [...search, ...assistant, ...dock.right.filter((id) => !search.includes(id) && !assistant.includes(id))],
       },
       open,
-      collapsed: { ...(view['collapsed'] as object), ...Object.fromEntries(named(['Search']).map((id) => [id, true])), ...Object.fromEntries(assistant.map((id) => [id, false])) },
+      collapsed: { ...(view['collapsed'] as object), ...Object.fromEntries(named(['Find']).map((id) => [id, true])), ...Object.fromEntries(assistant.map((id) => [id, false])) },
       rightW,
       foldedSides: [],
     };

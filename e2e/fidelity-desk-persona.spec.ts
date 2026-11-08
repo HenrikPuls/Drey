@@ -163,8 +163,8 @@ async function arrangeDocks(page: Page): Promise<void> {
       ids.set((btn.getAttribute('title') ?? '').split(' · ')[0] ?? '', btn.dataset['widget'] ?? '');
     }
     const named = (names: string[]): string[] => names.map((n) => ids.get(n)).filter((id): id is string => id !== undefined);
-    const left = named(['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tasks', 'Tickets']);
-    const right = named(['Search', 'Assistant']);
+    const left = named(['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tickets']);
+    const right = named(['Find', 'Assistant']);
     const all = [...ids.values()];
     const saved = JSON.parse(localStorage.getItem('drey.dock') ?? '{}') as { active: string; views: Record<string, Record<string, unknown>> };
     saved.views[saved.active] = {
@@ -172,7 +172,7 @@ async function arrangeDocks(page: Page): Promise<void> {
       dock: { left: left.concat(all.filter((id) => !left.includes(id) && !right.includes(id))), right, bottom: [] },
       open: Object.fromEntries(all.map((id) => [id, named(['Tickets', 'Assistant']).includes(id)])),
       flexes: Object.fromEntries(all.map((id) => [id, 1])),
-      collapsed: Object.fromEntries(named(['Search']).map((id) => [id, true])),
+      collapsed: Object.fromEntries(named(['Find']).map((id) => [id, true])),
       leftW: 300,
       rightW: 380,
       bottomH: 140,

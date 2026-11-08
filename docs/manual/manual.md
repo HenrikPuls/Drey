@@ -328,18 +328,25 @@ A task is any `- [ ]` checklist line — or a plain text line carrying
 - [ ] Clarify image rights with the editor 📅 2026-10-14 ⏫
 ```
 
-![The Tasks panel](img/panel-tasks.png)
+![The Find panel in Tasks mode](img/panel-tasks.png)
 
-The **Tasks panel** lists tasks from
+Tasks are one of the two modes of the **Find panel** (`Ctrl+Shift+F`, the
+magnifier in the dock strip): the title of its header is the mode switch,
+*Search | Tasks*, and the status next to it counts the open tasks ("6 open",
+"14 open in all vaults"). The **Tasks** mode lists tasks from the place the
+panel's `⋯` menu names under *Look in*:
 
-- **Doc** — the open document's live buffer,
-- **Vault** — every note in the active vault,
-- **All** — every registered vault, grouped per file with a vault badge.
+- **This note** — the open document's live buffer,
+- **This vault** — every note in the active vault,
+- **All vaults** — every registered vault, grouped per file with a vault name.
 
-The toolbar offers *hide done*, a kind filter (checkbox tasks vs.
-`#task` lines) and a sort cycle (file order / due / priority). Rows show
-a due badge (coloured when overdue or due today) and the priority glyph
-— both are buttons that re-open their pickers. In the editor, typing
+The same field as in Search narrows the list: `#tag` words become chips, the
+rest filters by text. The `⋯` menu carries *Show done*, the kind choice
+(*Checkbox tasks* and *#task lines*) and the order: *File order* (grouped per
+file), *Due date* (grouped *Overdue*, *Today*, *Later* and *No date*) and
+*Priority*. Rows show a due date (red when overdue, accent when due today) and
+the priority as an arrow with its word — both are buttons that re-open their
+pickers. In the editor, typing
 `due` / `prio` on a task line (or clicking a metadata chip) opens the
 same pickers in place.
 
@@ -352,8 +359,8 @@ same pickers in place.
 
 Once a day, a system notification counts the open tasks that are due
 today or overdue — across every vault (for example "2 due today, 4
-overdue"). Clicking it brings Drey to the front and opens the Tasks
-panel. Nothing is scheduled while Drey is closed: the next start
+overdue"). Clicking it brings Drey to the front and opens Find in Tasks
+mode. Nothing is scheduled while Drey is closed: the next start
 reports what piled up in one notification. Turn it off in
 Settings → Tasks.
 
@@ -366,26 +373,30 @@ list). The **Tags plugin** keeps a per-vault index of every
 heading-delimited section — tagged or not — so full-text search reaches
 unindexed-looking notes too.
 
-![The Search panel](img/panel-search.png)
+![The Find panel in Search mode](img/panel-search.png)
 
-The **Search panel** (open with `Ctrl+Shift+F`) has:
+The **Find panel** (open with `Ctrl+Shift+F`) replaces the former Search and
+Tasks panels. The title of its header switches between its two modes,
+*Search* and *Tasks* (section 6); the status next to it counts the hits
+("6 in 3 files") and names a scope other than This vault ("2 in this note").
+The Search mode has:
 
-- A **scope switch**: this document / the active vault / all vaults.
 - **One field** for everything: free text, and `#tag` words that lift
-  into chips as you type them.
-- Match toggles: `Aa` case-sensitive, `ab` whole word, `.*` regular
-  expression (an invalid regex shows an inline error, not an empty
-  list).
-- **Include chats** (speech-bubble toggle): `chats/` notes stay indexed
-  but are excluded from vault/all results — and from replace — unless
-  this is on.
+  into chips as you type them (with completion from your tags). The *x*
+  clears it; the replace switch at its right end opens the replace row.
+- The **`⋯` menu**: *Look in* (this note / this vault / all vaults),
+  *Match case*, *Whole word*, *Regular expression* (an invalid regex
+  turns the field red and shows the reason, not an empty list), and
+  *Include chats*: `chats/` notes stay indexed but are excluded from
+  vault/all results — and from replace — unless this is on.
 
-Results are sections grouped per file; a click opens the file at the
-section's line, in the file's vault.
+Results are sections grouped per file, the match marked in the snippet; a
+click opens the file at the section's line, in the file's vault.
 
 ### Replace
 
-The replace row patches the **open buffer** in document scope (an
+The replace switch in the field opens a second field with *Replace all*; it
+patches the **open buffer** in document scope (an
 unsaved edit, like typing). Vault-wide replace first shows **one bundled
 confirmation** listing every affected file with its diff:
 
@@ -393,7 +404,7 @@ confirmation** listing every affected file with its diff:
 
 ### Export and Summarize
 
-On the result line: **Export** dumps the hits into an unsaved
+In the `⋯` menu: **Export results to a note** dumps the hits into an unsaved
 `search-results.md` scratch tab; **Summarize** (needs an LLM) streams a
 digest of the hits into an editable scratch tab, cancellable, over the
 `builtin:search-summary` prompt template.
@@ -2123,7 +2134,7 @@ hotkey, in [Settings â†’ Keyboard shortcuts](#settings-keyboard-shortcuts).
 | `Mod+P` | Quick switcher (files) |
 | `Mod+Shift+P` | Command palette |
 | `Mod+,` | Settings |
-| `Mod+Shift+F` | Search panel |
+| `Mod+Shift+F` | Find panel |
 | `Mod+Shift+A` | Ask the assistant about the selection |
 | `Mod+G` | Toggle line numbers |
 | `Mod+B` / `Mod+Alt+B` | Toggle left / right dock |

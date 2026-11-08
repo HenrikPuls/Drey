@@ -333,8 +333,8 @@ async function arrangeDocks(page: Page, layout: { readonly shown: readonly strin
       ids.set((btn.getAttribute('title') ?? '').split(' · ')[0] ?? '', btn.dataset['widget'] ?? '');
     }
     const named = (names: string[]): string[] => names.map((n) => ids.get(n)).filter((id): id is string => id !== undefined);
-    const left = named(['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tasks', 'Tickets']);
-    const right = named(['Search', 'Work', 'Assistant']);
+    const left = named(['Calendar', 'Files', 'Backlinks', 'Source control', 'Outline', 'Tickets']);
+    const right = named(['Find', 'Work', 'Assistant']);
     const shown = new Set(named([...wanted.shown]));
     const saved = JSON.parse(localStorage.getItem('drey.dock') ?? '{}') as { active: string; views: Record<string, Record<string, unknown>> };
     const view = saved.views[saved.active];
@@ -354,8 +354,8 @@ async function arrangeDocks(page: Page, layout: { readonly shown: readonly strin
   }, layout);
 }
 
-const ROW_7 = { shown: ['Tickets', 'Work', 'Search', 'Assistant'], collapsed: ['Search'], rightW: 380 };
-const BOARD_9A = { shown: ['Calendar', 'Files', 'Outline', 'Tasks', 'Search', 'Assistant'], collapsed: ['Search', 'Tasks'], rightW: 420 };
+const ROW_7 = { shown: ['Tickets', 'Work', 'Find', 'Assistant'], collapsed: ['Find'], rightW: 380 };
+const BOARD_9A = { shown: ['Calendar', 'Files', 'Outline', 'Find', 'Assistant'], collapsed: ['Find'], rightW: 420 };
 
 async function sizeWindow(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ BrowserWindow }) => {

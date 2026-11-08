@@ -91,12 +91,38 @@ export class PanelFrame implements OnInit {
     () => this.registry.descriptor(this.panelId())?.headerActionsMount,
   );
   private readonly pluginActionsView = viewChild<ElementRef<HTMLDivElement>>('pluginActions');
+  /** A plugin widget that draws its own title into the slot (SDK 1.54). */
+  protected readonly headerTitleMount = computed(
+    () => this.registry.descriptor(this.panelId())?.headerTitleMount,
+  );
+  private readonly pluginTitleView = viewChild<ElementRef<HTMLSpanElement>>('pluginTitle');
   protected readonly isDragging = computed(() => this.dock.dragging() === this.panelId());
   /** True while this is the panel the user last interacted with: its header controls show. */
   protected readonly isActive = computed(() => this.dock.activePanel() === this.panelId());
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.dock.unregisterPanelEl(this.panelId(), this.el));
+    // The plugin's own title (SDK 1.54), mounted like the header controls.
+    effect((onCleanup) => {
+      const mount = this.headerTitleMount();
+      const host = this.pluginTitleView()?.nativeElement ?? null;
+      if (mount === undefined || host === null) {
+        return;
+      }
+      let dispose: (() => void) | undefined;
+      try {
+        dispose = mount(host) ?? undefined;
+      } catch (error) {
+        console.error(`panel "${this.panelId()}" header title mount failed:`, error);
+      }
+      onCleanup(() => {
+        try {
+          dispose?.();
+        } catch {
+          // A failing plugin dispose must not break the shell teardown.
+        }
+      });
+    });
     // Mount a plugin widget's header controls once their container exists.
     // Reading the signal-based `viewChild` INSIDE the effect tracks it: the
     // effect (re-)runs when the panel id changes or the container is
@@ -122,6 +148,13 @@ export class PanelFrame implements OnInit {
         }
       });
     });
+  }
+
+  /** A press on a button inside the plugin's title stays a click; any other press drags the panel. */
+  protected onTitleSlotPress(event: MouseEvent): void {
+    if ((event.target as HTMLElement | null)?.closest('button') != null) {
+      event.stopPropagation();
+    }
   }
 
   ngOnInit(): void {

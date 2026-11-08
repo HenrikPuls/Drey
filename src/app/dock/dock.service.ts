@@ -6,6 +6,7 @@ import { LayoutGestureService } from '../services/layout-gesture.service';
 import { SettingsService } from '../services/settings.service';
 import { WidgetId, type WidgetDescriptor } from './widget-registry';
 import { WidgetRegistryService } from './widget-registry.service';
+import { migrateWidgetAliases } from './widget-aliases';
 
 /**
  * A dockable widget id. Kept as an alias for continuity -- the registry
@@ -39,7 +40,7 @@ const DOCK_SIDES: readonly DockSide[] = ['left', 'right', 'bottom'];
 export type SideDock = 'left' | 'right';
 
 /** Persisted layout state (DESIGN.md "Datenmodell", minus the transient drag fields). */
-interface DockState {
+export interface DockState {
   dock: Record<DockSide, WidgetId[]>;
   /** `flex-grow` weight per open panel. */
   flexes: Record<WidgetId, number>;
@@ -224,6 +225,7 @@ export class DockService {
    * the two would fight indefinitely.
    */
   private absorbRegistry(widgets: readonly WidgetDescriptor[], disabled: ReadonlySet<string>): void {
+    this.migrateStoredAliases();
     this.patch((s) => {
       const dock = {
         left: [...s.dock.left],
@@ -233,7 +235,11 @@ export class DockService {
       const flexes = { ...s.flexes };
       const open = { ...s.open };
       const collapsed = { ...s.collapsed };
-      const stored = this.storedActive;
+      // The stored layout may name a replaced panel's old ids (SDK 1.54 `aliases`).
+      const stored =
+        this.storedActive === null
+          ? null
+          : migrateWidgetAliases(this.storedActive, this.registry.aliasTable());
       let changed = false;
       for (const w of widgets) {
         const placed =
@@ -260,9 +266,39 @@ export class DockService {
     });
   }
 
+  /**
+   * A panel that replaced others (SDK 1.54 `aliases`) renames their ids in
+   * every view's stored layout, once; the result is written back.
+   */
+  private migrateStoredAliases(): void {
+    const aliases = this.registry.aliasTable();
+    if (aliases.size === 0) {
+      return;
+    }
+    let changed = false;
+    if (this.storedActive !== null) {
+      const next = migrateWidgetAliases(this.storedActive, aliases);
+      changed ||= next !== this.storedActive;
+      this.storedActive = next;
+    }
+    for (const [view, layout] of Object.entries(this.slots)) {
+      const next = migrateWidgetAliases(layout, aliases) as DockState;
+      if (next !== layout) {
+        this.slots = { ...this.slots, [view]: next };
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.persist();
+    }
+  }
+
   /** Puts `id` where the stored layout had it, else into `fallback` at its default slot. */
   private place(lists: Record<DockSide, WidgetId[]>, id: WidgetId, fallback: DockSide): void {
-    const stored = this.storedActive?.dock;
+    const stored =
+      this.storedActive === null
+        ? undefined
+        : migrateWidgetAliases(this.storedActive, this.registry.aliasTable()).dock;
     const side = stored && DOCK_SIDES.find((d) => stored[d]?.includes(id));
     if (!stored || !side) {
       lists[fallback].splice(this.orderedInsertIndex(fallback, id, lists[fallback]), 0, id);
@@ -1114,7 +1150,9 @@ export class DockService {
   }
 
   /** Fold a stored blob onto the defaults, dropping anything unrecognised. */
-  private merge(base: DockState, saved: Partial<DockState>): DockState {
+  private merge(base: DockState, stored: Partial<DockState>): DockState {
+    // A panel that replaced others (SDK 1.54 `aliases`) takes their stored place.
+    const saved = migrateWidgetAliases(stored, this.registry.aliasTable());
     const known = new Set<WidgetId>(this.registry.allWidgetIds());
     const clean = (list: unknown): WidgetId[] =>
       Array.isArray(list) ? list.filter((x): x is WidgetId => known.has(x as WidgetId)) : [];

@@ -829,8 +829,20 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
 
 **Plugin panels** (renderer DOM widgets of the plugins above):
 
-- Search panel — `plugins/tags/`: an icon scope
-  switch (document | vault | all vaults), **one** field (the shared tag
+- **Find panel** (req-161, board 9c; SDK 1.54) — `plugins/tags/` hosts
+  the one dock panel `find` (strip icon `search`, `Ctrl+Shift+F`; its
+  `aliases: ['search', 'tasks']` map a stored layout of either old panel
+  onto it once, in every view). The header title is the mode switch
+  (`PluginWidgetContrib.headerTitle`), then the status per mode and one
+  `⋯` menu; below it ONE field and the list of the active mode. Search is
+  drawn by the tags plugin; any other mode (Tasks first) is mounted from
+  the base `FindModeRegistry` (`ui.registerFindMode`), so the tasks plugin
+  keeps its index, writes and pickers. Both modes are described below;
+  where the text names icon buttons on the result line or a scope switch,
+  the `⋯` menu (Look in; Match case · Whole word · Regular expression ·
+  Include chats; Export results to a note · Summarize) holds them now.
+- Search mode — `plugins/tags/`: a scope choice
+  (document | vault | all vaults), **one** field (the shared tag
   field in free-text mode: a typed `#name` becomes a chip, the rest is
   the text query) with `Aa`/`ab`/`.*` match toggles → section hits
   **grouped per file** (click opens the file at the line through the
@@ -847,12 +859,13 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   and out of "Replace all" — unless it is on (off by default; the
   document scope searches the open note as it is). Panel +
   toggle prefs persist in `localStorage['drey.search']`
-- Tasks panel — `plugins/tasks/` (ADR-0033):
+- Tasks mode of Find — `plugins/tasks/` (ADR-0033, `find-mode.ts`):
   checkbox / `#task` lines in the open document, the whole vault, or all
-  vaults (Doc | Vault | All scope toggle, milestone 34) · "hide done" · a
-  kind filter · a sort cycle (file order | due | priority, milestone 51 —
-  due/priority sorts flatten the grouped view) — all persisted to
-  `localStorage['drey.tasks']`. Task lines carry **Obsidian-compatible
+  vaults (the panel's *Look in* choice and shared field; milestone 34) ·
+  *Show done* · a kind choice · an order (file order | due | priority) —
+  the three choices in the `⋯` menu, persisted to
+  `localStorage['drey.tasks']`; the due order groups the list *Overdue ·
+  Today · Later · No date*, priority is flat. Task lines carry **Obsidian-compatible
   inline metadata** (req-37): a due `📅 YYYY-MM-DD` and a priority glyph
   (`🔺`/`⏫`/`🔽`), parsed + stripped by the shared scanner into
   `TaskRecord.due`/`TaskRecord.priority` (so `resolveTaskLine`'s
@@ -999,9 +1012,10 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
 | Tag pills + `#tag` completion (the tag chrome) | `src/app/editor/tags/`, `TagVocabularyService` | Base | ADR-0017 |
 | Tag index, prefix colors, rename/merge | `plugins/tags/` (main + Settings → Tags) | Plugin tags | ADR-0017, M53 |
-| Search panel (tag + text, replace, Export, Summarize) | `plugins/tags/` | Plugin tags | M33, M37 |
+| Find panel: Search mode (tag + text, replace, Export, Summarize), the mode host (`find-panel.ts`, `find-menu.ts`) | `plugins/tags/` | Plugin tags | M33, M37, M210 |
+| Find-mode registry (`ui.registerFindMode`), the title slot (`headerTitle`) and panel `aliases` | `src/app/plugin-host/find-mode-registry.service.ts`, `src/app/dock/` | Base | SDK 1.54, M210 |
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
-| Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
+| Tasks mode of Find + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033, M210 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events; streamed rounds with loop-owned delta forwarding and the abort signal into every call — M88) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`, `shared/llm/stream-assembly.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
 | Vault tools for the model — `vault_list`, `vault_search`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
@@ -3383,11 +3397,14 @@ seam — was removed.
   no file. The outcome says why it is empty: `unavailable` (no section
   index — the tags plugin is disabled), `noTargets` (a custom selection
   without a registered vault).
-- **Search panel files** (`plugins/tags/renderer/`) — `index.ts` only
-  wires the parts and registers the `search.open` command:
+- **Find panel files** (`plugins/tags/renderer/`) — `index.ts` only
+  wires the parts and registers the `search.open` and `find.mode`
+  commands:
   `search-session.ts` is the model without DOM (query, persisted
   choices from `search-prefs.ts`, the hits, the run in all three
-  scopes); `search-panel.ts` is the dock widget's DOM over it;
+  scopes); `find-panel.ts` is the dock widget's DOM over it (header
+  title, field, hit list, the active mode's mount) and `find-menu.ts` its
+  `⋯` popover;
   `search-replace.ts` the file-scope buffer patch and the bundled
   confirmation; `search-summary.ts` the Summarize digest into a
   scratch tab; `hit-list.ts` folds unsaved buffers into the hits and

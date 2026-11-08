@@ -81,8 +81,20 @@
   color: var(--text-primary);
 }
 
-.status {
+/* A plugin that draws its own title (SDK 1.54) gets this slot, the title's height. */
+.title-slot {
+  display: flex;
+  align-items: center;
   flex: none;
+  height: 24px;
+  min-width: 0;
+}
+
+.status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: 4px;
   white-space: nowrap;
   font-family: var(--font-sans);

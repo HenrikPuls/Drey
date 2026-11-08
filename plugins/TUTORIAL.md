@@ -136,6 +136,20 @@ const plugin: PluginRendererModule = {
       },
     });
 
+    // A mode of a Find panel (SDK 1.54): the host keeps the registry, the
+    // plugin that draws the panel (tags) mounts your list and menu rows.
+    api.ui.registerFindMode({
+      id: 'sample',
+      label: 'Sample',
+      order: 90,
+      status: (query) => `${query.tags.length} tags`,
+      menu: () => [],
+      mount: (listHost, query) => {
+        listHost.textContent = `You searched for "${query.text}".`;
+        return { update: () => undefined, onChange: () => () => undefined, dispose: () => undefined };
+      },
+    });
+
     // A command with a keybinding, appearing in the command palette.
     api.commands.register({
       id: 'sample.stamp',

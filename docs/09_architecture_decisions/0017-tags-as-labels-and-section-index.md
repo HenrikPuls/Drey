@@ -224,3 +224,12 @@ confirmation; vaults are individually selectable when several carry the
 tag. Renaming INTO the reserved `task` root is rejected. This is the
 planned remedy for the tag-sprawl risk (`#sailing` vs. `#boat` can now
 be consolidated); near-duplicate *detection* stays out of scope.
+
+## Later change -- the Search panel is the Search mode of Find (milestone 210, req-161)
+
+The tags plugin stays the tag data owner and now also hosts the one dock panel
+**Find**: its field (the shared tag field), vocabulary completion, the replace
+flow and the Search mode are unchanged in substance; the scope, the match
+options, Export and Summarize moved into the panel's `⋯` menu. Other plugins
+add modes through the base find-mode registry (SDK 1.53); the tags plugin reads
+it and attaches no meaning to a mode.

@@ -188,3 +188,13 @@ duplicate texts leave the recorded line ambiguous it returns `null` —
 the toggle skips (safe no-op) instead of ticking the nearest twin.
 An id-style addressing scheme stays open for a genuine multi-writer
 future, but not at the cost of machine tokens in single-user notes.
+
+## Later change -- the Tasks panel is the Tasks mode of Find (milestone 210, req-161)
+
+The tasks plugin stays the task data owner: its index, grammar, task-line
+writes and pickers do not move. Its list is mounted into the Find panel (hosted
+by the tags plugin) through `ui.registerFindMode` (SDK 1.53); the scope and the
+tag + text filter are the panel's shared choice and field, the done / kind /
+order choices are rows of the panel's `⋯` menu. The due-date order groups the
+list *Overdue · Today · Later · No date*. The reminder click runs the tags
+plugin's `find.mode` command with `{ mode: 'tasks' }`.

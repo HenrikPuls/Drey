@@ -129,25 +129,26 @@ test.describe('task metadata click-to-change', () => {
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'meta-tokens.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toBeVisible();
     await page.locator('app-dock-strip button[aria-label="Hide Calendar"]').click();
-    await page.locator('app-dock-strip button[aria-label="Show Tasks"]').click();
-    const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
-    const row = panel.locator('.task', { hasText: 'water the orchids' });
+    await page.locator('app-dock-strip button[aria-label="Show Find"]').click();
+    await page.locator('.find-tab', { hasText: 'Tasks' }).click();
+    const panel = page.locator('app-panel-frame', { has: page.locator('.find-tasks') });
+    const row = panel.locator('.find-task', { hasText: 'water the orchids' });
     await expect(row).toBeVisible();
 
-    await row.locator('.due').click();
+    await row.locator('.find-badge').first().click();
     const picker = page.locator('.tasks-due-picker');
     await expect(picker).toBeVisible();
     await picker.locator('input[type="date"]').fill('2026-04-04');
     await picker.locator('button.apply').click();
 
     // The open buffer was patched + saved; the panel list follows.
-    await expect(row.locator('.due')).toHaveText('📅 2026-04-04');
+    await expect(row.locator('.find-badge').first()).toHaveText('Apr 4');
 
     // And it is on disk: after a reload the badge still shows the new date.
     await page.reload();
-    const reloaded = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
+    const reloaded = page.locator('app-panel-frame', { has: page.locator('.find-tasks') });
     await expect(
-      reloaded.locator('.task', { hasText: 'water the orchids' }).locator('.due'),
-    ).toHaveText('📅 2026-04-04');
+      reloaded.locator('.find-task', { hasText: 'water the orchids' }).locator('.find-badge').first(),
+    ).toHaveText('Apr 4');
   });
 });

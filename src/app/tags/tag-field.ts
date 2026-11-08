@@ -36,6 +36,24 @@ export interface TagFieldOptions {
 
 const MAX_OPTIONS = 12;
 
+/** The chip's remove glyph: the icon set's `x` at 12 px (board 9c), drawn inline (plain DOM, no Angular). */
+function closeGlyph(): SVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '12');
+  svg.setAttribute('height', '12');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M18 6 6 18M6 6l12 12');
+  svg.appendChild(path);
+  return svg;
+}
+
 /**
  * The shared tag chip field (milestone 33): colored chips plus a completion
  * dropdown fed by the tag vocabulary. ONE implementation for every surface
@@ -216,7 +234,7 @@ export class TagField {
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'tag-field-x';
-      x.textContent = '×';
+      x.appendChild(closeGlyph());
       x.title = `Remove #${value}`;
       x.setAttribute('aria-label', `Remove #${value}`);
       x.addEventListener('mousedown', (e) => e.preventDefault()); // keep input focus
@@ -274,7 +292,7 @@ export class TagField {
       tag.style.backgroundColor = bg;
       const count = document.createElement('span');
       count.className = 'tag-field-option-count';
-      count.textContent = `${entry.count}×`;
+      count.textContent = String(entry.count);
       li.appendChild(tag);
       li.appendChild(count);
       // mousedown-preventDefault keeps the input focused so blur-commit

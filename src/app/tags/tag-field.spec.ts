@@ -54,7 +54,7 @@ describe('TagField', () => {
     const { f, changes } = field(['sailing']);
     input(f).value = ' Kauf ';
     type(f, 'Enter');
-    expect(chips(f).map((c) => c.textContent)).toEqual(['#sailing×', '#kauf×']);
+    expect(chips(f).map((c) => c.textContent)).toEqual(['#sailing', '#kauf']);
     expect(changes).toEqual([['sailing', 'kauf']]);
     expect(input(f).value).toBe('');
   });
@@ -106,7 +106,7 @@ describe('TagField', () => {
     const { f } = field(['sailing']);
     input(f).value = 'sa';
     input(f).dispatchEvent(new Event('input', { bubbles: true }));
-    expect(options(f).map((o) => o.textContent)).toEqual(['#sales2×']);
+    expect(options(f).map((o) => o.textContent)).toEqual(['#sales2']);
   });
 
   it('Escape closes the dropdown without committing', () => {
@@ -122,7 +122,7 @@ describe('TagField', () => {
   it('setValues repaints without firing onChange', () => {
     const { f, changes } = field(['a']);
     f.setValues(['x', 'y']);
-    expect(chips(f).map((c) => c.textContent)).toEqual(['#x×', '#y×']);
+    expect(chips(f).map((c) => c.textContent)).toEqual(['#x', '#y']);
     expect(changes).toEqual([]);
   });
 
@@ -181,7 +181,7 @@ describe('TagField', () => {
       expect(options(f).length).toBeGreaterThan(0);
 
       typeText(f, 'block #sailing ');
-      expect(chips(f).map((c) => c.textContent)).toEqual(['#sailing×']);
+      expect(chips(f).map((c) => c.textContent)).toEqual(['#sailing']);
       expect(changes).toEqual([['sailing']]);
       expect(input(f).value).toBe('block ');
       expect(texts[texts.length - 1]).toBe('block ');

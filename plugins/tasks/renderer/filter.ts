@@ -38,7 +38,7 @@ export function normalizeTag(raw: string): string {
 export function readPrefs(): TaskPrefs {
   const base: TaskPrefs = {
     scope: 'document',
-    hideDone: false,
+    hideDone: true,
     kinds: [...ALL_KINDS],
     queryTags: [],
     queryText: '',
@@ -54,7 +54,7 @@ export function readPrefs(): TaskPrefs {
       : base.queryTags;
     return {
       scope: raw.scope === 'vault' || raw.scope === 'all' ? raw.scope : 'document',
-      hideDone: raw.hideDone === true,
+      hideDone: typeof raw.hideDone === 'boolean' ? raw.hideDone : base.hideDone,
       // An empty selection would hide everything with no way back -- keep the default.
       kinds: kinds.length > 0 ? kinds : base.kinds,
       queryTags,

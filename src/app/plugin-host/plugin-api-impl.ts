@@ -41,6 +41,7 @@ import { extractWikilinks } from '@markdown-surface/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
 import { highlightCode } from './code-highlight';
 import { mountMarkdownView } from './markdown-view';
+import { FindModeRegistry } from './find-mode-registry.service';
 import { StatusItemsService } from './status-items.service';
 import { TitlebarActionsService } from './titlebar-actions.service';
 import { ConversationTargetsService } from './conversation-targets.service';
@@ -88,6 +89,7 @@ export class PluginApiFactory {
   private readonly editTarget = inject(EditTargetService);
   private readonly keys = inject(KeybindingService);
   private readonly widgets = inject(WidgetRegistryService);
+  private readonly findModes = inject(FindModeRegistry);
   private readonly settingsPages = inject(SettingsCategoryRegistry);
   private readonly confirm = inject(ConfirmationService);
   private readonly dialogs = inject(ConfirmDialogService);
@@ -353,6 +355,10 @@ export class PluginApiFactory {
       i18n: this.i18n.facade,
       ui: {
         registerWidget: (widget: PluginWidgetContrib) => track(this.widgets.registerPluginWidget(widget)),
+        registerFindMode: (mode) => track(this.findModes.register(mode)),
+        findModes: () => this.findModes.list(),
+        refreshStatus: () => this.widgets.bumpStatusTick(),
+        onFindModesChange: (listener) => track(this.findModes.onChange(listener)),
         registerSettingsPage: (page: PluginSettingsPageContrib) =>
           track(this.settingsPages.registerPluginPage(page, PluginSettingsHost)),
         registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),

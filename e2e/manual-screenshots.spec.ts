@@ -450,12 +450,13 @@ test.describe('manual: panels', () => {
     await page.keyboard.press('Escape');
 
     // Search panel: grouped results for a text query.
-    await soloPanel(page, 'Search');
-    const search = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
-    await expect(search.locator('.tag-search-field .tag-field-input').first()).toBeVisible();
-    await search.locator('.tag-search-field .tag-field-input').first().fill('Relaunch');
-    await search.locator('.tag-search-field .tag-field-input').first().press('Enter');
-    await expect(search.locator('.tag-search-hit').first()).toBeVisible();
+    await soloPanel(page, 'Find');
+    await page.locator('.find-tab', { hasText: 'Search' }).click();
+    const search = page.locator('app-panel-frame', { has: page.locator('.find') });
+    await expect(search.locator('.find-field .tag-field-input').first()).toBeVisible();
+    await search.locator('.find-field .tag-field-input').first().fill('Relaunch');
+    await search.locator('.find-field .tag-field-input').first().press('Enter');
+    await expect(search.locator('.find-hit').first()).toBeVisible();
     await page.waitForTimeout(250);
     await shoot(page, 'panel-search.png');
 
@@ -463,11 +464,11 @@ test.describe('manual: panels', () => {
     // document scope needs a task-carrying note open; vault scope reads the
     // plugin's whole-vault index.
     await openFile(page, 'Projects/Website-Relaunch.md', { folders: ['Projects'] });
-    await soloPanel(page, 'Tasks');
-    const tasks = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
-    await expect(tasks.locator('.task').first()).toBeVisible();
-    await tasks.locator('.seg button[data-scope="vault"]').click();
-    await expect(tasks.locator('.task').nth(2)).toBeVisible();
+    await soloPanel(page, 'Find');
+    await page.locator('.find-tab', { hasText: 'Tasks' }).click();
+    const tasks = page.locator('app-panel-frame', { has: page.locator('.find-tasks') });
+    await expect(tasks.locator('.find-task').first()).toBeVisible();
+    await expect(tasks.locator('.find-task').nth(2)).toBeVisible();
     await page.waitForTimeout(250);
     await shoot(page, 'panel-tasks.png');
 
@@ -725,14 +726,15 @@ test.describe('manual: history & dialogs', () => {
     await history.locator('button', { hasText: 'Close' }).click();
 
     // Vault-wide replace: the bundled confirmation dialog.
-    await soloPanel(page, 'Search');
-    const search = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
-    await search.locator('.tag-search-field .tag-field-input').first().fill('colour scheme');
-    await search.locator('.tag-search-field .tag-field-input').first().press('Enter');
-    await expect(search.locator('.tag-search-hit').first()).toBeVisible();
-    await search.locator('.tag-search-summary [aria-label="Replace"]').click();
-    await search.locator('.tag-search-replace input').fill('colour palette');
-    await search.locator('.tag-search-replace [aria-label="Replace all"]').click();
+    await soloPanel(page, 'Find');
+    await page.locator('.find-tab', { hasText: 'Search' }).click();
+    const search = page.locator('app-panel-frame', { has: page.locator('.find') });
+    await search.locator('.find-field .tag-field-input').first().fill('colour scheme');
+    await search.locator('.find-field .tag-field-input').first().press('Enter');
+    await expect(search.locator('.find-hit').first()).toBeVisible();
+    await search.locator('.find-field [aria-label="Replace"]').first().click();
+    await search.locator('.find-replace input').fill('colour palette');
+    await search.locator('.find-replace [aria-label="Replace all"]').click();
     const modal = page.locator('.plugin-modal.tag-search-modal');
     await expect(modal).toBeVisible();
     await shoot(page, 'dialog-confirm-replace.png');
