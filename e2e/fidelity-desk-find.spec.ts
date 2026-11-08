@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test, expect, type Locator, type Page, type ElectronApplication } from './fixtures/drey';
 
 /**
@@ -144,7 +145,14 @@ test('boards 9c DeskFind and DeskFindParts: the Find panel', async ({ page, elec
   await page.mouse.move(900, 600);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.screenshot({ path: path.join(OUT, 'DeskFind.png') });
+  // Board 10 marks the opened hit: open the first one, then crop its group.
+  await panel.locator('.find-hit').first().click();
+  await page.mouse.move(900, 600);
   await shoot(panel, '10-hit-group');
+  const groupTop = await panel.evaluate((root) => {
+    const group = root.querySelector('.find-group');
+    return group === null ? 0 : Math.round(group.getBoundingClientRect().top - root.getBoundingClientRect().top);
+  });
   // The measures the board names, for the report (console, no assertion).
   const measured = await page.evaluate(() => {
     const box = (sel: string): string => {
@@ -203,4 +211,73 @@ test('boards 9c DeskFind and DeskFindParts: the Find panel', async ({ page, elec
   // 2 · folded
   await page.locator('app-panel-frame', { has: page.locator('.find') }).locator('button.chevron').click();
   await shoot(panel, '2-folded');
+
+  await compareWithBoards(electronApp, groupTop);
 });
+
+/**
+ * Checklist step 9: boards/compare.html over board and screenshot, per
+ * region. The window is the whole of `DeskFind`; the two crops cut the
+ * board's collage (`DeskFindParts`) and the panel shot to the same size.
+ */
+async function compareWithBoards(app: ElectronApplication, groupTop: number): Promise<void> {
+  const boards = path.resolve(__dirname, '..', 'docs', 'design', 'work-panel', 'boards');
+  const compareUrl = pathToFileURL(path.join(boards, 'compare.html'));
+  const opened = app.waitForEvent('window');
+  await app.evaluate(({ BrowserWindow }, target) => {
+    const win = new BrowserWindow({ width: 1500, height: 1000, show: false });
+    void win.loadURL(target);
+  }, compareUrl.href);
+  const win = await opened;
+  await win.waitForLoadState('load');
+
+  /** Cuts `rect` out of the PNG at `file` into `out`. */
+  const crop = async (file: string, rect: [number, number, number, number], out: string): Promise<string> => {
+    const url = await win.evaluate(
+      async ({ src, r }) => {
+        const img = new Image();
+        img.src = src;
+        await img.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = r[2];
+        canvas.height = r[3];
+        canvas.getContext('2d')!.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
+        return canvas.toDataURL('image/png');
+      },
+      { src: pathToFileURL(file).href, r: rect },
+    );
+    fs.writeFileSync(out, Buffer.from(url.split(',')[1] ?? '', 'base64'));
+    return out;
+  };
+
+  const pass = async (name: string, boardPng: string, shotPng: string): Promise<void> => {
+    const target = new URL(compareUrl.href);
+    target.searchParams.set('board', pathToFileURL(boardPng).href);
+    target.searchParams.set('shot', pathToFileURL(shotPng).href);
+    await win.goto(target.href);
+    await win.waitForLoadState('load');
+    await win.waitForTimeout(500);
+    for (const mode of ['side', 'overlay', 'swipe', 'diff']) {
+      await win.locator(`[data-mode="${mode}"]`).click();
+      await win.waitForTimeout(250);
+      await win.locator('#stage').screenshot({ path: path.join(OUT, `${name}.${mode}.png`) });
+    }
+    console.log(`${name}: ${await win.locator('#info').innerText()}`);
+  };
+
+  await pass('DeskFind', path.join(boards, 'DeskFind.png'), path.join(OUT, 'DeskFind.png'));
+
+  const parts = path.join(boards, 'DeskFindParts.png');
+  // Board 10: the group head and its two hits (300 px box, 1 px border).
+  await pass(
+    'DeskFindParts-10-hit-group',
+    await crop(parts, [1136, 79, 298, 132], path.join(OUT, 'DeskFindParts-10.board.png')),
+    await crop(path.join(OUT, 'DeskFindParts-10-hit-group.png'), [0, groupTop, 298, 132], path.join(OUT, 'DeskFindParts-10.shot.png')),
+  );
+  // Board 1: the Tasks mode with the panel header, 518 px of it.
+  await pass(
+    'DeskFindParts-1-tasks',
+    await crop(parts, [50, 75, 298, 518], path.join(OUT, 'DeskFindParts-1.board.png')),
+    await crop(path.join(OUT, 'DeskFindParts-1-tasks.png'), [0, 0, 298, 518], path.join(OUT, 'DeskFindParts-1.shot.png')),
+  );
+}
