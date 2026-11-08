@@ -28,7 +28,7 @@ export function ask<T extends string>(
       box.classList.add('git-dialog');
       box.append(el('h2', 'git-dialog-title', title), el('p', 'git-dialog-text', message));
       const row = el('div', 'git-dialog-actions');
-      row.appendChild(textButton('git-btn', 'Cancel', () => settle(null)));
+      row.appendChild(textButton('git-btn', api.i18n.t('git.dialog.cancel'),() => settle(null)));
       for (const answer of answers) {
         const button = textButton('git-btn', answer.label, () => settle(answer.value));
         button.classList.toggle('primary', answer.primary === true);

@@ -196,7 +196,7 @@ const plugin: PluginRendererModule = {
     // -- the Outline dock panel -------------------------------------------------
     api.ui.registerWidget({
       id: 'outline',
-      title: 'Outline',
+      title: api.i18n.t('outline.title'),
       icon: 'list',
       defaultDock: 'left',
       defaultOpen: false,
@@ -212,7 +212,7 @@ const plugin: PluginRendererModule = {
         fold.type = 'button';
         fold.appendChild(api.ui.icon('chevrons-down-up', 14));
         const renderFold = (): void => {
-          const label = state.allCollapsed ? 'Expand all levels' : 'Collapse all levels';
+          const label = api.i18n.t(state.allCollapsed ? 'outline.expand_all' : 'outline.collapse_all');
           fold.classList.toggle('on', state.allCollapsed);
           fold.setAttribute('aria-pressed', String(state.allCollapsed));
           fold.setAttribute('aria-label', label);
@@ -241,6 +241,8 @@ const plugin: PluginRendererModule = {
       mount: (body) => {
         body.classList.add('outline-panel');
         const tree = el('div', 'tree');
+        tree.setAttribute('role', 'tree');
+        tree.setAttribute('aria-label', api.i18n.t('outline.tree'));
         body.append(tree);
 
         /** The visible rows in document order, for the caret highlight. */
@@ -262,6 +264,11 @@ const plugin: PluginRendererModule = {
           }
           for (const row of visibleRows) {
             row.el.classList.toggle('current', row.el === current);
+            if (row.el === current) {
+              row.el.setAttribute('aria-current', 'true');
+            } else {
+              row.el.removeAttribute('aria-current');
+            }
           }
         };
 
@@ -269,12 +276,12 @@ const plugin: PluginRendererModule = {
           tree.textContent = '';
           visibleRows = [];
           if (!state.isText) {
-            tree.append(el('p', 'empty', 'Open a note to see its outline.'));
+            tree.append(el('p', 'empty', api.i18n.t('outline.empty.no_note')));
             return;
           }
           const entries = scanOutline(state.buffer);
           if (entries.length === 0) {
-            tree.append(el('p', 'empty', 'No headings in this document.'));
+            tree.append(el('p', 'empty', api.i18n.t('outline.empty.no_headings')));
             return;
           }
           const collapsed = collapsedFor();
@@ -285,17 +292,21 @@ const plugin: PluginRendererModule = {
               const isCollapsed =
                 hasChildren && (state.allCollapsed || collapsed.get(node.key) === true);
 
+              // Board 9e: 4 px, plus 16 per level below the first.
               const row = el('div', 'row');
-              row.style.paddingLeft = `${(depth - 1) * 12 + 2}px`;
+              row.setAttribute('role', 'treeitem');
+              row.setAttribute('aria-level', String(depth));
+              row.style.paddingLeft = `${4 + (depth - 1) * 16}px`;
 
               if (hasChildren) {
-                const twist = el('button', 'twist', '▸') as HTMLButtonElement;
+                const twist = el('button', 'twist');
                 twist.type = 'button';
-                twist.title = isCollapsed ? 'Expand' : 'Collapse';
+                const twistLabel = api.i18n.t(isCollapsed ? 'outline.expand' : 'outline.collapse');
+                twist.title = twistLabel;
+                twist.setAttribute('aria-label', twistLabel);
                 twist.setAttribute('aria-expanded', String(!isCollapsed));
-                if (!isCollapsed) {
-                  twist.classList.add('open');
-                }
+                row.setAttribute('aria-expanded', String(!isCollapsed));
+                twist.appendChild(api.ui.icon(isCollapsed ? 'chevron-right' : 'chevron-down', 14));
                 twist.addEventListener('click', () => {
                   const expanding = collapsed.get(node.key) === true;
                   if (expanding) {
@@ -311,7 +322,7 @@ const plugin: PluginRendererModule = {
                 row.appendChild(el('span', 'twist-sp'));
               }
 
-              const label = el('button', `label h${node.entry.level}`, node.entry.title);
+              const label = el('button', 'label', node.entry.title);
               label.type = 'button';
               label.title = node.entry.title;
               label.addEventListener('click', () => {

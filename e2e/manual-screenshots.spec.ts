@@ -591,12 +591,13 @@ test.describe('manual: git', () => {
     const panel = page.locator('app-panel-frame', { has: page.locator('.git-panel') });
     // The repository was created after launch; Refresh makes the plugin
     // look again (same as git.spec).
-    await panel.locator('button[aria-label="Refresh the status"]').click();
+    await panel.locator('button[aria-label="More Git actions"]').click();
+    await page.getByRole('menuitem', { name: 'Refresh the status' }).click();
     await expect(panel.locator('.git-change').first()).toBeVisible({ timeout: 15_000 });
-    if ((await panel.locator('.git-commit').count()) === 0) {
-      await panel.locator('.git-history').click(); // unfold History
+    if ((await panel.locator('.git-log-row').count()) === 0) {
+      await panel.locator('.git-history .fold').click(); // unfold History
     }
-    await expect(panel.locator('.git-commit').first()).toBeVisible();
+    await expect(panel.locator('.git-log-row').first()).toBeVisible();
     await page.waitForTimeout(250);
     await shoot(page, 'panel-git.png');
 

@@ -1,84 +1,83 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { openFileHistory } from './dialog-file-history.js';
 import { openStashList } from './dialog-stashes.js';
-import { el } from './dom.js';
+import { openDropdown, type DropdownEntry } from './dropdown.js';
 import { openBranchPicker } from './picker-branch.js';
 import type { RepoCommands } from './repo-commands.js';
+import { pushCommitMenuLabel } from './repo-model.js';
 import type { RepoSession } from './repo-session.js';
 
-interface ActionRow {
-  icon: string;
-  label: string;
-  hint?: string;
-  disabled?: boolean;
-  run: () => void;
-}
-
-/** The panel header's "More Git actions" menu: merge, stash, amend, file history. */
-export function openRepoActions(api: DreyPluginApi, session: RepoSession, commands: RepoCommands): void {
+/**
+ * The panel header's "More Git actions" menu (board 9d, in its order):
+ * Fetch · Commit and push | Merge · Stash · Stashes · Amend | File history
+ * · Refresh.
+ */
+export function openRepoActions(
+  api: DreyPluginApi,
+  session: RepoSession,
+  commands: RepoCommands,
+  anchor: HTMLElement,
+): void {
+  if (session.state.busy !== null) {
+    return;
+  }
+  const t = api.i18n.t.bind(api.i18n);
+  const refresh: DropdownEntry = { label: t('git.menu.refresh'), run: () => void session.pull('relocate') };
   const vault = session.currentOk();
-  if (vault === null || session.state.busy !== null) {
+  if (vault === null) {
+    // No repository shown (yet): Refresh is the one way to look again
+    // for a repository that was created after the start.
+    openDropdown(anchor, t('git.more'), [refresh], () => api.ui.icon('check', 14), 284);
     return;
   }
   const merging = vault.operation !== null;
+  const amending = session.state.amend && !merging;
   const dirtyTree = vault.status.staged.length + vault.status.unstaged.length > 0;
   // A repository found by the scan (T-0045) offers the read rows only:
-  // merge, stash and amend rewrite history or the tree and are refused
-  // main-side; the stash list stays open (it reads).
+  // fetch, commit, merge, stash and amend change the repository and are
+  // refused main-side; the stash list and the file history stay (they
+  // read). A plugin-managed vault (SDK 1.32) keeps fetch only — it
+  // changes nothing in the working tree.
   const found = vault.discovered;
-  const rows: ActionRow[] = [
+  const managed = vault.managedBy !== null;
+  const conflictsLeft = vault.status.conflicts.length;
+  const entries: DropdownEntry[] = [
     {
-      icon: 'git-merge',
-      label: 'Merge a branch…',
+      label: t('git.menu.fetch'),
+      disabled: found,
+      run: () => void commands.remote(t('git.busy.fetching'), 'fetch'),
+    },
+    {
+      label: pushCommitMenuLabel(api.i18n, merging, amending),
+      hint: t('git.menu.commit_push.keys'),
+      disabled: found || managed || (merging && conflictsLeft > 0),
+      run: () => void commands.commit(true),
+    },
+    'separator',
+    {
+      label: t('git.menu.merge'),
       disabled: merging || found,
       run: () => void openBranchPicker(api, session, commands, 'merge'),
     },
     {
-      icon: 'archive',
-      label: 'Stash changes',
+      label: t('git.menu.stash'),
       disabled: merging || !dirtyTree || found,
       run: () => void commands.stashChanges(),
     },
     {
-      icon: 'archive',
-      label: 'Stashes…',
-      hint: vault.stashCount > 0 ? String(vault.stashCount) : undefined,
+      label: t('git.menu.stashes'),
+      hint: vault.stashCount > 0 ? api.i18n.formatNumber(vault.stashCount) : undefined,
       disabled: vault.stashCount === 0,
       run: () => void openStashList(api, session),
     },
     {
-      icon: 'pencil',
-      label: session.state.amend ? 'Stop amending' : 'Amend the last commit',
+      label: t(session.state.amend ? 'git.menu.stop_amend' : 'git.menu.amend'),
       disabled: merging || found,
       run: () => void commands.toggleAmend(),
     },
-    { icon: 'history', label: 'Git history of this file…', run: () => void openFileHistory(api, session) },
+    'separator',
+    { label: t('git.menu.file_history'), run: () => void openFileHistory(api, session) },
+    refresh,
   ];
-  const close = api.ui.showModal((box) => {
-    box.classList.add('git-branches');
-    const list = el('div', 'git-branch-list');
-    list.setAttribute('role', 'menu');
-    for (const item of rows) {
-      const row = el('button', 'git-branch');
-      row.type = 'button';
-      row.setAttribute('role', 'menuitem');
-      row.disabled = item.disabled === true;
-      row.append(api.ui.icon(item.icon, 14), el('span', 'name', item.label));
-      if (item.hint !== undefined) {
-        row.appendChild(el('span', 'hint', item.hint));
-      }
-      row.addEventListener('click', () => {
-        close();
-        item.run();
-      });
-      list.appendChild(row);
-    }
-    box.appendChild(list);
-    box.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        close();
-      }
-    });
-    queueMicrotask(() => (list.querySelector('button:not(:disabled)') as HTMLElement | null)?.focus());
-  });
+  openDropdown(anchor, t('git.more'), entries, () => api.ui.icon('check', 14), 284);
 }

@@ -30,22 +30,34 @@ const plugin: PluginRendererModule = {
     const commands = createRepoCommands(api, session);
     cleanup = session.watch();
 
-    api.commands.register({ id: 'git.commit', label: 'Git: Commit', run: () => void commands.commit() });
+    api.commands.register({
+      id: 'git.commit',
+      label: api.i18n.t('git.command.commit'),
+      run: () => void commands.commit(),
+    });
     api.commands.register({
       id: 'git.commitAndPush',
-      label: 'Git: Commit and push',
+      label: api.i18n.t('git.command.commit_and_push'),
       run: () => void commands.commit(true),
     });
     api.commands.register({
       id: 'git.merge',
-      label: 'Git: Merge a branch…',
+      label: api.i18n.t('git.command.merge'),
       run: () => void openBranchPicker(api, session, commands, 'merge'),
     });
-    api.commands.register({ id: 'git.stash', label: 'Git: Stash changes', run: () => void commands.stashChanges() });
-    api.commands.register({ id: 'git.stashes', label: 'Git: Stashes…', run: () => void openStashList(api, session) });
+    api.commands.register({
+      id: 'git.stash',
+      label: api.i18n.t('git.command.stash'),
+      run: () => void commands.stashChanges(),
+    });
+    api.commands.register({
+      id: 'git.stashes',
+      label: api.i18n.t('git.command.stashes'),
+      run: () => void openStashList(api, session),
+    });
     api.commands.register({
       id: 'git.fileHistory',
-      label: 'Git: History of this file…',
+      label: api.i18n.t('git.command.file_history'),
       run: () => void openFileHistory(api, session),
     });
     api.editor.registerContextMenuItems((target) => {
@@ -58,11 +70,23 @@ const plugin: PluginRendererModule = {
         return [];
       }
       const path = target.docPath;
-      return [{ label: 'Git history…', run: () => void openFileHistory(api, session, path) }];
+      return [{ label: api.i18n.t('git.menu.history'), run: () => void openFileHistory(api, session, path) }];
     });
-    api.commands.register({ id: 'git.push', label: 'Git: Push', run: () => void commands.remote('Pushing…', 'push') });
-    api.commands.register({ id: 'git.pull', label: 'Git: Pull', run: () => void commands.remote('Pulling…', 'pull') });
-    api.commands.register({ id: 'git.refresh', label: 'Git: Refresh status', run: () => void session.pull('relocate') });
+    api.commands.register({
+      id: 'git.push',
+      label: api.i18n.t('git.command.push'),
+      run: () => void commands.remote(api.i18n.t('git.busy.pushing'), 'push'),
+    });
+    api.commands.register({
+      id: 'git.pull',
+      label: api.i18n.t('git.command.pull'),
+      run: () => void commands.remote(api.i18n.t('git.busy.pulling'), 'pull'),
+    });
+    api.commands.register({
+      id: 'git.refresh',
+      label: api.i18n.t('git.command.refresh'),
+      run: () => void session.pull('relocate'),
+    });
 
     api.ui.registerWidget(createSourceControlWidget(api, session, commands));
     api.ui.registerSettingsPage(createGitSettingsPage(api, session));

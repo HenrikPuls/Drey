@@ -25,31 +25,34 @@ export async function openBranchPicker(
   try {
     branches = (await api.backend.invoke('branches', { vaultId })) as GitBranch[];
   } catch (error) {
-    await api.ui.showMessage(messageOf(error), 'Git');
+    await api.ui.showMessage(messageOf(error), api.i18n.t('git.dialog.git'));
     return;
   }
 
   const choose = async (branch: BranchOption): Promise<void> => {
     close();
     if ('create' in branch) {
-      await session.run('Creating branch…', 'createBranch', { vaultId, name: branch.create });
+      await session.run(api.i18n.t('git.busy.creating_branch'), 'createBranch', { vaultId, name: branch.create });
       return;
     }
     if (mode === 'merge') {
       await commands.mergeBranch(branch.name);
       return;
     }
-    if (branch.current || !(await session.cleanTabsOrExplain(vaultId, 'Switching the branch'))) {
+    if (branch.current || !(await session.cleanTabsOrExplain(vaultId, 'switch_branch'))) {
       return;
     }
-    await session.run('Switching branch…', 'checkout', { vaultId, name: branch.name, remote: branch.remote });
+    await session.run(api.i18n.t('git.busy.switching_branch'), 'checkout', { vaultId, name: branch.name, remote: branch.remote });
   };
 
   const close = api.ui.showModal((box) => {
     box.classList.add('git-branches');
     const input = el('input', 'git-branch-filter');
     input.type = 'text';
-    input.setAttribute('aria-label', mode === 'merge' ? 'Filter branches to merge' : 'Filter or name a branch');
+    input.setAttribute(
+      'aria-label',
+      mode === 'merge' ? api.i18n.t('git.branch_picker.filter_merge') : api.i18n.t('git.branch_picker.filter_switch'),
+    );
     const list = el('div', 'git-branch-list');
     list.setAttribute('role', 'listbox');
     box.append(input, list);
@@ -61,7 +64,7 @@ export async function openBranchPicker(
       cursor = Math.min(cursor, Math.max(0, options.length - 1));
       list.textContent = '';
       if (options.length === 0) {
-        list.appendChild(el('p', 'git-empty', 'No branch matches.'));
+        list.appendChild(el('p', 'git-empty', api.i18n.t('git.branch_picker.none')));
       }
       options.forEach((option, i) => {
         const row = el('button', 'git-branch');
@@ -70,11 +73,11 @@ export async function openBranchPicker(
         row.setAttribute('aria-selected', String(i === cursor));
         row.classList.toggle('on', i === cursor);
         if ('create' in option) {
-          row.append(api.ui.icon('plus', 14), el('span', 'name', `Create branch "${option.create}"`));
+          row.append(api.ui.icon('plus', 14), el('span', 'name', api.i18n.t('git.branch_picker.create', { name: option.create })));
         } else {
           row.append(api.ui.icon(option.current ? 'check' : 'git-branch', 14), el('span', 'name', option.name));
           if (option.remote) {
-            row.appendChild(el('span', 'hint', 'remote'));
+            row.appendChild(el('span', 'hint', api.i18n.t('git.branch_picker.remote')));
           }
         }
         row.addEventListener('click', () => void choose(option));

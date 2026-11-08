@@ -1,15 +1,19 @@
 /**
  * The Source control panel's decisions and wording as pure functions:
- * which repository the panel shows, what the buttons say, which rows the
- * branch picker offers. No DOM, no plugin API.
+ * which repository the panel shows, what the buttons say (through the
+ * host's i18n facade, handed in), which rows the branch picker offers.
+ * No DOM.
  */
 import {
   isPlausibleBranchName,
   repoKey,
   type GitBranch,
+  type GitChangeKind,
   type PatchLine,
   type VaultGitState,
 } from '../shared/status.js';
+import type { MessageKey } from '../../../shared/i18n';
+import type { PluginI18nApi } from '../../../shared/plugin-api/renderer';
 
 export type OkVault = Extract<VaultGitState, { state: 'ok' }>;
 
@@ -35,11 +39,6 @@ export function repoLabel(repo: OkVault, vaultName: string | undefined): string 
   }
   const slash = repo.subPath.lastIndexOf('/');
   return repo.subPath.slice(slash + 1);
-}
-
-/** The read-only sentence for a repository the scan found under a vault. */
-export function foundReadOnlyMessage(vaultName: string): string {
-  return `This repository was found under "${vaultName}" and is read-only here. Register it as a vault to work with it.`;
 }
 
 /**
@@ -80,52 +79,36 @@ export function pickCurrentRepo(
   return current;
 }
 
-/** `1 commit`, `3 commits`. */
-export function counted(count: number, noun: string): string {
-  return `${count} ${count === 1 ? noun : `${noun}s`}`;
-}
-
-/** The subject of an unsaved-tabs sentence: `"note.md" has` / `3 tabs have`. */
-export function unsavedSubject(dirty: ReadonlyArray<{ readonly name: string }>): string {
-  return dirty.length === 1 ? `"${dirty[0].name}" has` : `${dirty.length} tabs have`;
-}
-
-/** The busy line of a running commit. */
-export function commitBusyLabel(merging: boolean, amend: boolean, push: boolean): string {
+/** The commit field's check button: what Ctrl+Enter does right now. */
+export function commitButtonLabel(i18n: PluginI18nApi, merging: boolean, amending: boolean, conflictsLeft: number): string {
   if (merging) {
-    return push ? 'Completing the merge and pushing…' : 'Completing the merge…';
+    return i18n.t(conflictsLeft > 0 ? 'git.commit.resolve_first' : 'git.commit.complete_merge');
   }
-  if (amend) {
-    return push ? 'Amending and pushing…' : 'Amending…';
-  }
-  return push ? 'Committing and pushing…' : 'Committing…';
+  return i18n.t(amending ? 'git.commit.amend' : 'git.commit.commit');
 }
 
-export function commitButtonLabel(merging: boolean, amending: boolean, conflictsLeft: number): string {
+/** The ⋯ menu's "Commit and push" row for a merge, an amend and a plain commit (Ctrl+Shift+Enter). */
+export function pushCommitMenuLabel(i18n: PluginI18nApi, merging: boolean, amending: boolean): string {
   if (merging) {
-    return conflictsLeft > 0 ? 'Resolve all conflicts to complete the merge' : 'Complete the merge (Ctrl+Enter)';
+    return i18n.t('git.menu.merge_push');
   }
-  return amending ? 'Amend the last commit (Ctrl+Enter)' : 'Commit staged changes (Ctrl+Enter)';
+  return i18n.t(amending ? 'git.menu.amend_push' : 'git.menu.commit_push');
 }
 
-export function pushCommitButtonLabel(merging: boolean, amending: boolean): string {
-  if (merging) {
-    return 'Complete the merge and push (Ctrl+Shift+Enter)';
-  }
-  return amending ? 'Amend and push (Ctrl+Shift+Enter)' : 'Commit and push (Ctrl+Shift+Enter)';
+export function pullButtonLabel(i18n: PluginI18nApi, behind: number): string {
+  return behind > 0 ? i18n.t('git.pull.count', { count: behind }) : i18n.t('git.pull');
 }
 
-export function pullButtonLabel(behind: number): string {
-  return behind > 0 ? `Pull (${counted(behind, 'commit')} to pull)` : 'Pull';
-}
-
-export function pushButtonLabel(ahead: number): string {
-  return ahead > 0 ? `Push (${counted(ahead, 'commit')} not pushed)` : 'Push';
+export function pushButtonLabel(i18n: PluginI18nApi, ahead: number): string {
+  return ahead > 0 ? i18n.t('git.push.count', { count: ahead }) : i18n.t('git.push');
 }
 
 /** What the branch button shows: the branch, or where a detached HEAD sits. */
-export function branchLabel(branch: string | null, head: string | null): string {
-  return branch ?? (head === null ? 'No commits yet' : `Detached at ${head}`);
+export function branchLabel(i18n: PluginI18nApi, branch: string | null, head: string | null): string {
+  if (branch !== null) {
+    return branch;
+  }
+  return head === null ? i18n.t('git.branch.no_commits') : i18n.t('git.branch.detached', { head });
 }
 
 /** `↑2 ↓1` next to the branch name; empty when the branch is in step. */
@@ -133,22 +116,77 @@ export function syncBadge(ahead: number, behind: number): string {
   return [ahead > 0 ? `↑${ahead}` : '', behind > 0 ? `↓${behind}` : ''].join(' ').trim();
 }
 
+/**
+ * The right end of the branch line (board 9d): `Not published` for a
+ * branch with commits and no upstream, else the distance badge.
+ */
+export function syncText(i18n: PluginI18nApi, vault: OkVault): string {
+  const { branch, head, upstream, ahead, behind } = vault.status;
+  if (branch !== null && head !== null && upstream === null) {
+    return i18n.t('git.branch.not_published');
+  }
+  return syncBadge(ahead, behind);
+}
+
+/** The distance to the upstream as one sentence; empty when in step. */
+export function distanceText(i18n: PluginI18nApi, ahead: number, behind: number): string {
+  if (ahead > 0 && behind > 0) {
+    return i18n.t('git.branch.ahead_behind', { ahead, behind });
+  }
+  if (ahead > 0) {
+    return i18n.t('git.branch.ahead', { ahead });
+  }
+  return behind > 0 ? i18n.t('git.branch.behind', { behind }) : '';
+}
+
 /** The branch button's tooltip, one fact per line. */
-export function branchTooltip(vault: OkVault, formatWhen: (iso: string) => string): string {
+export function branchTooltip(i18n: PluginI18nApi, vault: OkVault, formatWhen: (iso: string) => string): string {
   const { ahead, behind, upstream } = vault.status;
-  const lines = [vault.operation !== null ? 'Switch branch (disabled while merging)' : 'Switch branch'];
-  lines.push(upstream === null ? 'Not published yet' : `Tracks ${upstream}`);
-  if (ahead > 0 || behind > 0) {
-    lines.push(
-      [ahead > 0 ? `${counted(ahead, 'commit')} not pushed` : '', behind > 0 ? `${behind} to pull` : '']
-        .filter((part) => part !== '')
-        .join(', '),
-    );
+  const lines = [i18n.t(vault.operation !== null ? 'git.branch.switch_merging' : 'git.branch.switch')];
+  lines.push(upstream === null ? i18n.t('git.branch.not_published_yet') : i18n.t('git.branch.tracks', { upstream }));
+  const distance = distanceText(i18n, ahead, behind);
+  if (distance !== '') {
+    lines.push(distance);
   }
   if (vault.fetchedAt !== null) {
-    lines.push(`Last fetch ${formatWhen(vault.fetchedAt)}`);
+    lines.push(i18n.t('git.branch.last_fetch', { when: formatWhen(vault.fetchedAt) }));
   }
   return lines.join('\n');
+}
+
+const KIND_KEYS: Readonly<Record<GitChangeKind, MessageKey>> = {
+  modified: 'git.kind.modified',
+  added: 'git.kind.added',
+  renamed: 'git.kind.renamed',
+  deleted: 'git.kind.deleted',
+  untracked: 'git.kind.untracked',
+  conflict: 'git.kind.conflict',
+};
+
+/** A file row's tooltip: `projects/brand-guide.md — Modified`. */
+export function changeTitle(i18n: PluginI18nApi, path: string, kind: GitChangeKind): string {
+  return i18n.t('git.row.title', { path, kind: i18n.t(KIND_KEYS[kind]) });
+}
+
+/**
+ * When a commit was made, as a history row says it (board 9d): the time
+ * for today, `yesterday`, else the short date (`Nov 5`). The raw text
+ * when the date cannot be read.
+ */
+export function commitWhen(i18n: PluginI18nApi, iso: string, now: Date = new Date()): string {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) {
+    return iso;
+  }
+  const day = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(now) - day(when)) / 86_400_000);
+  if (days === 0) {
+    return i18n.formatTime(when);
+  }
+  if (days === 1) {
+    return i18n.t('git.history.yesterday');
+  }
+  return new Intl.DateTimeFormat(i18n.locale, { month: 'short', day: 'numeric' }).format(when);
 }
 
 /**

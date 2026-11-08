@@ -7,7 +7,7 @@ import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { GitChange } from '../shared/status.js';
 import { ask } from './dialogs.js';
 import { messageOf } from './dom.js';
-import { commitBusyLabel, foundReadOnlyMessage, keyOf, unsavedSubject, type Group, type OkVault } from './repo-model.js';
+import { keyOf, type Group, type OkVault } from './repo-model.js';
 import type { RepoSession } from './repo-session.js';
 
 export interface RepoCommands {
@@ -31,6 +31,22 @@ export interface RepoCommands {
 export function createRepoCommands(api: DreyPluginApi, session: RepoSession): RepoCommands {
   const { state } = session;
 
+  const busyLabelOf = (merging: boolean, amend: boolean, push: boolean): string => {
+    if (merging) {
+      return push ? api.i18n.t('git.busy.completing_merge_push') : api.i18n.t('git.busy.completing_merge');
+    }
+    if (amend) {
+      return push ? api.i18n.t('git.busy.amending_push') : api.i18n.t('git.busy.amending');
+    }
+    return push ? api.i18n.t('git.busy.committing_push') : api.i18n.t('git.busy.committing');
+  };
+
+  const managedMessage = (vault: OkVault): Promise<void> =>
+    api.ui.showMessage(
+      api.i18n.t('git.cmd.managed_by', { plugin: vault.managedBy ?? '' }),
+      api.i18n.t('git.dialog.source_control'),
+    );
+
   /**
    * A repository found by the scan (T-0045) is read-only; the UI hides
    * the paths in, this guard answers the ones that still fire (a
@@ -41,8 +57,8 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return false;
     }
     await api.ui.showMessage(
-      foundReadOnlyMessage(state.names.get(vault.vaultId) ?? vault.vaultId),
-      'Source control',
+      api.i18n.t('git.cmd.found_read_only', { name: state.names.get(vault.vaultId) ?? vault.vaultId }),
+      api.i18n.t('git.dialog.source_control'),
     );
     return true;
   };
@@ -53,10 +69,7 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     if (vault.managedBy !== null) {
-      await api.ui.showMessage(
-        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
-        'Source control',
-      );
+      await managedMessage(vault);
       return;
     }
     const vaultId = vault.vaultId;
@@ -64,23 +77,23 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     const merging = vault.operation !== null;
     const amend = state.amend && !merging;
     if (merging && vault.status.conflicts.length > 0) {
-      await api.ui.showMessage('Resolve all merge conflicts first.', 'Merge');
+      await api.ui.showMessage(api.i18n.t('git.cmd.resolve_first'), api.i18n.t('git.cmd.merge.message_title'));
       return;
     }
     const message = (state.drafts.get(vaultId) ?? '').trim();
     if (message === '' && !merging && !amend) {
-      await api.ui.showMessage('Enter a commit message.', 'Commit');
+      await api.ui.showMessage(api.i18n.t('git.cmd.commit.message_needed'), api.i18n.t('git.cmd.commit.title'));
       return;
     }
     const dirty = session.dirtyDocs(vaultId);
     if (dirty.length > 0) {
       const answer = await ask(
         api,
-        'Unsaved changes',
-        `${unsavedSubject(dirty)} unsaved changes that will not be part of this commit.`,
+        api.i18n.t('git.dialog.unsaved_title'),
+        api.i18n.t('git.cmd.commit.unsaved_text', { count: dirty.length, name: dirty[0].name }),
         [
-          { label: 'Commit anyway', value: 'commit' },
-          { label: 'Save all and commit', value: 'save', primary: true },
+          { label: api.i18n.t('git.cmd.commit.anyway'), value: 'commit' },
+          { label: api.i18n.t('git.cmd.commit.save_all'), value: 'save', primary: true },
         ],
       );
       if (answer === null) {
@@ -99,13 +112,19 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     }
     if (!merging && !amend && now.status.staged.length === 0) {
       if (now.status.unstaged.length === 0) {
-        await api.ui.showMessage('There is nothing to commit.', 'Commit');
+        await api.ui.showMessage(api.i18n.t('git.cmd.commit.nothing'), api.i18n.t('git.cmd.commit.title'));
         return;
       }
-      const answer = await ask(api, 'Nothing is staged', 'Stage all changes of this vault and commit them?', [
-        { label: 'Stage all and commit', value: 'stage', primary: true },
-      ]);
-      if (answer === null || !(await session.run('Staging…', 'stage', { vaultId, subPath, paths: [] }))) {
+      const answer = await ask(
+        api,
+        api.i18n.t('git.cmd.commit.nothing_staged_title'),
+        api.i18n.t('git.cmd.commit.nothing_staged_text'),
+        [{ label: api.i18n.t('git.cmd.commit.stage_all'), value: 'stage', primary: true }],
+      );
+      if (
+        answer === null ||
+        !(await session.run(api.i18n.t('git.busy.staging'), 'stage', { vaultId, subPath, paths: [] }))
+      ) {
         return;
       }
       now = session.currentOk();
@@ -113,15 +132,15 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (now !== null && now.stagedOutside > 0) {
       const answer = await ask(
         api,
-        'Staged changes outside this vault',
-        `${now.stagedOutside} staged ${now.stagedOutside === 1 ? 'file lies' : 'files lie'} outside the vault folder. The commit includes ${now.stagedOutside === 1 ? 'it' : 'them'}.`,
-        [{ label: 'Commit', value: 'commit', primary: true }],
+        api.i18n.t('git.cmd.commit.outside_title'),
+        api.i18n.t('git.cmd.commit.outside_text', { count: now.stagedOutside }),
+        [{ label: api.i18n.t('git.cmd.commit.title'), value: 'commit', primary: true }],
       );
       if (answer === null) {
         return;
       }
     }
-    const label = commitBusyLabel(merging, amend, push);
+    const label = busyLabelOf(merging, amend, push);
     if (await session.run(label, 'commit', { vaultId, subPath, message, amend, push }, push)) {
       state.drafts.delete(keyOf(vault));
       state.amend = false;
@@ -134,17 +153,21 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (vault === null || (await refuseFound(vault))) {
       return;
     }
-    const into = vault.status.branch ?? 'the detached HEAD';
+    const branch = vault.status.branch;
     const answer = await ask(
       api,
-      'Merge branch',
-      `Merge "${name}" into "${into}"? If both sides changed the same lines the merge stops, and you settle each conflicted file here.`,
-      [{ label: 'Merge', value: 'merge', primary: true }],
+      api.i18n.t('git.cmd.merge.title'),
+      api.i18n.t('git.cmd.merge.text', { name, hasBranch: branch === null ? 'no' : 'yes', branch: branch ?? '' }),
+      [{ label: api.i18n.t('git.cmd.merge.confirm'), value: 'merge', primary: true }],
     );
-    if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'A merge'))) {
+    if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'merge'))) {
       return;
     }
-    await session.run('Merging…', 'merge', { vaultId: vault.vaultId, subPath: vault.subPath, name });
+    await session.run(api.i18n.t('git.busy.merging'), 'merge', {
+      vaultId: vault.vaultId,
+      subPath: vault.subPath,
+      name,
+    });
   };
 
   const abortMerge = async (): Promise<void> => {
@@ -154,14 +177,17 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     }
     const answer = await ask(
       api,
-      'Abort the merge',
-      'The merge is cancelled and the files return to how they were before it started. What you settled so far is lost.',
-      [{ label: 'Abort merge', value: 'abort', danger: true }],
+      api.i18n.t('git.cmd.abort.title'),
+      api.i18n.t('git.cmd.abort.text'),
+      [{ label: api.i18n.t('git.cmd.abort.confirm'), value: 'abort', danger: true }],
     );
-    if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'Aborting the merge'))) {
+    if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'abort_merge'))) {
       return;
     }
-    await session.run('Aborting the merge…', 'mergeAbort', { vaultId: vault.vaultId, subPath: vault.subPath });
+    await session.run(api.i18n.t('git.busy.aborting_merge'), 'mergeAbort', {
+      vaultId: vault.vaultId,
+      subPath: vault.subPath,
+    });
   };
 
   const resolveConflict = async (change: GitChange, side: 'ours' | 'theirs'): Promise<void> => {
@@ -170,19 +196,28 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     if (session.dirtyDocs(vault.vaultId).some((d) => d.path === change.path)) {
-      await api.ui.showMessage(`"${change.path}" has unsaved changes. Save or close the tab first.`, 'Merge');
+      await api.ui.showMessage(
+        api.i18n.t('git.cmd.path_unsaved', { path: change.path }),
+        api.i18n.t('git.cmd.merge.message_title'),
+      );
       return;
     }
+    const keepLabel = side === 'ours' ? api.i18n.t('git.cmd.keep_mine') : api.i18n.t('git.cmd.keep_theirs');
     const answer = await ask(
       api,
-      side === 'ours' ? 'Keep mine' : 'Keep theirs',
+      keepLabel,
       side === 'ours'
-        ? `"${change.path}" takes the version of the current branch. The incoming changes to this file are dropped.`
-        : `"${change.path}" takes the incoming version. Your branch's changes to this file are dropped.`,
-      [{ label: side === 'ours' ? 'Keep mine' : 'Keep theirs', value: 'resolve', primary: true }],
+        ? api.i18n.t('git.cmd.keep_mine_text', { path: change.path })
+        : api.i18n.t('git.cmd.keep_theirs_text', { path: change.path }),
+      [{ label: keepLabel, value: 'resolve', primary: true }],
     );
     if (answer !== null) {
-      await session.run('Resolving…', 'resolve', { vaultId: vault.vaultId, subPath: vault.subPath, path: change.path, side });
+      await session.run(api.i18n.t('git.busy.resolving'), 'resolve', {
+        vaultId: vault.vaultId,
+        subPath: vault.subPath,
+        path: change.path,
+        side,
+      });
     }
   };
 
@@ -197,18 +232,18 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     if (vault.operation !== null) {
-      await api.ui.showMessage('Complete or abort the merge first.', 'Amend');
+      await api.ui.showMessage(api.i18n.t('git.cmd.amend.merge_first'), api.i18n.t('git.cmd.amend.title'));
       return;
     }
     const { upstream, ahead, head: commitId } = vault.status;
     if (commitId === null) {
-      await api.ui.showMessage('There is no commit to amend yet.', 'Amend');
+      await api.ui.showMessage(api.i18n.t('git.cmd.amend.no_commit'), api.i18n.t('git.cmd.amend.title'));
       return;
     }
     if (upstream !== null && ahead === 0) {
       await api.ui.showMessage(
-        `The last commit is already on ${upstream}. Amending it would rewrite published history, and Drey never force-pushes.`,
-        'Amend',
+        api.i18n.t('git.cmd.amend.published', { upstream }),
+        api.i18n.t('git.cmd.amend.title'),
       );
       return;
     }
@@ -233,19 +268,16 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     if (vault.status.staged.length + vault.status.unstaged.length === 0) {
-      await api.ui.showMessage('There is nothing to stash.', 'Stash');
+      await api.ui.showMessage(api.i18n.t('git.cmd.stash.nothing'), api.i18n.t('git.cmd.stash.message_title'));
       return;
     }
-    const answer = await ask(
-      api,
-      'Stash changes',
-      'The changes of this vault, new files included, are put away and the files return to the last commit. Apply them again from the stash list.',
-      [{ label: 'Stash', value: 'stash', primary: true }],
-    );
-    if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'Stashing'))) {
+    const answer = await ask(api, api.i18n.t('git.cmd.stash.title'), api.i18n.t('git.cmd.stash.text'), [
+      { label: api.i18n.t('git.cmd.stash.message_title'), value: 'stash', primary: true },
+    ]);
+    if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'stash'))) {
       return;
     }
-    await session.run('Stashing…', 'stashPush', { vaultId: vault.vaultId, subPath: vault.subPath });
+    await session.run(api.i18n.t('git.busy.stashing'), 'stashPush', { vaultId: vault.vaultId, subPath: vault.subPath });
   };
 
   const remote = async (label: string, method: 'fetch' | 'pull' | 'push'): Promise<void> => {
@@ -254,13 +286,10 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     if (method !== 'fetch' && vault.managedBy !== null) {
-      await api.ui.showMessage(
-        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
-        'Source control',
-      );
+      await managedMessage(vault);
       return;
     }
-    if (method === 'pull' && !(await session.cleanTabsOrExplain(vault.vaultId, 'A pull'))) {
+    if (method === 'pull' && !(await session.cleanTabsOrExplain(vault.vaultId, 'pull'))) {
       return;
     }
     await session.run(label, method, { vaultId: vault.vaultId, subPath: vault.subPath }, true);
@@ -272,27 +301,37 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     if (vault.managedBy !== null) {
-      await api.ui.showMessage(
-        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
-        'Source control',
-      );
+      await managedMessage(vault);
       return;
     }
     if (session.dirtyDocs(vault.vaultId).some((d) => d.path === change.path)) {
-      await api.ui.showMessage(`"${change.path}" has unsaved changes. Save or close the tab first.`, 'Discard');
+      await api.ui.showMessage(
+        api.i18n.t('git.cmd.path_unsaved', { path: change.path }),
+        api.i18n.t('git.cmd.discard.confirm'),
+      );
       return;
     }
     const untracked = change.kind === 'untracked';
     const answer = await ask(
       api,
-      'Discard changes',
+      api.i18n.t('git.cmd.discard.title'),
       untracked
-        ? `"${change.path}" is not in the repository yet. It will be moved to the recycle bin.`
-        : `Your changes to "${change.path}" will be lost.`,
-      [{ label: untracked ? 'Delete file' : 'Discard', value: 'discard', danger: true }],
+        ? api.i18n.t('git.cmd.discard.text_untracked', { path: change.path })
+        : api.i18n.t('git.cmd.discard.text_tracked', { path: change.path }),
+      [
+        {
+          label: untracked ? api.i18n.t('git.cmd.discard.delete_file') : api.i18n.t('git.cmd.discard.confirm'),
+          value: 'discard',
+          danger: true,
+        },
+      ],
     );
     if (answer !== null) {
-      await session.run('Discarding…', 'discard', { vaultId: vault.vaultId, subPath: vault.subPath, paths: [change.path] });
+      await session.run(api.i18n.t('git.busy.discarding'), 'discard', {
+        vaultId: vault.vaultId,
+        subPath: vault.subPath,
+        paths: [change.path],
+      });
     }
   };
 
@@ -323,19 +362,23 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
         }
       }
       if (before.binary || after.binary) {
-        await api.ui.showMessage(`"${change.path}" is not a text file, so there is nothing to compare.`, 'Git');
+        await api.ui.showMessage(
+          api.i18n.t('git.cmd.diff.not_text', { path: change.path }),
+          api.i18n.t('git.dialog.git'),
+        );
         return;
       }
+      const staged = group === 'staged';
       await api.ui.showDiff({
-        title: group === 'staged' ? 'Staged changes' : 'Changes',
+        title: staged ? api.i18n.t('git.cmd.diff.title_staged') : api.i18n.t('git.cmd.diff.title_changes'),
         path: change.path,
         before: before.content ?? '',
         after: after.content ?? '',
-        beforeLabel: group === 'staged' ? 'Last commit' : 'Before',
-        afterLabel: group === 'staged' ? 'Staged' : 'Working copy',
+        beforeLabel: staged ? api.i18n.t('git.cmd.diff.last_commit') : api.i18n.t('git.cmd.diff.before'),
+        afterLabel: staged ? api.i18n.t('git.cmd.diff.staged') : api.i18n.t('git.cmd.diff.working_copy'),
       });
     } catch (error) {
-      await api.ui.showMessage(messageOf(error), 'Git');
+      await api.ui.showMessage(messageOf(error), api.i18n.t('git.dialog.git'));
     }
   };
 

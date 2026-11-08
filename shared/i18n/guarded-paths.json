@@ -16,6 +16,8 @@
     "plugins/tickets/renderer/decision",
     "plugins/tickets/renderer/cost",
     "packages/tickets-engine/src/autopilot",
-    "packages/tickets-engine/src/notes"
+    "packages/tickets-engine/src/notes",
+    "plugins/git/renderer",
+    "plugins/outline/renderer"
   ]
 }

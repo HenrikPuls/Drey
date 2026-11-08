@@ -100,7 +100,8 @@ export type IconName =
   | 'mic'
   | 'rocket'
   | 'hand'
-  | 'users';
+  | 'users'
+  | 'lock';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   // Lucide "play" / "pause" -- the tickets board's chain master and
@@ -293,6 +294,11 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'circle', cx: 12, cy: 12, r: 10 },
     { kind: 'path', d: 'M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20' },
     { kind: 'path', d: 'M2 12h20' },
+  ],
+  // Lucide "lock" -- the Source control panel's managed banner (req-162, board 9d).
+  lock: [
+    { kind: 'path', d: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M7 11V7a5 5 0 0 1 10 0v4' },
   ],
   // Titlebar maximize (an outline square).
   square: [
