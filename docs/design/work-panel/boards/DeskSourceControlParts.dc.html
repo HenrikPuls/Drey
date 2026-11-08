@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drey: Source control, the parts at 1:1</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:default}
+.ib{width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;border-radius:4px;color:#b3b7bc}
+.ib[aria-pressed="true"],.ib[aria-expanded="true"]{background:#2c2d31;color:#f4f5f6}
+.ib:disabled{opacity:0.5}
+.ib.sm{width:24px;height:24px}
+.ph{height:28px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 6px 0 4px}
+.pc{width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;border-radius:4px;color:#b3b7bc}
+.pt{font-size:13px;font-weight:600;color:#f4f5f6}
+.pn{font-size:13px;color:#b3b7bc;margin-left:4px;white-space:nowrap}
+.pa{margin-left:auto;display:flex;gap:2px}
+.seg{display:flex;flex-shrink:0;gap:2px;padding:2px;background:#18191b;border:1px solid #3b3d42;border-radius:8px}
+.sg{height:26px;padding:0 10px;display:flex;align-items:center;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.sg[aria-selected="true"]{background:#2c2d31;color:#f4f5f6;font-weight:600}
+.si{width:26px;height:26px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:4px;background:transparent;color:#b3b7bc}
+.si[aria-selected="true"]{background:#2c2d31;color:#f4f5f6}
+.fld{margin:0 8px 8px;min-height:32px;box-sizing:border-box;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 4px 0 8px;background:#18191b;border:1px solid #747980;border-radius:8px;color:#b3b7bc}
+.fld svg{flex-shrink:0}
+.fld input{flex-grow:1;min-width:0;height:30px;background:transparent;border:0;color:#f4f5f6;font:inherit;font-size:14px;padding:0;outline:none}
+.chip{height:22px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 4px 0 6px;background:rgba(142,203,239,0.14);color:#8ecbef;border-radius:4px;font-size:13px;white-space:nowrap}
+.chip button{width:14px;height:14px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:4px;background:transparent;color:#8ecbef}
+.tgs{display:flex;flex-shrink:0}
+.tg{width:24px;height:24px;flex-shrink:0;padding:0;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.tg[aria-pressed="true"]{background:#2c2d31;color:#f4f5f6}
+.fcs{display:flex;flex-wrap:wrap;flex-shrink:0;align-items:center;gap:6px;padding:0 8px 8px}
+.fc{height:24px;display:flex;align-items:center;padding:0 8px;box-sizing:border-box;border:1px solid #3b3d42;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.fc[aria-pressed="true"]{background:#2c2d31;border-color:#2c2d31;color:#f4f5f6}
+.gh{height:28px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 12px 0 8px;margin-top:4px;background:transparent;border:0;width:100%;box-sizing:border-box;color:#b3b7bc;font:inherit;text-align:left}
+.ghn{font-size:13px;font-weight:600;color:#f4f5f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.ghd{font-size:13px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1000 auto}
+.ghv{height:18px;flex-shrink:0;display:flex;align-items:center;padding:0 6px;border:1px solid #3b3d42;border-radius:4px;font-size:13px;color:#b3b7bc}
+.ghc{margin-left:auto;font-size:13px;flex-shrink:0}
+.hit{display:flex;flex-direction:column;gap:1px;padding:6px 12px 6px 26px;border:0;border-bottom:1px solid #2c2d31;background:transparent;width:100%;box-sizing:border-box;color:#f4f5f6;font:inherit;text-align:left;position:relative}
+.hit[aria-current="true"]{background:#2c2d31}
+.t1{display:flex;align-items:baseline;gap:4px;font-size:14px;line-height:20px;color:#f4f5f6;white-space:nowrap;overflow:hidden}
+.t1 b{font-weight:400;overflow:hidden;text-overflow:ellipsis}
+.ln{font-size:13px;color:#b3b7bc;flex-shrink:0}
+.t3{font-size:13px;line-height:18px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk{background:rgba(142,203,239,0.14);color:#f4f5f6;border-radius:2px}
+.task{display:flex;gap:10px;padding:6px 12px;border-bottom:1px solid #2c2d31}
+.cb{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;box-sizing:border-box;border:1.5px solid #747980;border-radius:4px;background:transparent;padding:0;display:flex;align-items:center;justify-content:center;color:#101113}
+.cb[aria-checked="true"]{background:#8ecbef;border-color:#8ecbef}
+.tb{display:flex;flex-direction:column;gap:1px;min-width:0;flex-grow:1}
+.tt{border:0;background:transparent;padding:0;text-align:left;font:inherit;font-size:14px;line-height:20px;color:#f4f5f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm{display:flex;align-items:center;gap:6px;font-size:13px;line-height:18px;color:#b3b7bc;white-space:nowrap;overflow:hidden}
+.bd{height:18px;display:flex;align-items:center;gap:4px;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-size:13px}
+.bd.over{color:#ee8f89}
+.bd.today{color:#8ecbef;font-weight:600}
+.task.done .tt{color:#b3b7bc;text-decoration:line-through}
+.empty{margin:0;padding:12px;font-size:14px;line-height:20px;color:#b3b7bc}
+.err{margin:0;padding:0 12px 8px;font-size:13px;line-height:18px;color:#ee8f89}
+
+.tab{height:24px;padding:0 6px;display:flex;align-items:center;border:0;border-radius:4px;background:transparent;color:#b3b7bc;font:inherit;font-size:13px}
+.tab[aria-selected="true"]{color:#f4f5f6;font-weight:600}
+.fld.focus{border-color:#8ecbef}
+.menu{position:absolute;right:6px;top:28px;width:236px;box-sizing:border-box;z-index:3;display:flex;flex-direction:column;padding:6px;background:#2c2d31;border:1px solid #747980;border-radius:8px}
+.mh{padding:4px 8px;font-size:13px;line-height:18px;color:#b3b7bc}
+.mi{height:28px;white-space:nowrap;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:#f4f5f6;font:inherit;font-size:14px;text-align:left}
+.mi .ck{width:14px;height:14px;flex-shrink:0;display:flex;color:#f4f5f6}
+.ms{height:1px;background:#3b3d42;margin:4px 0}
+.scl{height:30px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 12px 0 6px;font-size:13px;color:#b3b7bc}
+.rb{height:26px;display:flex;align-items:center;gap:4px;padding:0 6px;border:0;border-radius:4px;background:transparent;color:#f4f5f6;font:inherit;font-size:13px;white-space:nowrap}
+.sync{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fld textarea{flex-grow:1;min-width:0;background:transparent;border:0;color:#f4f5f6;font:inherit;font-size:14px;line-height:20px;padding:5px 0;resize:none;outline:none;align-self:stretch}
+.fld.multi{align-items:flex-start}
+.fld.multi .ib{margin-top:3px}
+.fr{height:28px;display:flex;align-items:center;gap:8px;padding:0 12px 0 26px;font-size:14px;position:relative}
+.fr.hov{background:#2c2d31}
+.fn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.fd{font-size:13px;color:#b3b7bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1000 0;min-width:0}
+.fl{width:12px;flex-shrink:0;text-align:center;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.fa{display:flex;gap:2px;flex-shrink:0}
+.sM{color:#e0bb6e}.sA{color:#93c47f}.sU{color:#82c4ab}.sD{color:#ee8f89}.sC{color:#f08080}
+.fn.sD{text-decoration:line-through}
+.gha{display:flex;gap:2px;margin-left:auto}
+.up{color:#8ecbef}
+.bn{margin:0 8px 8px;flex-shrink:0;display:flex;align-items:flex-start;gap:8px;padding:8px 6px 8px 10px;border-radius:8px}
+.bn svg{flex-shrink:0;margin-top:2px}
+.bn.merge{background:rgba(240,128,128,0.12);border:1px solid rgba(240,128,128,0.45);color:#f08080}
+.bn.amend{background:rgba(142,203,239,0.14);border:1px solid rgba(142,203,239,0.45);color:#8ecbef}
+.bn.managed{background:#2c2d31;border:1px solid #3b3d42;color:#b3b7bc}
+.bx{display:flex;flex-direction:column;flex-grow:1;min-width:0}
+.bt{font-size:14px;line-height:20px;font-weight:600;color:#f4f5f6}
+.bs{font-size:13px;line-height:18px;color:#b3b7bc}
+.busy{height:28px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;font-size:13px;color:#b3b7bc}
+.lk{border:0;background:transparent;padding:0;color:#8ecbef;font:inherit;font-size:13px}
+.or{height:28px;display:flex;align-items:center;gap:2px;margin:0 4px;padding-right:8px;border-radius:4px;font-size:14px;color:#f4f5f6}
+.or[aria-current="true"]{background:#2c2d31}
+.tw{width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:0;background:transparent;color:#b3b7bc;padding:0;border-radius:4px}
+.tws{width:20px;height:20px;flex-shrink:0}
+.ol{border:0;background:transparent;color:inherit;font:inherit;padding:0 4px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mi .k{margin-left:auto;font-size:13px;color:#b3b7bc}
+.mi[aria-disabled="true"]{color:#b3b7bc}
+.col{width:302px;display:flex;flex-direction:column;gap:8px}
+.lab{font-size:13px;line-height:18px;color:#b3b7bc}
+.lab.next{margin-top:16px}
+.box{width:300px;display:flex;flex-direction:column;background:#222326;border:1px solid #3b3d42;position:relative}
+.menu{width:260px}
+</style>
+</helmet>
+<div style="width: 1480px; height: 1160px; box-sizing: border-box; padding: 48px; display: flex; gap: 60px; align-items: flex-start; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px">
+
+  <!-- Column 1 -->
+  <div class="col">
+    <span class="lab">1 · Merging, two conflicts left, a conflict row hovered</span>
+    <section class="box" aria-label="Merging">
+      <div class="ph">
+        <button type="button" class="pc" aria-expanded="true" aria-label="Collapse Source control"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <span class="pt">Source control</span><span class="pn">3</span>
+        <span class="pa">
+          <button type="button" class="ib sm" aria-label="Pull" title="Pull"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path></svg></button>
+          <button type="button" class="ib sm" aria-label="Push" title="Push"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg></button>
+          <button type="button" class="ib sm" aria-haspopup="menu" aria-expanded="false" aria-label="More Git actions" title="More Git actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+        </span>
+      </div>
+      <div class="scl">
+        <button type="button" class="rb" aria-label="Switch branch" title="Switch branch (disabled while merging)" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>main</button>
+      </div>
+      <div class="bn merge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"></path><path d="M12 10v4"></path><path d="M12 17.5v.5"></path></svg><span class="bx"><span class="bt">Merging relaunch</span><span class="bs">2 conflicts left</span></span><button type="button" class="ib sm" aria-label="Abort the merge" title="Abort the merge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+      <div class="fld">
+        <textarea aria-label="Commit message" rows="1">Merge branch 'relaunch'</textarea>
+        <button type="button" class="ib sm" disabled aria-label="Resolve all conflicts to complete the merge" title="Resolve all conflicts to complete the merge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button>
+      </div>
+      <button type="button" class="gh" aria-expanded="true" style="margin-top: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg><span class="ghn">Merge conflicts</span><span class="ghc">2</span></button>
+      <div class="fr hov" role="button" tabindex="0" title="projects/website-relaunch.md — Merge conflict"><span class="fn sC">website-relaunch.md</span><span class="fd">projects</span><span class="fa"><button type="button" class="ib sm" aria-label="Open file" title="Open file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></button><button type="button" class="ib sm" aria-label="Keep mine (current branch)" title="Keep mine (current branch)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg></button><button type="button" class="ib sm" aria-label="Keep theirs (incoming)" title="Keep theirs (incoming)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button><button type="button" class="ib sm" aria-label="Mark as resolved (stage)" title="Mark as resolved (stage)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button></span><span class="fl sC">!</span></div>
+      <div class="fr" role="button" tabindex="0" title="projects/brand-guide.md — Merge conflict"><span class="fn sC">brand-guide.md</span><span class="fd">projects</span><span class="fl sC">!</span></div>
+      <button type="button" class="gh" aria-expanded="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg><span class="ghn">Staged changes</span><span class="ghc">1</span></button>
+      <div class="fr" role="button" tabindex="0" title="attachments/logo-square.png — Added"><span class="fn sA">logo-square.png</span><span class="fd">attachments</span><span class="fl sA">A</span></div>
+      <div style="height: 6px"></div>
+    </section>
+
+    <span class="lab next">2 · Amending: the last message in a growing field</span>
+    <section class="box" aria-label="Amending" style="padding-top: 8px">
+      <div class="bn amend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg><span class="bx"><span class="bt">Amending the last commit</span><span class="bs">Staged changes and this message replace it.</span></span><button type="button" class="ib sm" aria-label="Stop amending" title="Stop amending"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+      <div class="fld multi focus">
+        <textarea aria-label="Commit message" rows="3">Logo drafts for the relaunch&#10;&#10;Adds the round and the square draft.</textarea>
+        <button type="button" class="ib sm" aria-label="Amend the last commit (Ctrl+Enter)" title="Amend the last commit (Ctrl+Enter)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button>
+      </div>
+    </section>
+
+    <span class="lab next">3 · Busy: what runs, and Cancel where it can stop</span>
+    <section class="box" aria-label="Busy">
+      <div class="scl">
+        <button type="button" class="rb" aria-label="Switch branch" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>main</button>
+        <span class="sync">↑2</span>
+      </div>
+      <div class="busy"><span>Pushing…</span><button type="button" class="lk">Cancel</button></div>
+    </section>
+  </div>
+
+  <!-- Column 2 -->
+  <div class="col">
+    <span class="lab">4 · Hover: a group head, a staged row, a changed row</span>
+    <section class="box" aria-label="Rows hovered">
+      <button type="button" class="gh" aria-expanded="true" style="margin-top: 0; background: #2c2d31"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg><span class="ghn">Changes</span><span class="gha"><span class="ib sm" role="button" tabindex="0" aria-label="Stage all changes" title="Stage all changes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></span><span class="ghc" style="margin-left: 0">4</span></button>
+      <div class="fr hov" role="button" tabindex="0" title="projects/website-relaunch.md — Modified"><span class="fn sM">website-relaunch.md</span><span class="fd">projects</span><span class="fa"><button type="button" class="ib sm" aria-label="Open file" title="Open file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></button><button type="button" class="ib sm" aria-label="Discard changes" title="Discard changes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg></button><button type="button" class="ib sm" aria-label="Stage" title="Stage"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button></span><span class="fl sM">M</span></div>
+      <div class="fr" role="button" tabindex="0" title="daily/2026-11-08.md — Untracked"><span class="fn sU">2026-11-08.md</span><span class="fd">daily</span><span class="fl sU">U</span></div>
+      <button type="button" class="gh" aria-expanded="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg><span class="ghn">Staged changes</span><span class="ghc">1</span></button>
+      <div class="fr hov" role="button" tabindex="0" title="projects/brand-guide.md — Modified"><span class="fn sM">brand-guide.md</span><span class="fd">projects</span><span class="fa"><button type="button" class="ib sm" aria-label="Open file" title="Open file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></button><button type="button" class="ib sm" aria-label="Unstage" title="Unstage"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path></svg></button></span><span class="fl sM">M</span></div>
+      <div class="fr" role="button" tabindex="0" title="notes/renamed-note.md — Renamed"><span class="fn sA">renamed-note.md</span><span class="fd">notes</span><span class="fl sA">R</span></div>
+      <div style="height: 6px"></div>
+    </section>
+
+    <span class="lab next">5 · The branch line: detached, no commits, not published</span>
+    <section class="box" aria-label="Branch line states">
+      <div class="scl"><button type="button" class="rb" aria-label="Switch branch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>Detached at 4f2a9c1</button></div>
+      <div class="scl"><button type="button" class="rb" aria-label="Switch branch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>No commits yet</button></div>
+      <div class="scl"><button type="button" class="rb" aria-label="Switch branch" title="Switch branch&#10;Not published yet"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>relaunch</button><span class="sync">Not published</span></div>
+    </section>
+
+    <span class="lab next">6 · Folded by its chevron</span>
+    <section class="box" aria-label="Folded">
+      <div class="ph">
+        <button type="button" class="pc" aria-expanded="false" aria-label="Expand Source control"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
+        <span class="pt">Source control</span><span class="pn">5</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Column 3: the menu -->
+  <div class="col">
+    <span class="lab">7 · More Git actions</span>
+    <section class="box" aria-label="More Git actions" style="height: 400px">
+      <div class="ph">
+        <button type="button" class="pc" aria-expanded="true" aria-label="Collapse Source control"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <span class="pt">Source control</span><span class="pn">5</span>
+        <span class="pa">
+          <button type="button" class="ib sm" aria-label="Pull (1 commit to pull)" title="Pull (1 commit to pull)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path></svg></button>
+          <button type="button" class="ib sm" aria-label="Push (2 commits not pushed)" title="Push (2 commits not pushed)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg></button>
+          <button type="button" class="ib sm" aria-haspopup="menu" aria-expanded="true" aria-label="More Git actions" title="More Git actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+        </span>
+      </div>
+      <div class="scl"><button type="button" class="rb" aria-label="Repository">Notes<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button><button type="button" class="rb" aria-label="Switch branch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>main</button><span class="sync">↑2 ↓1</span></div>
+      <div role="menu" aria-label="More Git actions" class="menu" style="width: 284px">
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Fetch from the remote</button>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Commit and push<span class="k">Ctrl+Shift+Enter</span></button>
+        <div class="ms"></div>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Merge a branch…</button>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Stash changes</button>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Stashes…<span class="k">2</span></button>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Amend the last commit</button>
+        <div class="ms"></div>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Git history of this file…</button>
+        <button type="button" role="menuitem" class="mi"><span class="ck"></span>Refresh the status</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Column 4: empty and read-only -->
+  <div class="col">
+    <span class="lab">8 · Clean: nothing to commit</span>
+    <section class="box" aria-label="Clean">
+      <div class="scl"><button type="button" class="rb" aria-label="Switch branch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg>main</button></div>
+      <div class="fld"><textarea aria-label="Commit message" rows="1"></textarea><button type="button" class="ib sm" aria-label="Commit staged changes (Ctrl+Enter)" title="Commit staged changes (Ctrl+Enter)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button></div>
+      <p class="empty" style="padding-top: 4px">No changes.</p>
+    </section>
+
+    <span class="lab next">9 · No repository</span>
+    <section class="box" aria-label="Not a repository"><p class="empty">This vault is not a Git repository.</p></section>
+    <section class="box" aria-label="No git"><p class="empty">git was not found. Install Git or set its path in Settings → Git.</p></section>
+    <section class="box" aria-label="No vault"><p class="empty">No vault is open.</p></section>
+
+    <span class="lab next">10 · Read-only: managed by a plugin, found by scanning</span>
+    <section class="box" aria-label="Managed" style="padding-top: 8px">
+      <div class="bn managed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span class="bx"><span class="bt">Managed by Tickets</span><span class="bs">Read-only — this repository's history is written by the plugin.</span></span></div>
+    </section>
+    <section class="box" aria-label="Found by scanning">
+      <div class="busy" style="height: auto; padding: 8px 12px; flex-wrap: wrap; gap: 4px 8px"><span>Found by scanning Notes — read-only</span><button type="button" class="lk" title="E:\Vaults\Notes\archive">Register as vault</button></div>
+    </section>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1480,"height":1160}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

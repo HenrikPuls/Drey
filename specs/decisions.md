@@ -50,7 +50,10 @@ one means moving it back to the roadmap with a new justification.
   stays in the canvas and in `docs/design/work-panel/boards/` as a sketch of how the panels could
   look, but no session builds it and the fidelity rule does not measure the panels against it. The
   frame of 9a (req-104) remains the target for the dock headers and the panel chrome; the panels'
-  content stays as it is.
+  content stays as it is. *Later (owner, 2026-11-08):* for Source control and Outline the look of 9b
+  is wanted after all; it is measured and completed in boards 9d `DeskSourceControl` and 9e
+  `DeskOutline` (req-162), and those boards are the target, not 9b. Search and Tasks became Find
+  (9c, req-161). Calendar stays as built.
 
 - **An agent moving a ticket into Done on a store, and a pipeline key for Accept's run** (req-99a,
   2026-11-06). `dk` refuses an agent's release into a terminal stage (seen in E14-5, checked again

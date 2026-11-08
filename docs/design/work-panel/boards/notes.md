@@ -132,6 +132,15 @@ Desktop web keeps its top tab bar with the docked chat.
 
 The docked chat is always Mission Control, or Capacity. This changes concept section 7, which put a tab bar at the bottom on every size.
 
+## outlineNote
+
+9e: Outline (req-162; the look of 9b, measured; every level folds — owner, 2026-11-08)
+
+Header 28 px: "Outline" + the heading count; one control, chevrons-down-up "Collapse all levels" (pressed: "Expand all levels"), shown on hover, focus or while active.
+Row 28 px, margin 0 4, radius 4, 14 px --text-primary, ellipsis; indent 4 + 16 per level. A heading with children has its own fold chevron (20 px button, icon 14 --text-4: chevron-down open, chevron-right folded); a leaf has a 20 px spacer.
+The heading at the caret (or its nearest visible parent when folded): --active-bg. Hover: --hover-bg. No accent tint, no h1/h2 weights.
+Empty: "Open a note to see its outline." / "No headings in this document." (14/20 --text-4, padding 12).
+
 ## panelsNote
 
 9b: the panels of the current branch, same rules as 9a
@@ -164,3 +173,17 @@ Consolidated — Mission Control with Shape and Plan to accept
 ## rowMobile
 
 Mobile, aligned — the iPad is the phone app with more room
+
+## scNote
+
+9d: Source control (req-162; the look of 9b, measured, with everything the panel does — ADR-0065 + milestone 67)
+
+Header 28 px: "Source control" + the change count. Controls (hover, focus, or panel active — req-163): Pull, Push (labels carry the counts), ⋯ More Git actions. Fetch and Refresh moved into the menu.
+Branch line 30 px, 13 px: repository button (only with more than one repo), git-branch + branch (opens the branch picker; tooltip: upstream, counts, last fetch), right ↑2 ↓1 --text-4 or "Not published". Busy line 28 px: "Pushing…" + Cancel (--accent link) where the run can stop.
+Commit field: the Find field (32 px, --bg-search, --field-border, radius 8), one line that grows; no placeholder; check = Commit staged changes (Ctrl+Enter). Commit and push lives in the menu (Ctrl+Shift+Enter).
+Groups as Find (28 px heads, 13/600, count right): Merge conflicts · Staged changes · Changes · History. Bulk action on the head on hover: Stage all changes / Unstage all.
+File row 28 px, padding 0 12 0 26: name 14 in the status colour (M --status-modified, A/R --status-added, U --status-untracked, D --status-deleted struck, ! --status-conflict), folder 13 --text-4, letter 13 mono. On hover: Open file + Discard changes · Stage / Unstage / Keep mine · Keep theirs · Mark as resolved.
+History rows 52 px: subject 14/20, "author · time · hash" 13/18, "↑ not pushed" in --accent.
+Banners (radius 8, title 14/600, sub 13): merge (--status-conflict 12 % / 45 %), amend (--accent), managed (--active-bg). ⋯: Fetch from the remote · Commit and push | Merge a branch… · Stash changes · Stashes… (count) · Amend the last commit | Git history of this file… · Refresh the status.
+Dialogs (branch picker, stashes, file history, confirms) are not part of this board. Icon lock is missing in src/app/icons/icon.ts although the panel asks for it today: the build adds it.
+
