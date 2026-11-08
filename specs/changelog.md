@@ -1,4 +1,19 @@
 
+### Linux port + removal of the tickets plugin
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-08
+(outside the list). `plugins/tickets/` (board, fleet runner, remote
+gateway, `fleet_*` tools), its seven e2e specs and fixture,
+`specs/ticket-schema.md`, `docs/agents/fleet-worker.md`, the work-panel
+design files, the `ticket-handling` skill and the prompt `.gitattributes`
+are gone; AGENTS.md, CLAUDE.md and the CI (Playwright-Chromium step) lost
+their references (`specs/decisions.md` records it). The Linux port: the
+app code was already largely platform-neutral (terminal launcher,
+non-mac window chrome, win32-only updater and `taskkill`); added
+`linux` targets in `electron-builder.yml` (AppImage + deb, md/txt
+associations), `pack:linux` / `pack:dir:linux`, a platform-aware
+`verify:pack`, `dev.sh`, and a `linux` CI job (xvfb e2e, pack, smoke).
+
 ### req-94 — CI green again: the e2e suite runs, and is typechecked
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

@@ -94,6 +94,15 @@ one means moving it back to the roadmap with a new justification.
 
 ## Won't do (decided against, kept for the record)
 
+- **The tickets plugin / agent fleet** (owner, 2026-11-08). The whole
+  `plugins/tickets/` plugin — kanban/Work panel, fleet runner, chain
+  orchestrator, remote gateway, `fleet_*` MCP tools — was removed in the
+  Linux-port branch together with `specs/ticket-schema.md`, its e2e specs
+  and `docs/agents/fleet-worker.md`. ADRs 0075–0077, 0079, 0080, 0085–0087
+  and the changelog entries about it stay as history. The generic seams it
+  drove (managed vaults, `ctx.mcp.registerTools`, plugin user-data dirs,
+  `_`-prefixed root folders skipped by the scan) remain in the SDK.
+
 - **Auto-pairing the ticket file and its thread across panes** (owner,
   2026-11-01, req-84). The pair's landing matrix (req-75), its pane reuse
   (req-82) and the follow-the-active-tab rule (req-83) all lean on the

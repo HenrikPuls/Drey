@@ -32,6 +32,8 @@
     "clean": "node scripts/clean.mjs",
     "prepack": "npm run test:all",
     "pack:dir": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --win --dir",
+    "pack:dir:linux": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --linux --dir",
+    "pack:linux": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --linux",
     "pack": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --win",
     "electron": "node scripts/run-electron.js",
     "app": "npm run build && npm run electron",

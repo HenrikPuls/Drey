@@ -3,7 +3,7 @@
  * Hardening check for a PACKED build (ADR-0044 stage 10). Run after
  * `npm run pack:dir`:
  *
- *   node scripts/verify-pack.mjs [--exe release/win-unpacked/drey.exe]
+ *   node scripts/verify-pack.mjs [--exe release/win-unpacked/drey.exe | release/linux-unpacked/drey]
  *
  * Verifies, against the real packaged app:
  *  1. app.asar carries every shipped built-in plugin tree (manifest + main +
@@ -32,7 +32,9 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 
 const argExe = process.argv.indexOf('--exe');
 const exePath = path.resolve(
-  argExe > -1 ? process.argv[argExe + 1] : path.join(repoRoot, 'release', 'win-unpacked', 'drey.exe'),
+  argExe > -1 ? process.argv[argExe + 1] : process.platform === 'win32'
+      ? path.join(repoRoot, 'release', 'win-unpacked', 'drey.exe')
+      : path.join(repoRoot, 'release', 'linux-unpacked', 'drey'),
 );
 
 let failures = 0;

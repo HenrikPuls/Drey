@@ -1,6 +1,6 @@
 # 7. Deployment View
 
-Windows-first, single machine, no server component — the app and the
+Windows-first, with a Linux build (AppImage + deb via `npm run pack:linux`), single machine, no server component — the app and the
 vault folder both live on the user's PC (the vault optionally inside a
 OneDrive-synced folder, out of the app's control). Packaging is
 electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-electron-builder.md)).
