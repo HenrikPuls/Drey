@@ -1615,7 +1615,7 @@ describe('Orchestrator', () => {
       second.dispose();
     });
 
-    it('the coaching thread rides the instruction as the ## Coaching slice (U4)', async () => {
+    it('the coaching thread does NOT ride the instruction: nothing is adopted unreviewed (D-61, R2/R14)', async () => {
       await writePersonaPipeline();
       await writePersona('pia', {
         worker: 'claude-code',
@@ -1636,13 +1636,12 @@ describe('Orchestrator', () => {
       await orch.setMaster('run');
 
       const started = fleet.records[0]!;
-      expect(started.request.instruction).toContain('## Coaching');
-      expect(started.request.instruction).toContain('Coaching (owner, letzter zuerst)');
-      expect(started.request.instruction).toContain('owner — teach 6'); // the newest correction first
-      expect(started.request.instruction).not.toContain('teach 1'); // only the last five ride
-      expect(started.request.instruction.indexOf('teach 6')).toBeLessThan(started.request.instruction.indexOf('teach 2'));
-      // the coaching is a variable part — it rides the resume continuation, not the digest
-      expect(started.request.continuationInstruction).toContain('## Coaching');
+      // the thread is the 1:1 tab's note to the persona; until req-168/169 bring the
+      // accepted path, no line of it reaches a run — the memory still does
+      expect(started.request.instruction).not.toContain('## Coaching');
+      expect(started.request.instruction).not.toContain('teach ');
+      expect(started.request.continuationInstruction).not.toContain('## Coaching');
+      expect(started.request.instruction).toContain('## Memory');
     });
   });
 });

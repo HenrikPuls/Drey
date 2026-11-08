@@ -7,7 +7,6 @@
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import { PERSONAS_DIR } from '../core/persona';
-import { parseThread } from '../core/persona-thread';
 import type { TicketsGit } from '../core/tickets-git';
 
 /**
@@ -168,27 +167,8 @@ export async function readPersonaMemory(vaultPath: string, personaId: string): P
   return text !== null && text.trim() !== '' ? text : null;
 }
 
-// --- persona coaching (U4, concept §4.5) ------------------------------------
-
-/**
- * The persona coaching slice (U4, concept §4.5): the LAST
- * {@link PERSONA_COACHING_MAX_LINES} owner messages of the persona's
- * thread.md — what the owner taught in direct conversation — newest
- * first, so the freshest correction is the first thing the instruction
- * carries. Null when the thread holds no messages, so a persona-less (or
- * un-coached) run's instruction stays byte-identical.
- */
-export const PERSONA_COACHING_MAX_LINES = 5;
-
-const PERSONA_COACHING_LEAD =
-  'Coaching (owner, letzter zuerst) — was der Owner im direkten Gespräch beigebracht hat; anwenden, wo es passt:';
-
-export function personaCoachingSection(threadText: string): string | null {
-  const messages = parseThread(threadText);
-  const last = messages.slice(-PERSONA_COACHING_MAX_LINES).reverse();
-  if (last.length === 0) {
-    return null;
-  }
-  const lines = last.map((m) => `- '${m.at}' ${m.role} — ${m.text}`);
-  return `## Coaching${NL}${NL}${PERSONA_COACHING_LEAD}${NL}${NL}${lines.join(NL)}`;
-}
+// The persona coaching slice (U4) was removed in milestone 212 (D-61): the
+// thread.md lines reached the next brief without the owner's review, against
+// the rule that nothing is adopted automatically (concept R2/R14). req-168
+// makes the 1:1 a persona session and req-169 brings the accepted path
+// (memory with author and evidence, removable per line).

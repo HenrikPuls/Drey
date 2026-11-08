@@ -96,8 +96,6 @@ interface TicketPersona {
   readonly prompt: string | null;
   /** The persona's memory.md text ('' when absent). */
   readonly memory: string;
-  /** The persona's thread.md text ('' when absent) — the coaching slice's source. */
-  readonly coaching: string;
   /** The texts of the skills its record names (D-46). */
   readonly skills: readonly PersonaSkill[];
 }
@@ -1658,7 +1656,6 @@ export class Orchestrator {
         let persona: Persona | null = null;
         let prompt: string | null = null;
         let memory = '';
-        let coaching = '';
         let skills: readonly PersonaSkill[] = [];
         if (resolution.persona !== null) {
           const text = await fileOf(`${PERSONAS_DIR}/${resolution.persona}/persona.md`);
@@ -1672,7 +1669,6 @@ export class Orchestrator {
           if (persona !== null) {
             prompt = await fileOf(`${PERSONAS_DIR}/${persona.id}/prompt.md`);
             memory = (await fileOf(`${PERSONAS_DIR}/${persona.id}/memory.md`)) ?? '';
-            coaching = (await fileOf(`${PERSONAS_DIR}/${persona.id}/thread.md`)) ?? '';
             const loaded = await loadPersonaSkills(fileOf, persona.id, persona.skills);
             skills = loaded.skills;
             if (loaded.missing.length > 0) {
@@ -1680,7 +1676,7 @@ export class Orchestrator {
             }
           }
         }
-        personas.set(card.id, { resolution, persona, prompt, memory, coaching, skills });
+        personas.set(card.id, { resolution, persona, prompt, memory, skills });
       }
     }
     return personas;
@@ -1967,7 +1963,6 @@ export class Orchestrator {
               model: (modelChoice ?? personaModelFor(persona, null)).model,
               prompt: personaPrompt,
               memory: entry?.memory ?? '',
-              coaching: entry?.coaching ?? '',
               skills: entry?.skills ?? [],
             },
           }

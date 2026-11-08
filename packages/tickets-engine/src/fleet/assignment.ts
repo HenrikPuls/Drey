@@ -187,13 +187,6 @@ export interface InstructionInput {
    */
   readonly memorySection?: string | null;
   /**
-   * The resolved persona's coaching, already sliced by `context-pack`'s
-   * `personaCoachingSection` (U4, concept §4.5): rides directly after the
-   * memory in the variable parts — the owner's corrections reach the next
-   * run. Null/absent = no section.
-   */
-  readonly coachingSection?: string | null;
-  /**
    * The resolved persona's id and role (D-60): the brief names them so
    * the step prompt's persona-bound asks (the Friction line) can run —
    * the scout brief always did, the ship brief never. Null/absent = a
@@ -400,10 +393,6 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   if (memorySection !== null) {
     changing.push(memorySection);
   }
-  const coachingSection = input.coachingSection != null && input.coachingSection.trim() !== '' ? input.coachingSection : null;
-  if (coachingSection !== null) {
-    changing.push(coachingSection);
-  }
   const handover = input.handover?.trim();
   if (handover != null && handover !== '') {
     changing.push(
@@ -540,8 +529,6 @@ export interface ScoutInstructionInput {
   readonly skillsSection?: string | null;
   /** The resolved persona's `## Memory` slice (E3); absent = no section. */
   readonly memorySection?: string | null;
-  /** The resolved persona's `## Coaching` slice (U4); absent = no section. */
-  readonly coachingSection?: string | null;
   /** The persona id the Written-on line signs with; null/'' = `scout`. */
   readonly personaId?: string | null;
   /** The persona's role for the brief's persona line (D-60). */
@@ -612,10 +599,6 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
   const memorySection = input.memorySection != null && input.memorySection.trim() !== '' ? input.memorySection : null;
   if (memorySection !== null) {
     changing.push(memorySection);
-  }
-  const coachingSection = input.coachingSection != null && input.coachingSection.trim() !== '' ? input.coachingSection : null;
-  if (coachingSection !== null) {
-    changing.push(coachingSection);
   }
   const by = input.personaId !== undefined && input.personaId !== null && input.personaId.trim() !== '' ? input.personaId.trim() : 'scout';
   const discipline = input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : SCOUT_DISCIPLINE;

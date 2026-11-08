@@ -1072,10 +1072,11 @@ tickets/_meta/personas/
 
   The writer is strict (a multi-line message flattens to one line); the
   reader forgives — an unparseable line is skipped, never guessed. Every
-  append is one commit `personas: <id> thread`. The run brief's context
-  pack carries the last 5 messages, newest first, under a `## Coaching`
-  heading, so what the owner taught in conversation reaches the next
-  dispatch; an absent or empty thread adds no section at all.
+  append is one commit `personas: <id> thread`. No run brief carries the
+  thread (milestone 212, D-61 — until then the last 5 messages rode as a
+  `## Coaching` section without the owner's review): nothing a persona
+  reads is adopted automatically (concept R2/R14); req-168 turns the
+  thread into a persona session, req-169 brings the reviewed memory.
 
 **The improvement loop (E6).** Two more files may live in the persona
 directory — the worker's findings and the aggregation's proposals (the
