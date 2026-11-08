@@ -537,7 +537,7 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 `dist-electron/plugins/<id>/`):
 
 - `tags/` — tag data owner: section index, prefix colors, rename/merge,
-  the Search panel (ADR-0017, M33/37/53)
+  the Find panel (ADR-0017, M33/37/53, M210)
 - `tasks/` — the Tasks mode of the Find panel + per-vault task index, inline metadata
   (ADR-0033)
 - `templates/` — Templates panel, slash-menu template entries, snippets
