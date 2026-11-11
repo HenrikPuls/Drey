@@ -1,4 +1,16 @@
 
+### req-95 — repository moved to the `lariscus` GitHub organization
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-11
+(outside the list). The repository now lives at
+`github.com/lariscus/Drey` (transferred from `HenrikPuls/Drey`; the old
+URLs redirect). The update check's manual-download fallback
+(`RELEASES_PAGE_URL` in `shared/updates.ts`), the electron-builder
+`publish` target (so a pack writes the new `app-update.yml`) and ADR-0074
+point at the new owner. Installed versions up to 0.8.2 keep updating
+through GitHub's redirect for as long as the old name is not reused; the
+first release built from this change carries the new target itself.
+
 ### Linux port + removal of the tickets plugin (release 0.8.2)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-08
