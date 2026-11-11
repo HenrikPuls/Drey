@@ -7,7 +7,7 @@
  */
 
 /** Where Drey's releases live — also the manual-download fallback. */
-export const RELEASES_PAGE_URL = 'https://github.com/HenrikPuls/Drey/releases';
+export const RELEASES_PAGE_URL = 'https://github.com/lariscus/Drey/releases';
 
 const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)$/;
 

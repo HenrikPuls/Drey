@@ -86,7 +86,7 @@ installs per-user and relaunches Drey (electron-updater's
 single-instance lock cleanly because the old process is gone.
 
 **CI is the updater's supply side.** `electron-builder.yml` declares
-`publish: github (HenrikPuls/Drey)` so a pack writes `latest.yml`, the
+`publish: github (lariscus/Drey)` so a pack writes `latest.yml`, the
 `.blockmap` files and the packaged `app-update.yml` (metadata
 generation, independent of `--publish never`); the CI release step
 attaches `latest.yml` and the setup blockmap next to the exes. Releases

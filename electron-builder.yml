@@ -17,7 +17,7 @@ copyright: Copyright © 2026 Henrik Puls
 # release; the app never publishes itself.
 publish:
   provider: github
-  owner: HenrikPuls
+  owner: lariscus
   repo: Drey
 
 directories:
